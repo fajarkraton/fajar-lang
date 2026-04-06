@@ -810,6 +810,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
             return Ok(None);
         }
 
+        // E1: Universal builtin override — if user defined a function with
+        // the same name as a builtin, call that instead. This allows OS kernels
+        // to provide their own implementations of ANY builtin.
+        if let Some(result) = self.try_user_fn_override(name, args)? {
+            return Ok(Some(result));
+        }
+
         let zero = self.context.i64_type().const_int(0, false);
 
         match name {
@@ -820,28 +827,42 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     if args.is_empty() {
                         // Empty println → send newline to bare-metal UART
                         if let Some(f) = self.module.get_function("fj_rt_bare_println") {
-                            let null_ptr = self.context.ptr_type(inkwell::AddressSpace::default()).const_null();
+                            let null_ptr = self
+                                .context
+                                .ptr_type(inkwell::AddressSpace::default())
+                                .const_null();
                             let zero_len = self.context.i64_type().const_int(0, false);
-                            self.builder.build_call(f, &[null_ptr.into(), zero_len.into()], "")
+                            self.builder
+                                .build_call(f, &[null_ptr.into(), zero_len.into()], "")
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         }
                         return Ok(Some(zero.into()));
                     }
                     let arg_expr = &args[0].value;
-                    let val = self.compile_expr(arg_expr)?
+                    let val = self
+                        .compile_expr(arg_expr)?
                         .ok_or_else(|| CodegenError::Internal("print arg no value".into()))?;
                     let is_ln = name == "println" || name == "eprintln";
-                    let rt_name = if is_ln { "fj_rt_bare_println" } else { "fj_rt_bare_print" };
+                    let rt_name = if is_ln {
+                        "fj_rt_bare_println"
+                    } else {
+                        "fj_rt_bare_print"
+                    };
 
                     if val.is_struct_value() {
                         // String {ptr, len} — extract and pass to bare print
                         let sv = val.into_struct_value();
-                        let ptr = self.builder.build_extract_value(sv, 0, "str_ptr")
+                        let ptr = self
+                            .builder
+                            .build_extract_value(sv, 0, "str_ptr")
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                        let len = self.builder.build_extract_value(sv, 1, "str_len")
+                        let len = self
+                            .builder
+                            .build_extract_value(sv, 1, "str_len")
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         if let Some(f) = self.module.get_function(rt_name) {
-                            self.builder.build_call(f, &[ptr.into(), len.into()], "")
+                            self.builder
+                                .build_call(f, &[ptr.into(), len.into()], "")
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         }
                     } else {
@@ -852,9 +873,14 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         } else {
                             let i64_ty = self.context.i64_type();
                             let fn_ty = self.context.void_type().fn_type(&[i64_ty.into()], false);
-                            self.module.add_function(f_name, fn_ty, Some(inkwell::module::Linkage::External))
+                            self.module.add_function(
+                                f_name,
+                                fn_ty,
+                                Some(inkwell::module::Linkage::External),
+                            )
                         };
-                        self.builder.build_call(func, &[val.into()], "")
+                        self.builder
+                            .build_call(func, &[val.into()], "")
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     }
                     return Ok(Some(zero.into()));
@@ -1104,7 +1130,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
                     }
                 } else {
-                    // For non-string types, return 0 as fallback.
+                    // E3: len() on non-string/non-collection returns 0.
+                    // This is intentional — matches interpreter behavior where
+                    // len(42) returns 0 rather than erroring.
                     Ok(Some(zero.into()))
                 }
             }
@@ -1481,35 +1509,45 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         CodegenError::Internal("spin_unlock addr produced no value".into())
                     })?
                     .into_int_value();
-                self.compile_volatile_store(
-                    addr,
-                    self.context.i64_type().const_zero(),
-                )?;
+                self.compile_volatile_store(addr, self.context.i64_type().const_zero())?;
                 Ok(Some(zero.into()))
             }
 
             // ── Phase 1: Volatile u64 ──────────────────────────────────────
             "volatile_read_u64" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Internal("volatile_read_u64 requires 1 arg".into()));
+                    return Err(CodegenError::Internal(
+                        "volatile_read_u64 requires 1 arg".into(),
+                    ));
                 }
-                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal("volatile_read_u64 addr no value".into())
-                })?.into_int_value();
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_read_u64 addr no value".into())
+                    })?
+                    .into_int_value();
                 let val = self.compile_volatile_load(addr)?;
                 Ok(Some(val))
             }
 
             "volatile_write_u64" => {
                 if args.len() < 2 {
-                    return Err(CodegenError::Internal("volatile_write_u64 requires 2 args".into()));
+                    return Err(CodegenError::Internal(
+                        "volatile_write_u64 requires 2 args".into(),
+                    ));
                 }
-                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal("volatile_write_u64 addr no value".into())
-                })?.into_int_value();
-                let val = self.compile_expr(&args[1].value)?.ok_or_else(|| {
-                    CodegenError::Internal("volatile_write_u64 val no value".into())
-                })?.into_int_value();
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write_u64 addr no value".into())
+                    })?
+                    .into_int_value();
+                let val = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write_u64 val no value".into())
+                    })?
+                    .into_int_value();
                 self.compile_volatile_store(addr, val)?;
                 Ok(Some(zero.into()))
             }
@@ -1517,24 +1555,41 @@ impl<'ctx> LlvmCompiler<'ctx> {
             "volatile_write_u32_le" => {
                 // Same as volatile_write_u32 — little-endian is native on x86
                 if args.len() < 2 {
-                    return Err(CodegenError::Internal("volatile_write_u32_le requires 2 args".into()));
+                    return Err(CodegenError::Internal(
+                        "volatile_write_u32_le requires 2 args".into(),
+                    ));
                 }
-                let addr = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal("volatile_write_u32_le addr no value".into())
-                })?.into_int_value();
-                let val = self.compile_expr(&args[1].value)?.ok_or_else(|| {
-                    CodegenError::Internal("volatile_write_u32_le val no value".into())
-                })?.into_int_value();
-                let trunc = self.builder.build_int_truncate(val, self.context.i32_type(), "trunc32")
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write_u32_le addr no value".into())
+                    })?
+                    .into_int_value();
+                let val = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("volatile_write_u32_le val no value".into())
+                    })?
+                    .into_int_value();
+                let trunc = self
+                    .builder
+                    .build_int_truncate(val, self.context.i32_type(), "trunc32")
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                let ptr = self.builder.build_int_to_ptr(
-                    addr,
-                    self.context.ptr_type(inkwell::AddressSpace::default()),
-                    "addr_ptr",
-                ).map_err(|e| CodegenError::Internal(e.to_string()))?;
-                let store = self.builder.build_store(ptr, trunc)
+                let ptr = self
+                    .builder
+                    .build_int_to_ptr(
+                        addr,
+                        self.context.ptr_type(inkwell::AddressSpace::default()),
+                        "addr_ptr",
+                    )
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                store.set_volatile(true).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                let store = self
+                    .builder
+                    .build_store(ptr, trunc)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                store
+                    .set_volatile(true)
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 Ok(Some(zero.into()))
             }
 
@@ -1543,7 +1598,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let insn = match name {
                     "pause" => "pause",
                     "memory_fence" => "mfence",
-                    "sse_enable" => "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %rax\n\tmov %rax, %cr4",
+                    "sse_enable" => {
+                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %rax\n\tmov %rax, %cr4"
+                    }
                     "irq_enable" => "sti",
                     _ => "nop",
                 };
@@ -1555,9 +1612,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 if args.is_empty() {
                     return Err(CodegenError::Internal(format!("{name} requires 1 arg")));
                 }
-                let val = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal(format!("{name} arg no value"))
-                })?.into_int_value();
+                let val = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal(format!("{name} arg no value")))?
+                    .into_int_value();
                 let template = match name {
                     "invlpg" => "invlpg (%rdi)",
                     "fxsave" => "fxsave (%rdi)",
@@ -1569,10 +1627,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let void_ty = self.context.void_type();
                 let fn_ty = void_ty.fn_type(&[self.context.i64_type().into()], false);
                 let asm_val = self.context.create_inline_asm(
-                    fn_ty, template.to_string(), "{rdi}".to_string(),
-                    true, false, None, false,
+                    fn_ty,
+                    template.to_string(),
+                    "{rdi}".to_string(),
+                    true,
+                    false,
+                    None,
+                    false,
                 );
-                self.builder.build_indirect_call(fn_ty, asm_val, &[val.into()], "")
+                self.builder
+                    .build_indirect_call(fn_ty, asm_val, &[val.into()], "")
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 Ok(Some(zero.into()))
             }
@@ -1586,10 +1650,17 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let i64_ty = self.context.i64_type();
                 let fn_ty = i64_ty.fn_type(&[], false);
                 let asm_val = self.context.create_inline_asm(
-                    fn_ty, template.to_string(), "={rax}".to_string(),
-                    true, false, None, false,
+                    fn_ty,
+                    template.to_string(),
+                    "={rax}".to_string(),
+                    true,
+                    false,
+                    None,
+                    false,
                 );
-                let call = self.builder.build_indirect_call(fn_ty, asm_val, &[], "cr_val")
+                let call = self
+                    .builder
+                    .build_indirect_call(fn_ty, asm_val, &[], "cr_val")
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 match call.try_as_basic_value() {
                     inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
@@ -1607,27 +1678,47 @@ impl<'ctx> LlvmCompiler<'ctx> {
             "fn_addr" => {
                 // fn_addr("function_name") -> i64 (address of function)
                 if args.is_empty() {
-                    return Err(CodegenError::Internal("fn_addr requires 1 string arg".into()));
+                    return Err(CodegenError::Internal(
+                        "fn_addr requires 1 string arg".into(),
+                    ));
                 }
                 // Extract the function name from string literal argument
                 let fn_name = match &args[0].value {
-                    Expr::Literal { kind: LiteralKind::String(s), .. } => s.clone(),
-                    _ => return Err(CodegenError::Internal("fn_addr arg must be string literal".into())),
+                    Expr::Literal {
+                        kind: LiteralKind::String(s),
+                        ..
+                    } => s.clone(),
+                    _ => {
+                        return Err(CodegenError::Internal(
+                            "fn_addr arg must be string literal".into(),
+                        ));
+                    }
                 };
                 let i64_ty = self.context.i64_type();
-                if let Some(func) = self.functions.get(&fn_name).copied()
+                if let Some(func) = self
+                    .functions
+                    .get(&fn_name)
+                    .copied()
                     .or_else(|| self.module.get_function(&fn_name))
                 {
                     let ptr = func.as_global_value().as_pointer_value();
-                    let addr = self.builder.build_ptr_to_int(ptr, i64_ty, "fn_addr")
+                    let addr = self
+                        .builder
+                        .build_ptr_to_int(ptr, i64_ty, "fn_addr")
                         .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     Ok(Some(addr.into()))
                 } else {
                     // Function not found — declare as external and take address
                     let fn_ty = i64_ty.fn_type(&[], false);
-                    let func = self.module.add_function(&fn_name, fn_ty, Some(inkwell::module::Linkage::External));
+                    let func = self.module.add_function(
+                        &fn_name,
+                        fn_ty,
+                        Some(inkwell::module::Linkage::External),
+                    );
                     let ptr = func.as_global_value().as_pointer_value();
-                    let addr = self.builder.build_ptr_to_int(ptr, i64_ty, "fn_addr")
+                    let addr = self
+                        .builder
+                        .build_ptr_to_int(ptr, i64_ty, "fn_addr")
                         .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     Ok(Some(addr.into()))
                 }
@@ -1635,11 +1726,14 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             "cpuid_eax" | "cpuid_ebx" | "cpuid_ecx" | "cpuid_edx" => {
                 if args.is_empty() {
-                    return Err(CodegenError::Internal(format!("{name} requires 1 arg (leaf)")));
+                    return Err(CodegenError::Internal(format!(
+                        "{name} requires 1 arg (leaf)"
+                    )));
                 }
-                let leaf = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal(format!("{name} leaf no value"))
-                })?.into_int_value();
+                let leaf = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal(format!("{name} leaf no value")))?
+                    .into_int_value();
                 let out_reg = match name {
                     "cpuid_eax" => "={eax}",
                     "cpuid_ebx" => "={ebx}",
@@ -1662,13 +1756,20 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     fn_ty,
                     "mov %rdi, %rax\n\txor %ecx, %ecx\n\tcpuid".to_string(),
                     constraint,
-                    true, false, None, false,
+                    true,
+                    false,
+                    None,
+                    false,
                 );
-                let call = self.builder.build_indirect_call(fn_ty, asm_val, &[leaf.into()], "cpuid_val")
+                let call = self
+                    .builder
+                    .build_indirect_call(fn_ty, asm_val, &[leaf.into()], "cpuid_val")
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 match call.try_as_basic_value() {
                     inkwell::values::ValueKind::Basic(v) => {
-                        let ext = self.builder.build_int_z_extend(v.into_int_value(), i64_ty, "cpuid_ext")
+                        let ext = self
+                            .builder
+                            .build_int_z_extend(v.into_int_value(), i64_ty, "cpuid_ext")
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         Ok(Some(ext.into()))
                     }
@@ -1678,17 +1779,22 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             "iretq_to_user" => {
                 if args.len() < 3 {
-                    return Err(CodegenError::Internal("iretq_to_user requires 3 args (rip, rsp, rflags)".into()));
+                    return Err(CodegenError::Internal(
+                        "iretq_to_user requires 3 args (rip, rsp, rflags)".into(),
+                    ));
                 }
-                let rip = self.compile_expr(&args[0].value)?.ok_or_else(|| {
-                    CodegenError::Internal("iretq_to_user rip no value".into())
-                })?.into_int_value();
-                let rsp = self.compile_expr(&args[1].value)?.ok_or_else(|| {
-                    CodegenError::Internal("iretq_to_user rsp no value".into())
-                })?.into_int_value();
-                let rflags = self.compile_expr(&args[2].value)?.ok_or_else(|| {
-                    CodegenError::Internal("iretq_to_user rflags no value".into())
-                })?.into_int_value();
+                let rip = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rip no value".into()))?
+                    .into_int_value();
+                let rsp = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rsp no value".into()))?
+                    .into_int_value();
+                let rflags = self
+                    .compile_expr(&args[2].value)?
+                    .ok_or_else(|| CodegenError::Internal("iretq_to_user rflags no value".into()))?
+                    .into_int_value();
                 let void_ty = self.context.void_type();
                 let i64_ty = self.context.i64_type();
                 let fn_ty = void_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
@@ -1698,54 +1804,49 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     "{rdi},{rsi},{rdx}".to_string(),
                     true, false, None, false,
                 );
-                self.builder.build_indirect_call(fn_ty, asm_val, &[rip.into(), rsp.into(), rflags.into()], "")
+                self.builder
+                    .build_indirect_call(
+                        fn_ty,
+                        asm_val,
+                        &[rip.into(), rsp.into(), rflags.into()],
+                        "",
+                    )
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 Ok(Some(zero.into()))
             }
 
             // ── Phase 3: External call builtins ───────────────────────────
             // These call fj_rt_bare_* symbols provided by the runtime
-            "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
-            | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be"
-            | "read_timer_ticks" | "str_len" | "str_byte_at"
-            | "buffer_write_u16_le" | "buffer_write_u32_le" | "buffer_write_u64_le"
-            | "buffer_write_u16_be" | "buffer_write_u32_be" | "buffer_write_u64_be"
-            | "memcpy_buf" | "memset_buf" | "x86_serial_init" | "acpi_shutdown"
-            | "console_putchar" | "set_current_pid" | "pic_remap" | "idt_init"
-            | "pit_init" | "tss_init" | "nprint" | "pci_read32" | "pci_write32" => {
-                // PREFER user-defined function over external stub
-                if let Some(user_fn) = self.functions.get(name).copied() {
-                    let param_types: Vec<_> = user_fn.get_type().get_param_types();
-                    let compiled_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
-                        .iter()
-                        .enumerate()
-                        .map(|(i, arg)| {
-                            let val = self.compile_expr(&arg.value)?.ok_or_else(|| {
-                                CodegenError::Internal("builtin arg no value".into())
-                            })?;
-                            if val.is_struct_value() {
-                                let expects_int = param_types.get(i).is_some_and(|t| t.is_int_type());
-                                if expects_int {
-                                    let sv = val.into_struct_value();
-                                    let ptr = self.builder.build_extract_value(sv, 0, "s_ptr")
-                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                                    let i64_ty = self.context.i64_type();
-                                    let ptr_int = self.builder.build_ptr_to_int(
-                                        ptr.into_pointer_value(), i64_ty, "s_i64",
-                                    ).map_err(|e| CodegenError::Internal(e.to_string()))?;
-                                    return Ok(ptr_int.into());
-                                }
-                            }
-                            Ok(val.into())
-                        })
-                        .collect::<Result<Vec<_>, CodegenError>>()?;
-                    let call = self.builder.build_call(user_fn, &compiled_args, &format!("{name}_ret"))
-                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                    return match call.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
-                        inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
-                    };
-                }
+            "buffer_read_u16_le"
+            | "buffer_read_u32_le"
+            | "buffer_read_u64_le"
+            | "buffer_read_u16_be"
+            | "buffer_read_u32_be"
+            | "buffer_read_u64_be"
+            | "read_timer_ticks"
+            | "str_len"
+            | "str_byte_at"
+            | "buffer_write_u16_le"
+            | "buffer_write_u32_le"
+            | "buffer_write_u64_le"
+            | "buffer_write_u16_be"
+            | "buffer_write_u32_be"
+            | "buffer_write_u64_be"
+            | "memcpy_buf"
+            | "memset_buf"
+            | "x86_serial_init"
+            | "acpi_shutdown"
+            | "console_putchar"
+            | "set_current_pid"
+            | "pic_remap"
+            | "idt_init"
+            | "pit_init"
+            | "tss_init"
+            | "nprint"
+            | "pci_read32"
+            | "pci_write32" => {
+                // User-fn override is handled by try_user_fn_override at top of
+                // compile_builtin_call — no duplicate check needed here.
                 // Fallback: external runtime stub
                 let rt_name = format!("fj_rt_bare_{name}");
                 let i64_ty = self.context.i64_type();
@@ -1757,11 +1858,14 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         if v.is_struct_value() {
                             // String {ptr, len} — extract pointer, convert to i64
                             let sv = v.into_struct_value();
-                            let ptr = self.builder.build_extract_value(sv, 0, "str_ptr_ext")
+                            let ptr = self
+                                .builder
+                                .build_extract_value(sv, 0, "str_ptr_ext")
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                            let ptr_int = self.builder.build_ptr_to_int(
-                                ptr.into_pointer_value(), i64_ty, "str_i64_ext",
-                            ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                            let ptr_int = self
+                                .builder
+                                .build_ptr_to_int(ptr.into_pointer_value(), i64_ty, "str_i64_ext")
+                                .map_err(|e| CodegenError::Internal(e.to_string()))?;
                             arg_vals.push(ptr_int.into());
                         } else {
                             arg_vals.push(v.into());
@@ -1777,10 +1881,16 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let param_types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
                         (0..arg_vals.len()).map(|_| i64_ty.into()).collect();
                     let fn_ty = i64_ty.fn_type(&param_types, false);
-                    self.module.add_function(&rt_name, fn_ty, Some(inkwell::module::Linkage::External))
+                    self.module.add_function(
+                        &rt_name,
+                        fn_ty,
+                        Some(inkwell::module::Linkage::External),
+                    )
                 };
 
-                let call = self.builder.build_call(func, &arg_vals, &format!("{name}_ret"))
+                let call = self
+                    .builder
+                    .build_call(func, &arg_vals, &format!("{name}_ret"))
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 match call.try_as_basic_value() {
                     inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
@@ -2899,8 +3009,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let naked_kind =
                         inkwell::attributes::Attribute::get_named_enum_kind_id("naked");
                     let naked_attr = self.context.create_enum_attribute(naked_kind, 0);
-                    function
-                        .add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
+                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
                     let noinline_kind =
                         inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
                     let noinline_attr = self.context.create_enum_attribute(noinline_kind, 0);
@@ -3131,9 +3240,20 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .into(),
                 _ => llvm_type.into_int_type().const_zero().into(),
             },
-            Expr::Unary { op: UnaryOp::Neg, operand, .. } => {
-                if let Expr::Literal { kind: LiteralKind::Int(v), .. } = operand.as_ref() {
-                    self.context.i64_type().const_int((*v).wrapping_neg() as u64, true).into()
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                operand,
+                ..
+            } => {
+                if let Expr::Literal {
+                    kind: LiteralKind::Int(v),
+                    ..
+                } = operand.as_ref()
+                {
+                    self.context
+                        .i64_type()
+                        .const_int((*v).wrapping_neg() as u64, true)
+                        .into()
                 } else {
                     llvm_type.into_int_type().const_zero().into()
                 }
@@ -3325,16 +3445,23 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             // If arg is a string struct {ptr, len} but param expects i64,
                             // extract the pointer and convert to i64 (bare-metal ABI)
                             if val.is_struct_value() {
-                                let expects_int = param_types.get(i)
-                                    .is_some_and(|t| t.is_int_type());
+                                let expects_int =
+                                    param_types.get(i).is_some_and(|t| t.is_int_type());
                                 if expects_int {
                                     let sv = val.into_struct_value();
-                                    let ptr = self.builder.build_extract_value(sv, 0, "str_ptr_arg")
+                                    let ptr = self
+                                        .builder
+                                        .build_extract_value(sv, 0, "str_ptr_arg")
                                         .map_err(|e| CodegenError::Internal(e.to_string()))?;
                                     let i64_ty = self.context.i64_type();
-                                    let ptr_int = self.builder.build_ptr_to_int(
-                                        ptr.into_pointer_value(), i64_ty, "str_as_i64",
-                                    ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                    let ptr_int = self
+                                        .builder
+                                        .build_ptr_to_int(
+                                            ptr.into_pointer_value(),
+                                            i64_ty,
+                                            "str_as_i64",
+                                        )
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
                                     return Ok(ptr_int.into());
                                 }
                             }
@@ -3348,7 +3475,11 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
                     match call_val.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                        inkwell::values::ValueKind::Basic(val) => {
+                            // E4: Coerce i1 return values to i64 for uniform ABI
+                            let coerced = self.coerce_int_to_i64(val)?;
+                            Ok(Some(coerced))
+                        }
                         inkwell::values::ValueKind::Instruction(_) => Ok(None),
                     }
                 } else {
@@ -3375,24 +3506,35 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     }
                     Expr::Index { object, index, .. } => {
                         // array[i] = value — compile base as pointer, GEP, store
-                        let base = self.compile_expr(object)?.ok_or_else(|| {
-                            CodegenError::Internal("index assign base no value".into())
-                        })?.into_int_value();
-                        let idx = self.compile_expr(index)?.ok_or_else(|| {
-                            CodegenError::Internal("index assign index no value".into())
-                        })?.into_int_value();
+                        let base = self
+                            .compile_expr(object)?
+                            .ok_or_else(|| {
+                                CodegenError::Internal("index assign base no value".into())
+                            })?
+                            .into_int_value();
+                        let idx = self
+                            .compile_expr(index)?
+                            .ok_or_else(|| {
+                                CodegenError::Internal("index assign index no value".into())
+                            })?
+                            .into_int_value();
                         let i64_ty = self.context.i64_type();
-                        let ptr = self.builder.build_int_to_ptr(
-                            base,
-                            self.context.ptr_type(inkwell::AddressSpace::default()),
-                            "idx_base",
-                        ).map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let ptr = self
+                            .builder
+                            .build_int_to_ptr(
+                                base,
+                                self.context.ptr_type(inkwell::AddressSpace::default()),
+                                "idx_base",
+                            )
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         // SAFETY: bare-metal pointer arithmetic
                         let elem_ptr = unsafe {
-                            self.builder.build_in_bounds_gep(i64_ty, ptr, &[idx], "idx_ptr")
+                            self.builder
+                                .build_in_bounds_gep(i64_ty, ptr, &[idx], "idx_ptr")
                                 .map_err(|e| CodegenError::Internal(e.to_string()))?
                         };
-                        self.builder.build_store(elem_ptr, val)
+                        self.builder
+                            .build_store(elem_ptr, val)
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                         Ok(None)
                     }
@@ -3404,15 +3546,21 @@ impl<'ctx> LlvmCompiler<'ctx> {
                                     if ty.is_struct_type() {
                                         let st = ty.into_struct_type();
                                         // Look up field index
-                                        if let Some((_, field_names)) = self.struct_types.values()
-                                            .find(|(s, _)| *s == st)
+                                        if let Some((_, field_names)) =
+                                            self.struct_types.values().find(|(s, _)| *s == st)
                                         {
-                                            if let Some(idx) = field_names.iter().position(|n| n == field) {
-                                                let field_ptr = self.builder
+                                            if let Some(idx) =
+                                                field_names.iter().position(|n| n == field)
+                                            {
+                                                let field_ptr = self
+                                                    .builder
                                                     .build_struct_gep(st, ptr, idx as u32, field)
-                                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
-                                                self.builder.build_store(field_ptr, val)
-                                                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                                                    .map_err(|e| {
+                                                        CodegenError::Internal(e.to_string())
+                                                    })?;
+                                                self.builder.build_store(field_ptr, val).map_err(
+                                                    |e| CodegenError::Internal(e.to_string()),
+                                                )?;
                                                 return Ok(None);
                                             }
                                         }
@@ -3420,12 +3568,27 @@ impl<'ctx> LlvmCompiler<'ctx> {
                                 }
                             }
                         }
-                        // Fallback: treat as volatile write (field access on raw pointer)
-                        Ok(None)
+                        // E3: Field assignment on non-struct or unknown field —
+                        // in bare-metal mode, treat as no-op (raw pointer field access);
+                        // in hosted mode, report the issue.
+                        if self.no_std {
+                            Ok(None)
+                        } else {
+                            Err(CodegenError::Internal(format!(
+                                "cannot assign to field '{field}' — target is not a known struct variable"
+                            )))
+                        }
                     }
                     _ => {
-                        // Unknown target — skip silently (best effort for bare-metal)
-                        Ok(None)
+                        // E3: Unknown assign target — report instead of silently ignoring.
+                        // In bare-metal mode, tolerate exotic targets (pointer casts, etc.).
+                        if self.no_std {
+                            Ok(None)
+                        } else {
+                            Err(CodegenError::NotImplemented(
+                                "assignment to complex target expression in LLVM backend".into(),
+                            ))
+                        }
                     }
                 }
             }
@@ -4012,9 +4175,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
         // Create basic blocks
         let rhs_bb = self.context.append_basic_block(current_fn, "sc_rhs");
         let merge_bb = self.context.append_basic_block(current_fn, "sc_merge");
-        let lhs_bb = self.builder.get_insert_block().ok_or_else(|| {
-            CodegenError::Internal("no insert block".into())
-        })?;
+        let lhs_bb = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| CodegenError::Internal("no insert block".into()))?;
 
         // Branch based on operator
         match op {
@@ -4051,9 +4215,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 )
                 .map_err(|e| CodegenError::Internal(e.to_string()))?
         };
-        let rhs_end_bb = self.builder.get_insert_block().ok_or_else(|| {
-            CodegenError::Internal("no insert block after rhs".into())
-        })?;
+        let rhs_end_bb = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| CodegenError::Internal("no insert block after rhs".into()))?;
         self.builder
             .build_unconditional_branch(merge_bb)
             .map_err(|e| CodegenError::Internal(e.to_string()))?;
@@ -4264,10 +4429,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             Stmt::Return { value, .. } => {
                 // Determine if current function is void
-                let current_fn = self.builder.get_insert_block()
-                    .and_then(|b| b.get_parent());
-                let is_void = current_fn
-                    .is_some_and(|f| f.get_type().get_return_type().is_none());
+                let current_fn = self.builder.get_insert_block().and_then(|b| b.get_parent());
+                let is_void = current_fn.is_some_and(|f| f.get_type().get_return_type().is_none());
 
                 if let Some(expr) = value {
                     let val = self.compile_expr(expr)?;
@@ -4277,8 +4440,42 @@ impl<'ctx> LlvmCompiler<'ctx> {
                             .build_return(None)
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     } else if let Some(v) = val {
+                        // E4: Coerce return value to match function signature (i1→i64)
+                        let coerced = if let Some(ret_ty) =
+                            current_fn.and_then(|f| f.get_type().get_return_type())
+                        {
+                            if ret_ty.is_int_type() && v.is_int_value() {
+                                let ret_width = ret_ty.into_int_type().get_bit_width();
+                                let val_width = v.into_int_value().get_type().get_bit_width();
+                                if val_width < ret_width {
+                                    self.builder
+                                        .build_int_z_extend(
+                                            v.into_int_value(),
+                                            ret_ty.into_int_type(),
+                                            "ret_ext",
+                                        )
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                        .into()
+                                } else if val_width > ret_width {
+                                    self.builder
+                                        .build_int_truncate(
+                                            v.into_int_value(),
+                                            ret_ty.into_int_type(),
+                                            "ret_trunc",
+                                        )
+                                        .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                        .into()
+                                } else {
+                                    v
+                                }
+                            } else {
+                                v
+                            }
+                        } else {
+                            v
+                        };
                         self.builder
-                            .build_return(Some(&v))
+                            .build_return(Some(&coerced))
                             .map_err(|e| CodegenError::Internal(e.to_string()))?;
                     } else {
                         self.builder
@@ -5243,6 +5440,199 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // E1: Universal builtin override — user fn always wins over stubs
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Attempts to call a user-defined function that overrides a builtin.
+    ///
+    /// OS kernels MUST be able to override any builtin with their own
+    /// implementation. This method checks if a user-defined function exists
+    /// with the same name and calls it instead, performing struct→i64 ABI
+    /// coercion as needed.
+    ///
+    /// Returns `Ok(Some(val))` if user fn was found and called,
+    /// `Ok(None)` if no user override exists (caller should use builtin impl).
+    fn try_user_fn_override(
+        &mut self,
+        name: &str,
+        args: &[CallArg],
+    ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
+        let user_fn = match self.functions.get(name).copied() {
+            Some(f) => f,
+            None => return Ok(None),
+        };
+        let param_types: Vec<_> = user_fn.get_type().get_param_types();
+        let compiled_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let val = self.compile_expr(&arg.value)?.ok_or_else(|| {
+                    CodegenError::Internal(format!("user override '{name}' arg {i} no value"))
+                })?;
+                // Struct→i64 ABI coercion: extract ptr when callee expects int
+                if val.is_struct_value() {
+                    let expects_int = param_types.get(i).is_some_and(|t| t.is_int_type());
+                    if expects_int {
+                        let sv = val.into_struct_value();
+                        let ptr = self
+                            .builder
+                            .build_extract_value(sv, 0, "ovr_ptr")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        let i64_ty = self.context.i64_type();
+                        let ptr_int = self
+                            .builder
+                            .build_ptr_to_int(ptr.into_pointer_value(), i64_ty, "ovr_i64")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                        return Ok(ptr_int.into());
+                    }
+                }
+                Ok(val.into())
+            })
+            .collect::<Result<Vec<_>, CodegenError>>()?;
+        let call = self
+            .builder
+            .build_call(user_fn, &compiled_args, &format!("{name}_ovr"))
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let zero = self.context.i64_type().const_int(0, false);
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(Some(v)),
+            inkwell::values::ValueKind::Instruction(_) => Ok(Some(zero.into())),
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // E2: Proper inline asm constraint classifier
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Formats an LLVM inline asm input/inout constraint.
+    ///
+    /// LLVM constraint syntax:
+    /// - Generic: `r` (any GPR), `m` (memory), `i` (immediate), `n` (int immediate)
+    /// - Physical register: must be wrapped in braces, e.g., `{rax}`, `{eax}`, `{xmm0}`
+    /// - Memory/flag clobbers: `~{memory}`, `~{cc}`, `~{dirflag}`, `~{fpsr}`
+    /// - Tied operands: `0`, `1`, etc. (digit references)
+    /// - Already-braced: pass through unchanged
+    fn format_asm_constraint_in(constraint: &str) -> String {
+        Self::format_asm_constraint_impl(constraint, false)
+    }
+
+    /// Formats an LLVM inline asm output constraint (prepends `=`).
+    fn format_asm_constraint_out(constraint: &str) -> String {
+        Self::format_asm_constraint_impl(constraint, true)
+    }
+
+    /// Core constraint formatter. `is_output` prepends `=` for output operands.
+    fn format_asm_constraint_impl(constraint: &str, is_output: bool) -> String {
+        let prefix = if is_output { "=" } else { "" };
+
+        // Already wrapped in braces — pass through
+        if constraint.starts_with('{') {
+            return format!("{prefix}{constraint}");
+        }
+
+        // Already has `=` prefix (from user) — strip and re-add
+        let raw = constraint.strip_prefix('=').unwrap_or(constraint);
+
+        // Already wrapped in braces after stripping `=`
+        if raw.starts_with('{') {
+            return format!("{prefix}{raw}");
+        }
+
+        // Generic single-letter constraints: r, m, i, n, g, X, etc.
+        const GENERIC_CONSTRAINTS: &[&str] = &[
+            "r", "m", "i", "n", "g", "X", "o", "V", "p", "f", "t", "u",
+            // x86 specific generic
+            "q", "Q", "a", "b", "c", "d", "S", "D", "A",
+        ];
+        if GENERIC_CONSTRAINTS.contains(&raw) {
+            return format!("{prefix}{raw}");
+        }
+
+        // Digit-tied operands: "0", "1", "2", etc.
+        if raw.chars().all(|c| c.is_ascii_digit()) {
+            return format!("{prefix}{raw}");
+        }
+
+        // Clobber syntax: ~{...} — pass through
+        if raw.starts_with('~') {
+            return raw.to_string();
+        }
+
+        // Known LLVM special constraints that should NOT be braced
+        const SPECIAL_CONSTRAINTS: &[&str] = &["memory", "cc", "dirflag", "fpsr", "flags"];
+        if SPECIAL_CONSTRAINTS.contains(&raw) {
+            return format!("{prefix}{raw}");
+        }
+
+        // Everything else is a physical register name — wrap in braces
+        // Examples: rax, eax, rbx, xmm0, cr3, rdi, rsi, etc.
+        format!("{prefix}{{{raw}}}")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // E4: Type harmonization helper — coerce int to i64
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Coerces an integer value to i64 via zero-extension if needed.
+    /// Returns the value unchanged if it's already i64 or non-integer.
+    fn coerce_int_to_i64(
+        &self,
+        val: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        if val.is_int_value() {
+            let iv = val.into_int_value();
+            if iv.get_type().get_bit_width() < 64 {
+                let ext = self
+                    .builder
+                    .build_int_z_extend(iv, self.context.i64_type(), "coerce_i64")
+                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                Ok(ext.into())
+            } else {
+                Ok(val)
+            }
+        } else {
+            Ok(val)
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // E5: Pre-link symbol verification for bare-metal
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Verifies that all `fj_rt_bare_*` symbols referenced in the module are
+    /// either defined or explicitly declared as external.
+    ///
+    /// Call this before `emit_object()` in bare-metal mode to catch missing
+    /// runtime symbols early, instead of getting cryptic linker errors.
+    ///
+    /// Returns a list of undefined bare-metal symbols. If empty, all symbols
+    /// are resolved.
+    pub fn verify_bare_metal_symbols(&self) -> Vec<String> {
+        let mut missing = Vec::new();
+        let mut func = self.module.get_first_function();
+        while let Some(f) = func {
+            let name = f.get_name().to_string_lossy().to_string();
+            if name.starts_with("fj_rt_bare_") {
+                // Declaration only (no basic blocks) = external symbol needed
+                if f.count_basic_blocks() == 0 {
+                    // Check if this symbol is provided by any user-defined function
+                    // (user overrides would have basic blocks)
+                    let short_name = name.strip_prefix("fj_rt_bare_").unwrap_or(&name);
+                    let has_user_impl = self
+                        .functions
+                        .get(short_name)
+                        .is_some_and(|uf| uf.count_basic_blocks() > 0);
+                    if !has_user_impl {
+                        missing.push(name);
+                    }
+                }
+            }
+            func = f.get_next_function();
+        }
+        missing
+    }
+
     /// Sets the LTO mode.
     pub fn set_lto_mode(&mut self, mode: LtoMode) {
         self.lto_mode = mode;
@@ -5370,34 +5760,19 @@ impl<'ctx> LlvmCompiler<'ctx> {
         for op in operands {
             match op {
                 crate::parser::ast::AsmOperand::In { constraint, expr } => {
-                    // LLVM requires {reg} syntax for physical registers
-                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
-                        format!("{{{constraint}}}")
-                    } else {
-                        constraint.clone()
-                    };
-                    constraints.push(c);
+                    // E2: Proper constraint classification
+                    constraints.push(Self::format_asm_constraint_in(constraint));
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
                 }
                 crate::parser::ast::AsmOperand::Out { constraint, .. } => {
-                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
-                        format!("={{{constraint}}}")
-                    } else {
-                        format!("={constraint}")
-                    };
-                    constraints.push(c);
+                    constraints.push(Self::format_asm_constraint_out(constraint));
                 }
                 crate::parser::ast::AsmOperand::InOut {
                     constraint, expr, ..
                 } => {
-                    let c = if constraint.len() <= 4 && constraint.chars().all(|c| c.is_alphanumeric()) && constraint != "r" && constraint != "m" && constraint != "i" {
-                        format!("{{{constraint}}}")
-                    } else {
-                        constraint.clone()
-                    };
-                    constraints.push(c);
+                    constraints.push(Self::format_asm_constraint_in(constraint));
                     if let Some(val) = self.compile_expr(expr)? {
                         input_vals.push(val);
                     }
@@ -5861,7 +6236,27 @@ impl<'ctx> LlvmCompiler<'ctx> {
     }
 
     /// Writes the compiled module to an object file.
+    ///
+    /// In bare-metal mode, runs pre-link symbol verification to catch missing
+    /// `fj_rt_bare_*` symbols early with clear diagnostics.
     pub fn emit_object(&self, path: &Path) -> Result<(), CodegenError> {
+        // E5: Pre-link symbol verification for bare-metal
+        if self.no_std {
+            let missing = self.verify_bare_metal_symbols();
+            if !missing.is_empty() {
+                eprintln!(
+                    "warning: {} undefined bare-metal runtime symbol(s) — \
+                     these must be provided by your runtime library or will \
+                     cause linker errors:",
+                    missing.len()
+                );
+                for sym in &missing {
+                    eprintln!("  - {sym}");
+                }
+                // Don't fail — just warn. The user may provide these via
+                // a separate object file or archive at link time.
+            }
+        }
         let tm = self.create_target_machine(None)?;
         self.configure_module_target(&tm);
         tm.write_to_file(&self.module, FileType::Object, path)
