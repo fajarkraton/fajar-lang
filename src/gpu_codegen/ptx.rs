@@ -31,6 +31,12 @@ pub enum PtxType {
     F64,
     /// 16-bit float (half precision).
     F16,
+    /// 16-bit brain float (bfloat16, Ada Lovelace+).
+    Bf16,
+    /// 8-bit float (FP8 E4M3, Ada Lovelace+).
+    Fp8E4m3,
+    /// 8-bit float (FP8 E5M2, Ada Lovelace+).
+    Fp8E5m2,
 }
 
 impl fmt::Display for PtxType {
@@ -46,6 +52,9 @@ impl fmt::Display for PtxType {
             PtxType::F32 => write!(f, ".f32"),
             PtxType::F64 => write!(f, ".f64"),
             PtxType::F16 => write!(f, ".f16"),
+            PtxType::Bf16 => write!(f, ".bf16"),
+            PtxType::Fp8E4m3 => write!(f, ".e4m3"),
+            PtxType::Fp8E5m2 => write!(f, ".e5m2"),
         }
     }
 }
@@ -503,6 +512,36 @@ pub struct SharedDecl {
 }
 
 impl PtxModule {
+    /// Creates a module targeting RTX 4090 (Ada Lovelace, sm_89, PTX 8.3).
+    pub fn for_rtx4090() -> Self {
+        Self {
+            ptx_version: 83,
+            sm_version: 89,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        }
+    }
+
+    /// Creates a module targeting the given compute capability.
+    pub fn for_compute(sm: u32) -> Self {
+        let ptx_ver = match sm {
+            89 => 83, // Ada Lovelace
+            86 | 87 => 75, // Ampere
+            80 => 75, // A100
+            75 => 65, // Turing
+            70 => 60, // Volta
+            _ => 75,  // default
+        };
+        Self {
+            ptx_version: ptx_ver,
+            sm_version: sm,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        }
+    }
+
     /// Emits the complete PTX assembly text.
     pub fn emit(&self) -> String {
         let mut out = String::new();
@@ -1024,6 +1063,31 @@ mod tests {
         assert!(ptx.contains(".u32"));
         assert!(ptx.contains(".f32"));
         assert!(ptx.contains(".u64"));
+    }
+
+    // V23: sm_89 Ada Lovelace (RTX 4090) — PTX 8.3, BF16/FP8 types
+    #[test]
+    fn v23_ptx_sm89_ada_lovelace() {
+        let mut module = PtxModule {
+            ptx_version: 83, // PTX ISA 8.3 for Ada Lovelace
+            sm_version: 89,
+            address_size: 64,
+            kernels: Vec::new(),
+            shared_decls: Vec::new(),
+        };
+        module.add_elementwise_add_kernel("ada_compute");
+        let ptx = module.emit();
+        assert!(ptx.contains(".version 8.3"));
+        assert!(ptx.contains(".target sm_89"));
+        assert!(ptx.contains(".visible .entry ada_compute"));
+        assert!(ptx.contains("add.f32"));
+    }
+
+    #[test]
+    fn v23_ptx_bf16_fp8_types() {
+        assert_eq!(format!("{}", PtxType::Bf16), ".bf16");
+        assert_eq!(format!("{}", PtxType::Fp8E4m3), ".e4m3");
+        assert_eq!(format!("{}", PtxType::Fp8E5m2), ".e5m2");
     }
 
     // V16 G3.8: emit_compute_to_file
