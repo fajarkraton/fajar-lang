@@ -3304,6 +3304,8 @@ fj_rt_bare_idt_init:
 __isr_common:
     /* Stack: [vector] [error_code] [rip] [cs] [rflags] [rsp] [ss] */
     push    rax
+    push    rbx
+    push    rcx
     push    rdx
 
     /* Print "[EXC " */
@@ -3314,39 +3316,27 @@ __isr_common:
     mov     al, 'C'; out dx, al
     mov     al, ' '; out dx, al
 
-    /* Print vector number (from stack) */
-    mov     rax, [rsp + 24]     /* vector number (after push rax, rdx, error_code) */
-    /* Print as 2-digit decimal */
-    xor     rdx, rdx
-    mov     rcx, 10
-    div     rcx
-    add     al, '0'
-    mov     dx, 0x3F8
-    out     dx, al
-    mov     al, dl
-    add     al, '0'             /* remainder */
-    /* fix: remainder is in rdx from div */
-    pop     rdx                 /* restore original rdx */
-    push    rdx
-    mov     rax, [rsp + 24]
-    push    rbx
+    /* Print vector number as 2-digit decimal */
+    /* Stack: [rdx][rcx][rbx][rax][vector][error_code][rip][cs]... */
+    mov     rax, [rsp + 32]     /* vector number (+32 = skip rdx,rcx,rbx,rax) */
     xor     rdx, rdx
     mov     rbx, 10
     div     rbx                 /* rax = tens, rdx = ones */
     add     al, '0'
+    mov     rcx, rdx            /* save remainder in rcx */
     mov     dx, 0x3F8
-    out     dx, al
-    mov     rax, rdx
+    out     dx, al              /* print tens digit */
+    mov     al, cl
     add     al, '0'
-    mov     dx, 0x3F8
-    out     dx, al
+    out     dx, al              /* print ones digit */
     mov     al, ']'
     out     dx, al
     mov     al, 0x0A
     out     dx, al
-    pop     rbx
 
     pop     rdx
+    pop     rcx
+    pop     rbx
     pop     rax
     cli
     hlt
@@ -3412,7 +3402,7 @@ __isr_14:
     pop     rax
 
     push    rax
-    mov     rax, QWORD PTR [rsp + 16]  /* CS from exception frame */
+    mov     rax, QWORD PTR [rsp + 24]  /* CS from exception frame (rax+0, err+8, RIP+16, CS+24) */
     and     rax, 3
     cmp     rax, 3
     pop     rax

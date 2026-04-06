@@ -1599,7 +1599,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     "pause" => "pause",
                     "memory_fence" => "mfence",
                     "sse_enable" => {
-                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x600, %eax\n\tmov %rax, %cr4"
+                        // Enable SSE: clear CR0.EM (bit 2), set CR0.MP (bit 1)
+                        // Enable OSFXSR (9) + OSXMMEXCPT (10) + OSXSAVE (18) in CR4
+                        // OSXSAVE is required for ALL VEX-encoded instructions (AVX, BMI2)
+                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x40600, %eax\n\tmov %rax, %cr4"
                     }
                     "irq_enable" => "sti",
                     _ => "nop",
