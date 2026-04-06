@@ -555,6 +555,8 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
+| [**v23.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v23.0.0) | **Boot** | **FajarOS boots to shell (105 commands, 90 auto-tested). Ring 3 user mode (IRETQ+SYSCALL+SYSRETQ→shell resume). FajarQuant kernel-native. NVMe storage. 22 bugs fixed: LLVM asm constraint ordering, iretq selectors, PIC/LAPIC handlers, entry block alloca, frame allocator BSF/POPCNT. x86_64-user standalone ELF target. 7,572 tests.** |
+| [v20.8.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v20.8.0) | Perfection | FajarQuant, JIT 76x speedup, GPU detection (RTX 4090), 131/131 features audit, plugin CLI, strict mode. 10,400+ tests. |
 | **v12.1.0** | **Delivery** | **V15: Multi-step effect continuations (replay-with-cache), resume() no-arg, effect type/arity checking, ML shorthand builtins (tanh/concat/accuracy), .forward() method dispatch, bindgen typedef struct fix, `fj run --check-only`, `fj registry-init`, LSP effect keywords, 22+ new .fj examples. 8,092 tests.** |
 | **v12.0.0** | **Infinity** | **V14: Algebraic effects + handlers, dependent types (Pi/Sigma/refinement), GPU compute shaders (SPIR-V/PTX/fusion), LSP v4 (semantic tokens, inlay hints, completions), package registry (Sigstore signing, SBOM, audit). 8,074 tests, all CLI-integrated.** |
 | **v11.0.0** | **Beyond** | **V13: Const generics, incremental compilation, WASI P2 component model, FFI v2 (C++/Python/Rust), SMT verification (DO-178C), distributed runtime (Raft), self-hosting compiler** |
