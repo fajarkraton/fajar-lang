@@ -2274,7 +2274,8 @@ fj_rt_str_len:
 /* TSS is needed for Ring 3→0 transitions: RSP0 = kernel stack */
 
 /* tss_init() — Initialize TSS + GDT TSS descriptor + load TR */
-.global fj_rt_bare_tss_init
+/* .weak so external runtime_stubs.S can override with real implementation */
+.weak fj_rt_bare_tss_init
 .type fj_rt_bare_tss_init, @function
 fj_rt_bare_tss_init:
     /* Zero TSS area (104 bytes at 0x6FC00) */
@@ -3208,7 +3209,8 @@ __timer_ticks:
 .section .text
 
 /* ── idt_init(): Build IDT entries and load with LIDT ── */
-.global fj_rt_bare_idt_init
+/* .weak so external runtime_stubs.S can override with real implementation */
+.weak fj_rt_bare_idt_init
 .type fj_rt_bare_idt_init, @function
 fj_rt_bare_idt_init:
     push    rbx
@@ -3567,7 +3569,8 @@ fj_rt_bare_pic_eoi:
 /* ── PIT (8254) Timer ── */
 
 /* pit_init(hz): Set PIT channel 0 frequency */
-.global fj_rt_bare_pit_init
+/* .weak so external runtime_stubs.S can override with real implementation */
+.weak fj_rt_bare_pit_init
 .type fj_rt_bare_pit_init, @function
 fj_rt_bare_pit_init:
     /* divisor = 1193182 / hz */

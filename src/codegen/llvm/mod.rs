@@ -776,6 +776,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "memory_fence"
                 | "invlpg"
                 | "fxsave"
+                | "read_cr2"
                 | "read_cr3"
                 | "write_cr3"
                 | "read_cr4"
@@ -813,6 +814,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "fxrstor"
                 | "sse_enable"
                 | "irq_enable"
+                | "irq_disable"
                 | "nprint"
                 | "write_cr4"
                 | "read_msr"
@@ -1746,7 +1748,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
 
             // ── Phase 2: Inline asm builtins ──────────────────────────────
-            "pause" | "memory_fence" | "sse_enable" | "irq_enable" => {
+            "pause" | "memory_fence" | "sse_enable" | "irq_enable" | "irq_disable" => {
                 let insn = match name {
                     "pause" => "pause",
                     "memory_fence" => "mfence",
@@ -1754,9 +1756,11 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         // Enable SSE: clear CR0.EM (bit 2), set CR0.MP (bit 1)
                         // Enable OSFXSR (9) + OSXMMEXCPT (10) + OSXSAVE (18) in CR4
                         // OSXSAVE is required for ALL VEX-encoded instructions (AVX, BMI2)
-                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x40600, %eax\n\tmov %rax, %cr4"
+                        // Then set XCR0 = 7 (X87 + SSE + AVX) via XSETBV so vzeroupper works
+                        "mov %cr0, %rax\n\tand $$0xFFFB, %ax\n\tor $$0x2, %ax\n\tmov %rax, %cr0\n\tmov %cr4, %rax\n\tor $$0x40600, %eax\n\tmov %rax, %cr4\n\txor %ecx, %ecx\n\tmov $$7, %eax\n\txor %edx, %edx\n\txsetbv"
                     }
                     "irq_enable" => "sti",
+                    "irq_disable" => "cli",
                     _ => "nop",
                 };
                 self.compile_zero_operand_asm(insn)?;
@@ -1796,8 +1800,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 Ok(Some(zero.into()))
             }
 
-            "read_cr3" | "read_cr4" => {
+            "read_cr2" | "read_cr3" | "read_cr4" => {
                 let template = match name {
+                    "read_cr2" => "mov %cr2, %rax",
                     "read_cr3" => "mov %cr3, %rax",
                     "read_cr4" => "mov %cr4, %rax",
                     _ => "mov %cr3, %rax",
