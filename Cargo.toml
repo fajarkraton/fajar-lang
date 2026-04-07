@@ -138,4 +138,4 @@ cranelift-object = { path = "patches/cranelift-object" }
 
 [profile.release]
 opt-level = 3
-lto = true
+lto = false

@@ -4241,31 +4241,36 @@ impl<'ctx> LlvmCompiler<'ctx> {
     ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let i64_ty = self.context.i64_type();
-        let str_struct_ty = self.context.struct_type(&[ptr_ty.into(), i64_ty.into()], false);
+        let str_struct_ty = self
+            .context
+            .struct_type(&[ptr_ty.into(), i64_ty.into()], false);
 
         // Helper: build a {ptr, len} struct from pointer and length values.
-        let build_str_struct =
-            |builder: &Builder<'ctx>,
-             ptr: BasicValueEnum<'ctx>,
-             len: BasicValueEnum<'ctx>|
-             -> Result<BasicValueEnum<'ctx>, CodegenError> {
-                let mut s = str_struct_ty.get_undef();
-                s = builder
-                    .build_insert_value(s, ptr, 0, "fstr_ptr")
-                    .map_err(|e| CodegenError::Internal(e.to_string()))?
-                    .into_struct_value();
-                s = builder
-                    .build_insert_value(s, len, 1, "fstr_len")
-                    .map_err(|e| CodegenError::Internal(e.to_string()))?
-                    .into_struct_value();
-                Ok(s.into())
-            };
+        let build_str_struct = |builder: &Builder<'ctx>,
+                                ptr: BasicValueEnum<'ctx>,
+                                len: BasicValueEnum<'ctx>|
+         -> Result<BasicValueEnum<'ctx>, CodegenError> {
+            let mut s = str_struct_ty.get_undef();
+            s = builder
+                .build_insert_value(s, ptr, 0, "fstr_ptr")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                .into_struct_value();
+            s = builder
+                .build_insert_value(s, len, 1, "fstr_len")
+                .map_err(|e| CodegenError::Internal(e.to_string()))?
+                .into_struct_value();
+            Ok(s.into())
+        };
 
         // Empty f-string → return empty string.
         if parts.is_empty() {
             let null_ptr = ptr_ty.const_null();
             let zero_len = i64_ty.const_int(0, false);
-            return Ok(Some(build_str_struct(&self.builder, null_ptr.into(), zero_len.into())?));
+            return Ok(Some(build_str_struct(
+                &self.builder,
+                null_ptr.into(),
+                zero_len.into(),
+            )?));
         }
 
         // Compile the first part to initialize the accumulator.
@@ -4296,14 +4301,20 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
             // Call fj_rt_str_concat(ptr1, len1, ptr2, len2) -> ptr
-            let concat_fn = *self.functions.get("fj_rt_str_concat").ok_or_else(|| {
-                CodegenError::Internal("fj_rt_str_concat not declared".into())
-            })?;
+            let concat_fn = *self
+                .functions
+                .get("fj_rt_str_concat")
+                .ok_or_else(|| CodegenError::Internal("fj_rt_str_concat not declared".into()))?;
             let concat_call = self
                 .builder
                 .build_call(
                     concat_fn,
-                    &[acc_ptr.into(), acc_len.into(), rhs_ptr.into(), rhs_len.into()],
+                    &[
+                        acc_ptr.into(),
+                        acc_len.into(),
+                        rhs_ptr.into(),
+                        rhs_len.into(),
+                    ],
                     "concat_ptr",
                 )
                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
@@ -4362,9 +4373,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 build_str_struct(&self.builder, ptr.into(), len.into())
             }
             FStringExprPart::Expr(expr) => {
-                let val = self
-                    .compile_expr(expr)?
-                    .ok_or_else(|| CodegenError::Internal("f-string expr produced no value".into()))?;
+                let val = self.compile_expr(expr)?.ok_or_else(|| {
+                    CodegenError::Internal("f-string expr produced no value".into())
+                })?;
 
                 // If the value is already a {ptr, len} struct (string), use directly.
                 if val.is_struct_value() {
@@ -4383,8 +4394,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
                 let is_bool = infer_type_from_expr(expr) == "bool"
-                    || (val.is_int_value()
-                        && val.into_int_value().get_type().get_bit_width() == 1);
+                    || (val.is_int_value() && val.into_int_value().get_type().get_bit_width() == 1);
                 let rt_fn_name = if val.is_float_value() {
                     "fj_rt_float_to_string"
                 } else if is_bool {
@@ -4393,26 +4403,30 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     "fj_rt_int_to_string"
                 };
 
-                let rt_fn = *self.functions.get(rt_fn_name).ok_or_else(|| {
-                    CodegenError::Internal(format!("{rt_fn_name} not declared"))
-                })?;
+                let rt_fn = *self
+                    .functions
+                    .get(rt_fn_name)
+                    .ok_or_else(|| CodegenError::Internal(format!("{rt_fn_name} not declared")))?;
 
                 // Coerce bool (i1) to i64 for the runtime call.
-                let call_val = if val.is_int_value()
-                    && val.into_int_value().get_type().get_bit_width() == 1
-                {
-                    self.builder
-                        .build_int_z_extend(val.into_int_value(), i64_ty, "bool_ext")
-                        .map_err(|e| CodegenError::Internal(e.to_string()))?
-                        .into()
-                } else {
-                    val
-                };
+                let call_val =
+                    if val.is_int_value() && val.into_int_value().get_type().get_bit_width() == 1 {
+                        self.builder
+                            .build_int_z_extend(val.into_int_value(), i64_ty, "bool_ext")
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?
+                            .into()
+                    } else {
+                        val
+                    };
 
                 self.builder
                     .build_call(
                         rt_fn,
-                        &[call_val.into(), out_ptr_alloca.into(), out_len_alloca.into()],
+                        &[
+                            call_val.into(),
+                            out_ptr_alloca.into(),
+                            out_len_alloca.into(),
+                        ],
                         "to_str",
                     )
                     .map_err(|e| CodegenError::Internal(e.to_string()))?;
@@ -4708,9 +4722,10 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 .build_extract_value(r_struct, 1, "sr_len")
                 .map_err(|e| CodegenError::Internal(e.to_string()))?;
 
-            let concat_fn = *self.functions.get("fj_rt_str_concat").ok_or_else(|| {
-                CodegenError::Internal("fj_rt_str_concat not declared".into())
-            })?;
+            let concat_fn = *self
+                .functions
+                .get("fj_rt_str_concat")
+                .ok_or_else(|| CodegenError::Internal("fj_rt_str_concat not declared".into()))?;
             let concat_call = self
                 .builder
                 .build_call(
@@ -4736,7 +4751,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
             let i64_ty = self.context.i64_type();
-            let str_struct_ty = self.context.struct_type(&[ptr_ty.into(), i64_ty.into()], false);
+            let str_struct_ty = self
+                .context
+                .struct_type(&[ptr_ty.into(), i64_ty.into()], false);
             let mut s = str_struct_ty.get_undef();
             s = self
                 .builder
@@ -8429,57 +8446,217 @@ impl<'ctx> LlvmCompiler<'ctx> {
         #[cfg(feature = "native")]
         {
             use crate::codegen::cranelift::runtime_fns;
-            map_rt!(ee, self.module, "fj_rt_println_str", runtime_fns::fj_rt_println_str);
-            map_rt!(ee, self.module, "fj_rt_print_str", runtime_fns::fj_rt_print_str);
-            map_rt!(ee, self.module, "fj_rt_println_int", runtime_fns::fj_rt_print_i64);
-            map_rt!(ee, self.module, "fj_rt_print_int", runtime_fns::fj_rt_print_i64_no_newline);
-            map_rt!(ee, self.module, "fj_rt_println_f64", runtime_fns::fj_rt_println_f64);
-            map_rt!(ee, self.module, "fj_rt_print_f64", runtime_fns::fj_rt_print_f64_no_newline);
-            map_rt!(ee, self.module, "fj_rt_println_bool", runtime_fns::fj_rt_println_bool);
-            map_rt!(ee, self.module, "fj_rt_print_bool", runtime_fns::fj_rt_print_bool);
-            map_rt!(ee, self.module, "fj_rt_eprintln_int", runtime_fns::fj_rt_eprintln_i64);
-            map_rt!(ee, self.module, "fj_rt_eprintln_str", runtime_fns::fj_rt_eprintln_str);
-            map_rt!(ee, self.module, "fj_rt_eprintln_f64", runtime_fns::fj_rt_eprintln_f64);
-            map_rt!(ee, self.module, "fj_rt_eprintln_bool", runtime_fns::fj_rt_eprintln_bool);
-            map_rt!(ee, self.module, "fj_rt_eprint_int", runtime_fns::fj_rt_eprint_i64);
-            map_rt!(ee, self.module, "fj_rt_eprint_str", runtime_fns::fj_rt_eprint_str);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_str",
+                runtime_fns::fj_rt_println_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_str",
+                runtime_fns::fj_rt_print_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_int",
+                runtime_fns::fj_rt_print_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_int",
+                runtime_fns::fj_rt_print_i64_no_newline
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_f64",
+                runtime_fns::fj_rt_println_f64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_f64",
+                runtime_fns::fj_rt_print_f64_no_newline
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_bool",
+                runtime_fns::fj_rt_println_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_bool",
+                runtime_fns::fj_rt_print_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_int",
+                runtime_fns::fj_rt_eprintln_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_str",
+                runtime_fns::fj_rt_eprintln_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_f64",
+                runtime_fns::fj_rt_eprintln_f64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_bool",
+                runtime_fns::fj_rt_eprintln_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_int",
+                runtime_fns::fj_rt_eprint_i64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_str",
+                runtime_fns::fj_rt_eprint_str
+            );
             map_rt!(ee, self.module, "fj_rt_alloc", runtime_fns::fj_rt_alloc);
             map_rt!(ee, self.module, "fj_rt_free", runtime_fns::fj_rt_free);
             // Type conversion (f-strings)
-            map_rt!(ee, self.module, "fj_rt_int_to_string", runtime_fns::fj_rt_int_to_string);
-            map_rt!(ee, self.module, "fj_rt_float_to_string", runtime_fns::fj_rt_float_to_string);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_int_to_string",
+                runtime_fns::fj_rt_int_to_string
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_float_to_string",
+                runtime_fns::fj_rt_float_to_string
+            );
             // bool_to_string not in cranelift runtime — use LLVM-local runtime
-            map_rt!(ee, self.module, "fj_rt_bool_to_string", runtime::fj_rt_bool_to_string);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_bool_to_string",
+                runtime::fj_rt_bool_to_string
+            );
         }
 
         #[cfg(not(feature = "native"))]
         {
             use runtime;
-            map_rt!(ee, self.module, "fj_rt_println_str", runtime::fj_rt_println_str);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_str",
+                runtime::fj_rt_println_str
+            );
             map_rt!(ee, self.module, "fj_rt_print_str", runtime::fj_rt_print_str);
-            map_rt!(ee, self.module, "fj_rt_println_int", runtime::fj_rt_println_int);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_int",
+                runtime::fj_rt_println_int
+            );
             map_rt!(ee, self.module, "fj_rt_print_int", runtime::fj_rt_print_int);
-            map_rt!(ee, self.module, "fj_rt_println_f64", runtime::fj_rt_println_f64);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_f64",
+                runtime::fj_rt_println_f64
+            );
             map_rt!(ee, self.module, "fj_rt_print_f64", runtime::fj_rt_print_f64);
-            map_rt!(ee, self.module, "fj_rt_println_bool", runtime::fj_rt_println_bool);
-            map_rt!(ee, self.module, "fj_rt_print_bool", runtime::fj_rt_print_bool);
-            map_rt!(ee, self.module, "fj_rt_eprintln_int", runtime::fj_rt_eprintln_int);
-            map_rt!(ee, self.module, "fj_rt_eprintln_str", runtime::fj_rt_eprintln_str);
-            map_rt!(ee, self.module, "fj_rt_eprintln_f64", runtime::fj_rt_eprintln_f64);
-            map_rt!(ee, self.module, "fj_rt_eprintln_bool", runtime::fj_rt_eprintln_bool);
-            map_rt!(ee, self.module, "fj_rt_eprint_int", runtime::fj_rt_eprint_int);
-            map_rt!(ee, self.module, "fj_rt_eprint_str", runtime::fj_rt_eprint_str);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_println_bool",
+                runtime::fj_rt_println_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_print_bool",
+                runtime::fj_rt_print_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_int",
+                runtime::fj_rt_eprintln_int
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_str",
+                runtime::fj_rt_eprintln_str
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_f64",
+                runtime::fj_rt_eprintln_f64
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprintln_bool",
+                runtime::fj_rt_eprintln_bool
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_int",
+                runtime::fj_rt_eprint_int
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_eprint_str",
+                runtime::fj_rt_eprint_str
+            );
             map_rt!(ee, self.module, "fj_rt_alloc", runtime::fj_rt_alloc);
             map_rt!(ee, self.module, "fj_rt_free", runtime::fj_rt_free);
             // String + assert functions
             map_rt!(ee, self.module, "fj_rt_str_len", runtime::fj_rt_str_len);
-            map_rt!(ee, self.module, "fj_rt_str_concat", runtime::fj_rt_str_concat);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_str_concat",
+                runtime::fj_rt_str_concat
+            );
             map_rt!(ee, self.module, "fj_rt_assert", runtime::fj_rt_assert);
             map_rt!(ee, self.module, "fj_rt_assert_eq", runtime::fj_rt_assert_eq);
             // Type conversion (f-strings)
-            map_rt!(ee, self.module, "fj_rt_int_to_string", runtime::fj_rt_int_to_string);
-            map_rt!(ee, self.module, "fj_rt_float_to_string", runtime::fj_rt_float_to_string);
-            map_rt!(ee, self.module, "fj_rt_bool_to_string", runtime::fj_rt_bool_to_string);
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_int_to_string",
+                runtime::fj_rt_int_to_string
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_float_to_string",
+                runtime::fj_rt_float_to_string
+            );
+            map_rt!(
+                ee,
+                self.module,
+                "fj_rt_bool_to_string",
+                runtime::fj_rt_bool_to_string
+            );
         }
 
         // Check if main returns void or i64

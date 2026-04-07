@@ -517,6 +517,31 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             .to_string(),
             3,
         ),
+        BuiltinKernel::CodebookDot => (
+            // Codebook dot product: score[i] = sum_j query[j] * codebook[indices[i*dim+j]]
+            r#"
+@group(0) @binding(0) var<storage, read> query: array<f32>;
+@group(0) @binding(1) var<storage, read> indices: array<u32>;
+@group(0) @binding(2) var<storage, read> codebook: array<f32>;
+@group(0) @binding(3) var<storage, read_write> scores: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let token = gid.x;
+    let n_tokens = arrayLength(&scores);
+    if token >= n_tokens { return; }
+    let dim = arrayLength(&query);
+    var sum: f32 = 0.0;
+    for (var j: u32 = 0u; j < dim; j = j + 1u) {
+        let idx = indices[token * dim + j];
+        sum = sum + query[j] * codebook[idx];
+    }
+    scores[token] = sum;
+}
+"#
+            .to_string(),
+            4,
+        ),
     }
 }
 

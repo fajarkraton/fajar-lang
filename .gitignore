@@ -64,3 +64,4 @@ paper/*.bbl
 paper/*.blg
 paper/*.log
 paper/*.out
+test_deploy.wasm
