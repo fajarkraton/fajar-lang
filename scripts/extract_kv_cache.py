@@ -117,11 +117,12 @@ def extract_kv_cache(
     load_time = time.time() - t0
     print(f"Model loaded in {load_time:.1f}s")
 
-    # Get model config
+    # Get model config — handle multimodal models (Gemma 4) with text_config
     config = model.config
-    num_layers = config.num_hidden_layers
-    num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-    d_head = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+    text_cfg = getattr(config, "text_config", config)
+    num_layers = text_cfg.num_hidden_layers
+    num_kv_heads = getattr(text_cfg, "num_key_value_heads", text_cfg.num_attention_heads)
+    d_head = text_cfg.head_dim if hasattr(text_cfg, "head_dim") else text_cfg.hidden_size // text_cfg.num_attention_heads
 
     print(f"Architecture: {num_layers} layers, {num_kv_heads} KV heads, d_head={d_head}")
 
@@ -131,8 +132,8 @@ def extract_kv_cache(
         "num_layers": num_layers,
         "num_kv_heads": num_kv_heads,
         "d_head": d_head,
-        "num_attention_heads": config.num_attention_heads,
-        "hidden_size": config.hidden_size,
+        "num_attention_heads": text_cfg.num_attention_heads,
+        "hidden_size": text_cfg.hidden_size,
         "max_length": max_length,
         "num_prompts": num_prompts,
         "dtype": "float16",
@@ -165,11 +166,31 @@ def extract_kv_cache(
         past_kv = outputs.past_key_values
         seq_len = inputs["input_ids"].shape[1]
 
-        for layer_idx in range(num_layers):
-            # past_kv[layer] = (key, value)
-            # key shape: (batch, num_kv_heads, seq_len, d_head)
-            key = past_kv[layer_idx][0][0].cpu().float().numpy()  # (kv_heads, seq, d)
-            val = past_kv[layer_idx][1][0].cpu().float().numpy()
+        # Handle DynamicCache (transformers >= 5.x) with .layers[i].keys/values
+        if hasattr(past_kv, 'layers'):
+            cache_layers = past_kv.layers
+            actual_layers = len(cache_layers)
+        elif hasattr(past_kv, 'key_cache'):
+            cache_layers = None
+            actual_layers = len(past_kv.key_cache)
+        elif hasattr(past_kv, '__len__'):
+            cache_layers = None
+            actual_layers = min(num_layers, len(past_kv))
+        else:
+            cache_layers = None
+            actual_layers = num_layers
+
+        for layer_idx in range(actual_layers):
+            if cache_layers is not None:
+                # DynamicCache with .layers — keys/values are attributes
+                key = cache_layers[layer_idx].keys[0].cpu().float().numpy()
+                val = cache_layers[layer_idx].values[0].cpu().float().numpy()
+            elif hasattr(past_kv, 'key_cache'):
+                key = past_kv.key_cache[layer_idx][0].cpu().float().numpy()
+                val = past_kv.value_cache[layer_idx][0].cpu().float().numpy()
+            else:
+                key = past_kv[layer_idx][0][0].cpu().float().numpy()
+                val = past_kv[layer_idx][1][0].cpu().float().numpy()
 
             np.save(os.path.join(prompt_dir, f"layer_{layer_idx:02d}_keys.npy"), key)
             np.save(os.path.join(prompt_dir, f"layer_{layer_idx:02d}_values.npy"), val)
