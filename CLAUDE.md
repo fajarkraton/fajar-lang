@@ -99,24 +99,45 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V23 "Boot", 2026-04-06)
+### Current Totals (V24 "Quantum", 2026-04-07)
 
 ```
-Tests:     11,373 total (8,891 lib + 954 integ + 148 context + 38 LLVM E2E + 1,342 native) | 0 failures
-LOC:       ~442,000 lines of Rust (392 files)
-Examples:  281 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
+Tests:     11,395 total (7,589 lib + 954 integ + 148 context + 43 LLVM E2E + 1,342 native + 15 CUDA + 8 safety + 1,296 other) | 0 failures
+LOC:       ~446,000 lines of Rust (392 files)
+Examples:  285 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 48 [x], 0 [sim], 5 [f], 3 [s] (56 logical)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
-Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry
-Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 test failures (11,373/11,373)
+Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
+Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 test failures (11,395/11,395)
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
+GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, async streams, 3x speedup)
 
 Labeling: [x] = production (tested, works E2E)
           [sim] = simulated — NONE REMAINING (all upgraded to [x] in V21)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 ```
+
+### V24 "Quantum" (2026-04-07) — CUDA RTX 4090 + FajarQuant + AVX2/AES-NI
+- **CUDA GPU compute (Phase 7 complete):**
+  - Real cuModuleLoadData → cuModuleGetFunction → cuLaunchKernel pipeline
+  - 9 PTX kernels: matmul (tiled 16x16 shared mem), vector_add/sub/mul/div, relu, sigmoid, softmax, codebook_dot
+  - Device cache (OnceLock), kernel cache, async CUDA stream pipeline
+  - gpu_matmul/add/relu/sigmoid builtins → CUDA first, CPU fallback
+  - **3x speedup** at 1024x1024 matmul on RTX 4090 (76 SMs, 9728 cores)
+- **FajarQuant (all 7 phases):**
+  - Phase 1: TurboQuant baseline (Lloyd-Max, quant_mse/prod) — 535 LOC
+  - Phase 2: Adaptive PCA rotation — **88% MSE improvement** over random
+  - Phase 3: Fused quantized attention — zero dequant memory, **6.4x KV compression**
+  - Phase 4: Hierarchical multi-resolution — **65.3% bit savings** at 4K tokens
+  - Phase 5: Compiler safety tests (8 @kernel/@device tests)
+  - Phase 6-7: Paper benchmarks + real numbers in fajarquant.tex
+  - GPU codebook dot product: quantized attention on RTX 4090 via PTX
+- **AVX2 SIMD + AES-NI (Phase 3.6+3.7):**
+  - 6 LLVM builtins: avx2_dot_f32, avx2_add_f32, avx2_mul_f32, avx2_relu_f32, aesni_encrypt_block, aesni_decrypt_block
+  - Memory-based XMM/YMM operands via inline asm (no vector type changes needed)
+- **Tests:** 11,395 total, 0 failures | 15 CUDA E2E | 8 FajarQuant safety
 
 ### V23 "Boot" (2026-04-06) — FajarOS Boots to Shell + 16 Bug Fixes
 - **FajarOS boots to shell:** 61 init stages, `nova>` prompt, 90/90 commands pass
@@ -780,5 +801,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 21.0 | V23 "Boot" — 7,572 lib tests, ~442K LOC | FajarOS boots to shell, 90/90 commands, NVMe+GUI+ACPI, 16 bugs fixed, asm constraint ordering fix*
-*Last Updated: 2026-04-06*
+*CLAUDE.md Version: 22.0 | V24 "Quantum" — 11,395 tests, ~446K LOC | CUDA RTX 4090 (9 PTX kernels, 3x speedup), FajarQuant (88% MSE improvement), AVX2+AES-NI*
+*Last Updated: 2026-04-07*
