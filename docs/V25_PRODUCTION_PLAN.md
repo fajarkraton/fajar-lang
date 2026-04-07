@@ -7,118 +7,83 @@
 
 ---
 
-## Phase A: Fajar Lang Critical Fixes (Target: 3-5 days)
+## Phase A: Fajar Lang Fixes (Target: 2-3 days)
 
-> **Goal:** Fix 5 critical bugs + wire 9 framework modules → 95% production
-> **Current:** 79% production (V24 audit)
+> **Goal:** Fix 1 real bug + wire framework modules → 95% production
+> **Current:** ~90% production (V24 re-audit: most "bugs" were false alarms)
 > **After Phase A:** 95% production
 
-### A1: Fix @kernel/@device Context Enforcement (P0, ~3 hours)
+### Re-Audit Results (2026-04-07, hands-on verification)
 
-**Bug:** `is_inside_kernel()` always returns false — @kernel/@device annotations ignored.
-**Root Cause:** Function context not pushed when entering annotated functions.
-**File:** `src/analyzer/type_check/check.rs` — `check_function_def()` doesn't push context.
+The initial V24 audit (code-reading) reported 5 critical bugs. Hands-on testing
+(running actual code) revealed **4 of 5 were false alarms:**
 
-| # | Task | File | Verification |
-|---|------|------|-------------|
-| A1.1 | Add `context_stack: Vec<ContextKind>` to TypeChecker | `src/analyzer/type_check/mod.rs` | Compiles |
-| A1.2 | Push context on `check_function_def()` for @kernel/@device/@safe | `check.rs` | `is_inside_kernel()` returns true |
-| A1.3 | Pop context on function exit | `check.rs` | Stack balanced |
-| A1.4 | Verify KE001 fires: heap alloc in @kernel | `tests/context_safety_tests.rs` | `let s = "hello"` in @kernel → KE001 |
-| A1.5 | Verify KE002 fires: tensor in @kernel | test | `zeros([3])` in @kernel → KE002 |
-| A1.6 | Verify DE001 fires: raw pointer in @device | test | Pointer deref in @device → DE001 |
+| Claimed Bug | Hands-On Test | Result |
+|-------------|--------------|--------|
+| A1: @kernel/@device BROKEN | `@kernel fn` + `zeros()` → KE002 fires ✅ | **FALSE ALARM** — 148 tests pass |
+| A2: HashMap BROKEN | `map_insert(null, k, v)` was broken | **FIXED** in commit `30ef65b` |
+| A3: JIT strings BROKEN | `fj run --native` + f-strings → correct output | **FALSE ALARM** — works perfectly |
+| A4: AOT linking FAILS | `fj build` + run binary → fib(30)=832040 | **FALSE ALARM** — works perfectly |
+| A5: LLVM 80+ errors | `cargo build --features llvm` → 0 errors | **FALSE ALARM** — compiles clean |
+| A5b: LLVM println segfault | `fj run --llvm` + `println()` → SIGSEGV | **REAL BUG** — only actual issue |
 
-**Gate:** `cargo test --test context_safety_tests` + `cargo test --test fajarquant_safety_tests` — all pass with REAL enforcement.
+**Lesson learned:** Never trust code-reading audits alone. Always run the code.
 
-### A2: Fix HashMap Builtins (P0, ~3 hours)
+### A1: Fix LLVM println Segfault (P1, ~3 hours)
 
-**Bug:** `map_insert()` doesn't persist — len=0 after insert, `map_get()` returns None.
-**Root Cause:** Value::Map is cloned (not mutated in place) due to Arc<Mutex> ownership.
-**File:** `src/interpreter/eval/builtins.rs` — `builtin_map_insert()`
+**Bug:** `fj run --llvm` segfaults when calling `println()`. Pure integer code works.
+**Scope:** LLVM JIT runtime function linkage for string-producing builtins.
+**File:** `src/codegen/llvm/mod.rs` — runtime function registration.
 
-| # | Task | File | Verification |
-|---|------|------|-------------|
-| A2.1 | Audit `builtin_map_insert` — trace value flow | `builtins.rs` | Identify clone vs mutate |
-| A2.2 | Fix map mutation: ensure insert modifies env binding | `builtins.rs` + `env.rs` | `map_insert(m, "k", "v"); map_get(m, "k")` → "v" |
-| A2.3 | Fix map_remove, map_keys, map_values | `builtins.rs` | All 8 HashMap methods work |
-| A2.4 | Add integration test for full HashMap lifecycle | `tests/eval_tests.rs` | insert → get → remove → len correct |
-
-**Gate:** `fj run examples/hashmap_demo.fj` produces correct output.
-
-### A3: Fix JIT String Codegen (P1, ~3 hours)
-
-**Bug:** `fj run --native` prints raw pointers for strings.
-**Root Cause:** Cranelift codegen emits pointer, not string value for String operations.
-**File:** `src/codegen/cranelift/compile/values.rs` or `strings.rs`
+**Verified behavior:**
+- `fn main() -> i64 { 100 + 200 }` → **300** ✅ (works)
+- `fn main() { println("hello") }` → **SIGSEGV** ❌ (crashes)
+- `fn add(a: i64, b: i64) -> i64 { a + b } fn main() -> i64 { add(20, 22) }` → **42** ✅
 
 | # | Task | File | Verification |
 |---|------|------|-------------|
-| A3.1 | Audit string representation in Cranelift IR | `codegen/cranelift/` | Identify Value::Str → IR mapping |
-| A3.2 | Fix println for string literals | codegen | `fj run --native` + `println("hello")` → "hello" |
-| A3.3 | Fix f-string interpolation | codegen | `f"x={x}"` outputs correctly |
-| A3.4 | Fix match→string result | codegen | `match x { 0 => "zero" }` returns string |
+| A1.1 | Debug segfault: run with `RUST_BACKTRACE=1` | llvm/mod.rs | Identify crash location |
+| A1.2 | Check `fj_rt_println` linkage in LLVM JIT | llvm/mod.rs | Symbol resolved correctly |
+| A1.3 | Fix runtime function pointer registration | llvm/mod.rs | println linked |
+| A1.4 | Test `println("hello")` via LLVM | shell | Output: "hello" |
+| A1.5 | Test f-strings + string ops via LLVM | shell | No segfault |
 
-**Gate:** `fj run --native examples/hello.fj` prints "Hello, World!" (not `0x7f...`).
+**Gate:** `fj run --llvm file.fj` with `println("hello")` → "hello" (no crash).
 
-### A4: Fix AOT Linking (P1, ~4 hours)
+### A2: Wire Framework Modules to CLI (P2, ~12 hours)
 
-**Bug:** `fj build` produces ELF but linking fails — undefined reference to runtime functions.
-**Root Cause:** Runtime library (println, builtins) not linked into binary.
-**File:** `src/codegen/cranelift/aot.rs` or `src/main.rs` build pipeline
+> **NOTE:** Before implementing, each module must be verified by running code.
+> The audit agents claimed 9 framework modules — verify each is actually unwired.
 
-| # | Task | File | Verification |
-|---|------|------|-------------|
-| A4.1 | Identify which runtime symbols are missing | linker error output | List all undefined references |
-| A4.2 | Generate runtime stubs (fj_rt_println, etc.) | `codegen/cranelift/` | Stubs compile to .o |
-| A4.3 | Link runtime stubs into AOT binary | `main.rs` build cmd | `fj build hello.fj` → working ELF |
-| A4.4 | Test AOT binary execution | shell | `./hello` prints output |
+| # | Module | Verify First | CLI Command | Hours |
+|---|--------|-------------|------------|-------|
+| A2.1 | concurrency_v2 | Test `actor_spawn` from .fj | `fj actor-demo` | 1 |
+| A2.2 | debugger_v2 | Test `fj debug --record` | `fj debug --record/--replay` | 2 |
+| A2.3 | ml_advanced | Test `diffusion_create` from .fj | `fj diffusion-demo` | 1 |
+| A2.4 | deployment | Test `fj deploy` actual output | `fj deploy` (real Docker gen) | 2 |
+| A2.5 | jit | Test `fj run --jit` behavior | `fj run --tiered` | 2 |
+| A2.6 | lsp_v3 | Test LSP semantic tokens | Wire to `lsp/server.rs` | 1 |
+| A2.7 | playground | Test `fj playground` output | `fj playground` (HTML gen) | 1 |
+| A2.8 | plugin | Test plugin dlopen | `fj plugin load` | 2 |
+| A2.9 | wasi_p2 | Test WASI component model | `fj run --wasi file.fj` | 2 |
 
-**Gate:** `fj build examples/hello.fj -o hello && ./hello` prints "Hello, World!".
+**IMPORTANT:** Verify each module is actually [f] before spending time wiring it.
+Some may already be [x] (like the audit falsely claimed @kernel was broken).
 
-### A5: Sync LLVM Backend (P2, ~8 hours)
-
-**Bug:** 80+ compile errors — AST structs changed but LLVM codegen not updated.
-**Root Cause:** Struct fields added/renamed in parser AST, LLVM backend references old names.
-**File:** `src/codegen/llvm/mod.rs` (12,800 lines)
-
-| # | Task | File | Verification |
-|---|------|------|-------------|
-| A5.1 | List all 80+ compile errors | `cargo build --features llvm` | Categorize by type |
-| A5.2 | Fix struct field mismatches (batch 1: Expr) | `llvm/mod.rs` | Errors < 40 |
-| A5.3 | Fix struct field mismatches (batch 2: Stmt, FnDef) | `llvm/mod.rs` | Errors < 10 |
-| A5.4 | Fix remaining type/lifetime errors | `llvm/mod.rs` | 0 errors |
-| A5.5 | Run LLVM E2E tests | `cargo test --features llvm` | 43 LLVM E2E pass |
-
-**Gate:** `cargo build --features llvm` compiles, `fj run --backend llvm hello.fj` executes.
-
-### A6: Wire Framework Modules to CLI (P2, ~12 hours)
-
-| # | Module | CLI Command | File | Hours |
-|---|--------|------------|------|-------|
-| A6.1 | concurrency_v2 | `fj actor-demo` | `main.rs` | 1 |
-| A6.2 | debugger_v2 | `fj debug --record/--replay` | `main.rs` | 2 |
-| A6.3 | ml_advanced | `fj diffusion-demo` | `main.rs` | 1 |
-| A6.4 | deployment | `fj deploy` (real Docker gen) | `main.rs` | 2 |
-| A6.5 | jit | `fj run --tiered` | `main.rs` | 2 |
-| A6.6 | lsp_v3 | Wire semantic tokens to lsp server | `lsp/server.rs` | 1 |
-| A6.7 | playground | `fj playground` (HTML gen) | `main.rs` | 1 |
-| A6.8 | plugin | `fj plugin load` | `main.rs` | 2 |
-| A6.9 | wasi_p2 | `fj run --wasi file.fj` | `main.rs` | 2 |
-
-**Gate:** All 9 modules callable from CLI. `fj --help` lists all commands.
+**Gate:** Verified modules callable from CLI. `fj --help` lists new commands.
 
 ### Phase A Summary
 
 | Metric | Before (V24) | After (V25) |
 |--------|-------------|-------------|
-| Critical bugs | 5 | 0 |
-| Production modules | 49 [x] | 56+ [x] |
-| CLI commands production | 25/35 | 33/35 |
-| @kernel/@device | BROKEN | ENFORCED |
-| HashMap | BROKEN | WORKING |
-| `fj build` | FAILS | PRODUCES WORKING ELF |
-| `fj run --native` | BROKEN STRINGS | CORRECT OUTPUT |
-| `fj run --llvm` | 80+ ERRORS | WORKS |
+| Real bugs | 1 (LLVM println) | 0 |
+| HashMap | FIXED (`30ef65b`) | WORKING |
+| @kernel/@device | WORKS (was false alarm) | WORKS |
+| JIT strings | WORKS (was false alarm) | WORKS |
+| AOT build | WORKS (was false alarm) | WORKS |
+| LLVM compile | CLEAN (was false alarm) | CLEAN |
+| `fj run --llvm` + println | SEGFAULT | FIX NEEDED |
+| Framework modules wired | TBD (verify first) | Up to 9 more |
 
 ---
 
@@ -306,24 +271,44 @@
 
 ---
 
-## Overall Timeline
+## Overall Timeline (Revised after Re-Audit)
 
 ```
-Week 1-2:  Phase A — Fajar Lang critical fixes (5 bugs + 9 modules)
-Week 3-4:  Phase B — FajarOS honest fixes (NVMe, ELF loader, FS write)
-Week 5-9:  Phase C — FajarQuant paper submission (real data + baselines)
-Week 10:   V25 "Production" release
+Week 1:    Phase A — Fajar Lang (1 real bug + verify/wire framework modules)
+Week 2-3:  Phase B — FajarOS honest fixes (NVMe, ELF loader, FS write)
+Week 4-8:  Phase C — FajarQuant paper submission (real data + baselines)
+Week 9:    V25 "Production" release
 ```
+
+**Note:** Phase A reduced from 2 weeks to 1 week after re-audit found 4/5 claimed
+bugs were false alarms. Fajar Lang is closer to production than initially assessed.
 
 ## Success Criteria for V25 "Production"
 
 | Project | V24 Score | V25 Target | Metric |
 |---------|-----------|------------|--------|
-| Fajar Lang | 79% | **95%** | 0 critical bugs, 56+ [x] modules |
+| Fajar Lang | ~90% (re-audit) | **95%** | LLVM println fixed, framework modules wired |
 | FajarOS | 40% | **65%** | NVMe works, ELF loads, FS writes |
 | FajarQuant | Pre-print (5/10) | **8/10** | Real data, baselines, perplexity |
 
+## Audit Methodology
+
+**CRITICAL:** All future audits MUST use hands-on verification (run the code),
+not code-reading analysis. The V24 audit produced 4 false positives because
+the audit agents read code and made assumptions without running tests.
+
+**Correct approach:**
+1. Write a minimal .fj test case
+2. Run it: `fj run test.fj`, `fj build test.fj`, `fj run --llvm test.fj`
+3. Check actual output vs expected
+4. Only then categorize as bug or working
+
+**Incorrect approach (produced false alarms):**
+- "I see push_scope but no pop_scope" → wrong (pop was inside emit_unused_warnings)
+- "Struct fields changed so LLVM must be broken" → wrong (LLVM was already synced)
+- "JIT strings output pointers" → wrong (was fixed in a previous version)
+
 ---
 
-*V25 "Production" Plan — honest roadmap based on V24 deep audit*
-*Created: 2026-04-07*
+*V25 "Production" Plan — revised after hands-on re-audit*
+*Created: 2026-04-07, Revised: 2026-04-07 (re-audit eliminated 4 false alarms)*
