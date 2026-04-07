@@ -19,7 +19,7 @@ pub mod tensor_bridge;
 pub use buffer::GpuBuffer;
 pub use cpu_fallback::CpuFallbackDevice;
 pub use device::{GpuBackend, GpuDevice, GpuDeviceInfo};
-pub use kernel::{GpuKernel, KernelSource, WorkgroupSize};
+pub use kernel::{BuiltinKernel, GpuKernel, KernelSource, WorkgroupSize};
 
 #[cfg(feature = "gpu")]
 mod wgpu_backend;

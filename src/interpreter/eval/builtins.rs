@@ -492,6 +492,8 @@ impl Interpreter {
             "fq_kv_cache_create" => self.builtin_fq_kv_cache_create(args),
             "fq_kv_cache_append" => self.builtin_fq_kv_cache_append(args),
             "fq_fused_attention" => self.builtin_fq_fused_attention(args),
+            // FajarQuant × CUDA: GPU-accelerated codebook dot product
+            "gpu_fq_codebook_dot" => self.builtin_gpu_fq_codebook_dot(args),
             // FajarQuant Phase 4: Hierarchical multi-resolution
             "fq_schedule_create" => self.builtin_fq_schedule_create(args),
             "fq_hierarchical_stats" => self.builtin_fq_hierarchical_stats(args),
@@ -6635,6 +6637,152 @@ impl Interpreter {
         let arr = ndarray::ArrayD::from_shape_vec(shape, output.to_vec()).map_err(|e| {
             EvalError::Runtime(RuntimeError::TypeError(format!("fused_attention: {e}")))
         })?;
+        Ok(Value::Tensor(
+            crate::runtime::ml::tensor::TensorValue::from_ndarray(arr),
+        ))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FajarQuant × CUDA: GPU-accelerated codebook dot product
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// `gpu_fq_codebook_dot(query_tensor, indices_tensor, codebook_tensor, n_tokens, dim)` -> tensor
+    /// Runs codebook dot product on RTX 4090: score[i] = sum_j q[j] * cb[idx[i*dim+j]]
+    fn builtin_gpu_fq_codebook_dot(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let q_tensor = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "gpu_fq_codebook_dot: query must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let idx_tensor = match &args[1] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "gpu_fq_codebook_dot: indices must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let cb_tensor = match &args[2] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "gpu_fq_codebook_dot: codebook must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let n_tokens = match &args[3] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "gpu_fq_codebook_dot: n_tokens must be int".into(),
+                )
+                .into());
+            }
+        };
+        let dim = match &args[4] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("gpu_fq_codebook_dot: dim must be int".into()).into(),
+                );
+            }
+        };
+
+        // Try CUDA GPU
+        #[cfg(feature = "cuda")]
+        {
+            use crate::runtime::gpu::{self, BuiltinKernel, GpuBackend, KernelSource};
+            let device = gpu::best_device();
+            if device.info().backend == GpuBackend::Cuda {
+                // Convert query f64 → f32
+                let q_f32: Vec<f32> = q_tensor.data().iter().map(|&v| v as f32).collect();
+                let q_bytes: Vec<u8> = q_f32.iter().flat_map(|f| f.to_le_bytes()).collect();
+
+                // Convert indices f64 → u8
+                let idx_u8: Vec<u8> = idx_tensor.data().iter().map(|&v| v as u8).collect();
+
+                // Convert codebook f64 → f32
+                let cb_f32: Vec<f32> = cb_tensor.data().iter().map(|&v| v as f32).collect();
+                let cb_bytes: Vec<u8> = cb_f32.iter().flat_map(|f| f.to_le_bytes()).collect();
+
+                let q_buf = device.create_buffer(dim * 4);
+                let idx_buf = device.create_buffer(n_tokens * dim);
+                let cb_buf = device.create_buffer(cb_f32.len() * 4);
+                let sc_buf = device.create_buffer(n_tokens * 4);
+
+                if let (Ok(q_b), Ok(idx_b), Ok(cb_b), Ok(sc_b)) = (q_buf, idx_buf, cb_buf, sc_buf) {
+                    if device.upload(&q_b, &q_bytes).is_ok()
+                        && device.upload(&idx_b, &idx_u8).is_ok()
+                        && device.upload(&cb_b, &cb_bytes).is_ok()
+                    {
+                        if let Ok(kernel) = device
+                            .compile_kernel(&KernelSource::Builtin(BuiltinKernel::CodebookDot))
+                        {
+                            if device
+                                .execute(&kernel, (1, 1, 1), &[&q_b, &idx_b, &cb_b, &sc_b])
+                                .is_ok()
+                            {
+                                let mut sc_bytes = vec![0u8; n_tokens * 4];
+                                if device.download(&sc_b, &mut sc_bytes).is_ok() {
+                                    let scores: Vec<f64> = sc_bytes
+                                        .chunks_exact(4)
+                                        .map(|c| {
+                                            f32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f64
+                                        })
+                                        .collect();
+                                    device.free_buffer(&q_b);
+                                    device.free_buffer(&idx_b);
+                                    device.free_buffer(&cb_b);
+                                    device.free_buffer(&sc_b);
+                                    let shape = vec![scores.len()];
+                                    if let Ok(arr) = ndarray::ArrayD::from_shape_vec(shape, scores)
+                                    {
+                                        return Ok(Value::Tensor(
+                                            crate::runtime::ml::tensor::TensorValue::from_ndarray(
+                                                arr,
+                                            ),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // CPU fallback: compute codebook dot product manually
+        let q_data: Vec<f64> = q_tensor.data().iter().copied().collect();
+        let idx_data: Vec<u8> = idx_tensor.data().iter().map(|&v| v as u8).collect();
+        let cb_data: Vec<f64> = cb_tensor.data().iter().copied().collect();
+
+        let mut scores = Vec::with_capacity(n_tokens);
+        for i in 0..n_tokens {
+            let mut sum = 0.0f64;
+            for j in 0..dim {
+                let idx = idx_data[i * dim + j] as usize;
+                let cb_val = cb_data.get(idx).copied().unwrap_or(0.0);
+                sum += q_data[j] * cb_val;
+            }
+            scores.push(sum);
+        }
+
+        let shape = vec![scores.len()];
+        let arr = ndarray::ArrayD::from_shape_vec(shape, scores)
+            .map_err(|e| EvalError::Runtime(RuntimeError::TypeError(format!("{e}"))))?;
         Ok(Value::Tensor(
             crate::runtime::ml::tensor::TensorValue::from_ndarray(arr),
         ))

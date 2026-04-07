@@ -1494,6 +1494,7 @@ impl Interpreter {
             // FajarQuant Phase 2: Adaptive
             "fajarquant_compare",
             // FajarQuant Phase 3: Fused attention
+            "gpu_fq_codebook_dot",
             "fq_kv_cache_create",
             "fq_kv_cache_append",
             "fq_fused_attention",

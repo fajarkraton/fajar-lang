@@ -852,6 +852,18 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64],
                 Type::Unknown,
             ),
+            // FajarQuant × CUDA: GPU codebook dot product
+            (
+                "gpu_fq_codebook_dot",
+                vec![
+                    dyn_t.clone(),
+                    dyn_t.clone(),
+                    dyn_t.clone(),
+                    Type::I64,
+                    Type::I64,
+                ],
+                dyn_t.clone(),
+            ),
             // FajarQuant Phase 3: Fused attention
             (
                 "fq_kv_cache_create",

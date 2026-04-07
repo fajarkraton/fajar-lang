@@ -36,6 +36,8 @@ pub enum BuiltinKernel {
     Softmax,
     /// Matrix multiplication.
     Matmul,
+    /// FajarQuant codebook dot product: score[i] = sum_j query[j] * codebook[indices[i*dim+j]].
+    CodebookDot,
 }
 
 impl std::fmt::Display for BuiltinKernel {
@@ -49,6 +51,7 @@ impl std::fmt::Display for BuiltinKernel {
             BuiltinKernel::Sigmoid => write!(f, "sigmoid"),
             BuiltinKernel::Softmax => write!(f, "softmax"),
             BuiltinKernel::Matmul => write!(f, "matmul"),
+            BuiltinKernel::CodebookDot => write!(f, "codebook_dot"),
         }
     }
 }

@@ -92,6 +92,7 @@ impl GpuDevice for CpuFallbackDevice {
                     BuiltinKernel::Relu | BuiltinKernel::Sigmoid => (format!("{builtin}"), 2),
                     BuiltinKernel::Softmax => (format!("{builtin}"), 2),
                     BuiltinKernel::Matmul => (format!("{builtin}"), 3),
+                    BuiltinKernel::CodebookDot => (format!("{builtin}"), 4),
                 };
                 Ok(GpuKernel::new(
                     name,

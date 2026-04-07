@@ -329,7 +329,97 @@ fn generate_builtin_ptx(builtin: BuiltinKernel) -> (String, String) {
             )
         }
         BuiltinKernel::Matmul => ("matmul".into(), ptx_matmul()),
+        BuiltinKernel::CodebookDot => ("codebook_dot".into(), ptx_codebook_dot()),
     }
+}
+
+/// Generate PTX for FajarQuant codebook dot product.
+/// Each thread computes one token's attention score:
+///   score[token_id] = sum_j query[j] * codebook[indices[token_id * dim + j]]
+///
+/// Args: (query_ptr: f32*, indices_ptr: u8*, codebook_ptr: f32*, scores_ptr: f32*,
+///         n_tokens: u32, dim: u32)
+/// Grid: (ceil(n_tokens/256), 1, 1), Block: (256, 1, 1)
+fn ptx_codebook_dot() -> String {
+    r#".version 8.3
+.target sm_89
+.address_size 64
+
+.visible .entry codebook_dot(
+    .param .u64 param_query,
+    .param .u64 param_indices,
+    .param .u64 param_codebook,
+    .param .u64 param_scores,
+    .param .u32 param_n_tokens,
+    .param .u32 param_dim
+) {
+    .reg .u32  %rtid, %rbid, %rbdim, %gid, %n_tokens, %dim;
+    .reg .u32  %j, %idx_u32, %offset;
+    .reg .u64  %q_base, %idx_base, %cb_base, %sc_base;
+    .reg .u64  %addr, %off64;
+    .reg .f32  %sum, %qval, %cbval;
+    .reg .pred %p_bounds, %p_loop;
+
+    ld.param.u64 %q_base, [param_query];
+    ld.param.u64 %idx_base, [param_indices];
+    ld.param.u64 %cb_base, [param_codebook];
+    ld.param.u64 %sc_base, [param_scores];
+    ld.param.u32 %n_tokens, [param_n_tokens];
+    ld.param.u32 %dim, [param_dim];
+
+    // gid = blockIdx.x * blockDim.x + threadIdx.x (token index)
+    mov.u32 %rtid, %tid.x;
+    mov.u32 %rbid, %ctaid.x;
+    mov.u32 %rbdim, %ntid.x;
+    mad.lo.u32 %gid, %rbid, %rbdim, %rtid;
+
+    setp.ge.u32 %p_bounds, %gid, %n_tokens;
+    @%p_bounds bra DONE;
+
+    // sum = 0.0
+    mov.f32 %sum, 0f00000000;
+
+    // offset = gid * dim (start of this token's indices)
+    mul.lo.u32 %offset, %gid, %dim;
+
+    mov.u32 %j, 0;
+LOOP:
+    setp.ge.u32 %p_loop, %j, %dim;
+    @%p_loop bra STORE;
+
+    // Load query[j]
+    mul.wide.u32 %off64, %j, 4;
+    add.u64 %addr, %q_base, %off64;
+    ld.global.f32 %qval, [%addr];
+
+    // Load indices[offset + j] (u8)
+    add.u32 %idx_u32, %offset, %j;
+    cvt.u64.u32 %off64, %idx_u32;
+    add.u64 %addr, %idx_base, %off64;
+    ld.global.u8 %idx_u32, [%addr];
+
+    // Load codebook[idx] (f32)
+    mul.wide.u32 %off64, %idx_u32, 4;
+    add.u64 %addr, %cb_base, %off64;
+    ld.global.f32 %cbval, [%addr];
+
+    // sum += query[j] * codebook[idx]
+    fma.rn.f32 %sum, %qval, %cbval, %sum;
+
+    add.u32 %j, %j, 1;
+    bra LOOP;
+
+STORE:
+    // scores[gid] = sum
+    mul.wide.u32 %off64, %gid, 4;
+    add.u64 %addr, %sc_base, %off64;
+    st.global.f32 [%addr], %sum;
+
+DONE:
+    ret;
+}
+"#
+    .to_string()
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -359,6 +449,8 @@ enum CudaKernelKind {
     Activation,
     /// C = A @ B — 3 buffer params + M, K, N
     Matmul,
+    /// FajarQuant codebook dot: 4 buffers (query, indices, codebook, scores) + n_tokens, dim
+    CodebookDot,
     /// User-supplied PTX — pass buffer pointers only
     Custom,
 }
@@ -840,6 +932,9 @@ impl GpuDevice for CudaDevice {
                         (CudaKernelKind::Activation, 2, WorkgroupSize::d1(256))
                     }
                     BuiltinKernel::Matmul => (CudaKernelKind::Matmul, 3, WorkgroupSize::d2(16, 16)),
+                    BuiltinKernel::CodebookDot => {
+                        (CudaKernelKind::CodebookDot, 4, WorkgroupSize::d1(256))
+                    }
                 };
                 (entry_name, ptx_source, kind, num_bindings, wg)
             }
@@ -1004,6 +1099,41 @@ impl GpuDevice for CudaDevice {
 
                 let grid = (n.div_ceil(16) as u32, m.div_ceil(16) as u32, 1);
                 let block = (16, 16, 1);
+
+                drop(kernels);
+                self.launch_kernel(function, grid, block, &mut args)
+            }
+            CudaKernelKind::CodebookDot => {
+                // Kernel: (query_ptr, indices_ptr, codebook_ptr, scores_ptr, n_tokens, dim)
+                // Buffers: [query(f32*dim), indices(u8*n_tokens*dim), codebook(f32*2^b), scores(f32*n_tokens)]
+                if dev_ptrs.len() < 4 {
+                    return Err(GpuError::BackendError(
+                        "codebook_dot requires 4 buffers (query, indices, codebook, scores)".into(),
+                    ));
+                }
+                let query_elems = buffers[0].size() / std::mem::size_of::<f32>();
+                let dim = query_elems;
+                let scores_elems = buffers[3].size() / std::mem::size_of::<f32>();
+                let n_tokens = scores_elems;
+
+                let mut q_ptr = dev_ptrs[0];
+                let mut idx_ptr = dev_ptrs[1];
+                let mut cb_ptr = dev_ptrs[2];
+                let mut sc_ptr = dev_ptrs[3];
+                let mut n_tok = n_tokens as u32;
+                let mut dim_val = dim as u32;
+
+                let mut args: Vec<*mut c_void> = vec![
+                    &mut q_ptr as *mut u64 as *mut c_void,
+                    &mut idx_ptr as *mut u64 as *mut c_void,
+                    &mut cb_ptr as *mut u64 as *mut c_void,
+                    &mut sc_ptr as *mut u64 as *mut c_void,
+                    &mut n_tok as *mut u32 as *mut c_void,
+                    &mut dim_val as *mut u32 as *mut c_void,
+                ];
+
+                let grid = (n_tokens.div_ceil(256) as u32, 1, 1);
+                let block = (256, 1, 1);
 
                 drop(kernels);
                 self.launch_kernel(function, grid, block, &mut args)
@@ -1438,6 +1568,7 @@ mod tests {
             BuiltinKernel::Sigmoid,
             BuiltinKernel::Softmax,
             BuiltinKernel::Matmul,
+            BuiltinKernel::CodebookDot,
         ];
 
         for builtin in &builtins {
@@ -1457,6 +1588,7 @@ mod tests {
         let builtins = [
             (BuiltinKernel::VectorAdd, "vector_add"),
             (BuiltinKernel::Matmul, "matmul"),
+            (BuiltinKernel::CodebookDot, "codebook_dot"),
             (BuiltinKernel::Relu, "relu"),
         ];
         for (builtin, expected_name) in &builtins {
@@ -1471,5 +1603,57 @@ mod tests {
             assert!(ptx.contains(".version 8.3"));
             assert!(ptx.contains(".target sm_89"));
         }
+    }
+
+    #[test]
+    fn cuda_codebook_dot_e2e() {
+        // FajarQuant × CUDA: codebook dot product on GPU.
+        let devices = match enumerate_devices() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let dev = &devices[0];
+
+        let dim = 4usize;
+        let n_tokens = 3usize;
+        let n_centroids = 4usize;
+
+        // Query: [1.0, 2.0, 3.0, 4.0]
+        let query: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
+        // Codebook: [0.1, 0.2, 0.3, 0.4]
+        let codebook: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4];
+        // Token 0: [0,1,2,3] → 1*0.1+2*0.2+3*0.3+4*0.4 = 3.0
+        // Token 1: [3,3,3,3] → (1+2+3+4)*0.4 = 4.0
+        // Token 2: [0,0,0,0] → (1+2+3+4)*0.1 = 1.0
+        let indices: Vec<u8> = vec![0, 1, 2, 3, 3, 3, 3, 3, 0, 0, 0, 0];
+
+        let q_bytes: Vec<u8> = query.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let cb_bytes: Vec<u8> = codebook.iter().flat_map(|f| f.to_le_bytes()).collect();
+
+        let q_buf = dev.create_buffer(dim * 4).expect("alloc query");
+        let idx_buf = dev.create_buffer(n_tokens * dim).expect("alloc indices");
+        let cb_buf = dev.create_buffer(n_centroids * 4).expect("alloc codebook");
+        let sc_buf = dev.create_buffer(n_tokens * 4).expect("alloc scores");
+
+        dev.upload(&q_buf, &q_bytes).expect("upload query");
+        dev.upload(&idx_buf, &indices).expect("upload indices");
+        dev.upload(&cb_buf, &cb_bytes).expect("upload codebook");
+
+        let kernel = dev
+            .compile_kernel(&KernelSource::Builtin(BuiltinKernel::CodebookDot))
+            .expect("compile codebook_dot");
+        dev.execute(&kernel, (1, 1, 1), &[&q_buf, &idx_buf, &cb_buf, &sc_buf])
+            .expect("execute codebook_dot");
+
+        let mut sc_bytes = vec![0u8; n_tokens * 4];
+        dev.download(&sc_buf, &mut sc_bytes).expect("download");
+        let scores: Vec<f32> = sc_bytes
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+
+        assert!((scores[0] - 3.0).abs() < 0.01, "token 0: {}", scores[0]);
+        assert!((scores[1] - 4.0).abs() < 0.01, "token 1: {}", scores[1]);
+        assert!((scores[2] - 1.0).abs() < 0.01, "token 2: {}", scores[2]);
     }
 }
