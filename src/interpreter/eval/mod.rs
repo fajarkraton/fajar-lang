@@ -2581,8 +2581,7 @@ impl Interpreter {
                     Err(msg) => Err(RuntimeError::TypeError(msg).into()),
                 }
             }
-            // V12 Gap Closure: Yield expression in generator
-            // Uses generators_v12 state machine for proper generator semantics.
+            // Yield expression in generator (V18 gen fn semantics)
             Expr::Yield { value, .. } => {
                 let val = if let Some(expr) = value {
                     self.eval_expr(expr)?

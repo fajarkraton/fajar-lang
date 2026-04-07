@@ -3288,7 +3288,10 @@ fn cmd_build_llvm(
         }
     });
 
+    #[cfg(feature = "native")]
     let is_user_target = target.as_ref().is_some_and(|t| t.is_user_mode);
+    #[cfg(not(feature = "native"))]
+    let is_user_target = false;
     if is_bare_metal || is_user_target {
         // ── Bare-metal / user-mode build pipeline ─────────────────────
         // Requires `native` feature for linker script + startup generation.

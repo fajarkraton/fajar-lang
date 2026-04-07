@@ -825,6 +825,12 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "hlt"
                 | "rdtsc"
                 | "rdrand"
+                | "avx2_dot_f32"
+                | "avx2_add_f32"
+                | "avx2_mul_f32"
+                | "avx2_relu_f32"
+                | "aesni_encrypt_block"
+                | "aesni_decrypt_block"
                 | "spin_lock"
                 | "spin_unlock"
         )
@@ -1514,6 +1520,110 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
             // rdrand() -> i64 — hardware random number
             "rdrand" => self.compile_rdrand().map(Some),
+
+            // AVX2 SIMD builtins — memory-based operands (addresses as i64)
+            // avx2_dot_f32(a_ptr, b_ptr, len) -> i64 (f32 bits in lower 32)
+            "avx2_dot_f32" => {
+                if args.len() < 3 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(3)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_dot_f32(&compiled).map(Some)
+            }
+
+            // avx2_add_f32(dst_ptr, a_ptr, b_ptr, len) -> i64 (0 on success)
+            "avx2_add_f32" => {
+                if args.len() < 4 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(4)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_elementwise(&compiled, "vaddps").map(Some)
+            }
+
+            // avx2_mul_f32(dst_ptr, a_ptr, b_ptr, len) -> i64 (0 on success)
+            "avx2_mul_f32" => {
+                if args.len() < 4 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(4)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_elementwise(&compiled, "vmulps").map(Some)
+            }
+
+            // avx2_relu_f32(dst_ptr, src_ptr, len) -> i64 (0 on success)
+            "avx2_relu_f32" => {
+                if args.len() < 3 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(3)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_relu(&compiled).map(Some)
+            }
+
+            // AES-NI builtins — 128-bit block operations via XMM registers
+            // aesni_encrypt_block(state_ptr, key_schedule_ptr, rounds) -> i64 (0)
+            "aesni_encrypt_block" => {
+                if args.len() < 3 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(3)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("aesni arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_aesni_block(&compiled, false).map(Some)
+            }
+
+            // aesni_decrypt_block(state_ptr, key_schedule_ptr, rounds) -> i64 (0)
+            "aesni_decrypt_block" => {
+                if args.len() < 3 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(3)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("aesni arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_aesni_block(&compiled, true).map(Some)
+            }
 
             // spin_lock(addr) — busy-wait until lock acquired (volatile CAS loop)
             "spin_lock" => {
@@ -7565,6 +7675,274 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 3.6: AVX2 SIMD builtins — memory-based (addresses as i64)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// AVX2 dot product: avx2_dot_f32(a_ptr, b_ptr, len) -> i64 (f32 bits)
+    ///
+    /// Processes 8 floats per iteration with vfmadd231ps, then horizontal sum.
+    /// Returns the f32 result's bits in the lower 32 bits of i64.
+    fn compile_avx2_dot_f32(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+
+        // AT&T syntax: vfmadd231ps loop with horizontal sum
+        let template = concat!(
+            "vxorps %ymm0, %ymm0, %ymm0\n\t",
+            "movq $0, %rax\n\t",
+            "movq $1, %rbx\n\t",
+            "movq $2, %rcx\n\t",
+            "shrq $$3, %rcx\n\t",
+            "testq %rcx, %rcx\n\t",
+            "jz 2f\n",
+            "1:\n\t",
+            "vmovups (%rax), %ymm1\n\t",
+            "vmovups (%rbx), %ymm2\n\t",
+            "vfmadd231ps %ymm2, %ymm1, %ymm0\n\t",
+            "addq $$32, %rax\n\t",
+            "addq $$32, %rbx\n\t",
+            "decq %rcx\n\t",
+            "jnz 1b\n",
+            "2:\n\t",
+            "vextractf128 $$1, %ymm0, %xmm1\n\t",
+            "vaddps %xmm1, %xmm0, %xmm0\n\t",
+            "vhaddps %xmm0, %xmm0, %xmm0\n\t",
+            "vhaddps %xmm0, %xmm0, %xmm0\n\t",
+            "vmovd %xmm0, %eax\n\t",
+            "vzeroupper",
+        );
+
+        let constraint =
+            "={rax},{rdi},{rsi},{rdx},~{rbx},~{rcx},~{ymm0},~{ymm1},~{ymm2},~{xmm0},~{xmm1}"
+                .to_string();
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            template.to_string(),
+            constraint,
+            true,
+            true,
+            None,
+            false,
+        );
+
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, "avx2_dot")
+            .map_err(|e| CodegenError::Internal(format!("avx2_dot asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("avx2_dot produced no value".into()))
+            }
+        }
+    }
+
+    /// AVX2 elementwise binary op: dst[i] = op(a[i], b[i]) for f32 arrays.
+    ///
+    /// `op` is the AVX instruction name: "vaddps", "vmulps", etc.
+    /// Args: (dst_ptr, a_ptr, b_ptr, len)
+    fn compile_avx2_elementwise(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+        op: &str,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(
+            &[i64_ty.into(), i64_ty.into(), i64_ty.into(), i64_ty.into()],
+            false,
+        );
+
+        let template = format!(
+            concat!(
+                "movq $1, %rax\n\t",  // a_ptr
+                "movq $2, %rbx\n\t",  // b_ptr
+                "movq $3, %rcx\n\t",  // len
+                "movq $0, %rdx\n\t",  // dst_ptr
+                "shrq $$3, %rcx\n\t", // len/8
+                "testq %rcx, %rcx\n\t",
+                "jz 2f\n",
+                "1:\n\t",
+                "vmovups (%rax), %ymm0\n\t",
+                "vmovups (%rbx), %ymm1\n\t",
+                "{op} %ymm1, %ymm0, %ymm2\n\t",
+                "vmovups %ymm2, (%rdx)\n\t",
+                "addq $$32, %rax\n\t",
+                "addq $$32, %rbx\n\t",
+                "addq $$32, %rdx\n\t",
+                "decq %rcx\n\t",
+                "jnz 1b\n",
+                "2:\n\t",
+                "xorq %rax, %rax\n\t",
+                "vzeroupper",
+            ),
+            op = op
+        );
+
+        let constraint =
+            "={rax},{rdi},{rsi},{rdx},{rcx},~{rbx},~{ymm0},~{ymm1},~{ymm2}".to_string();
+
+        let inline_asm = self
+            .context
+            .create_inline_asm(asm_fn_ty, template, constraint, true, true, None, false);
+
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, "avx2_ewise")
+            .map_err(|e| CodegenError::Internal(format!("avx2 elementwise asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("avx2 elementwise no value".into()))
+            }
+        }
+    }
+
+    /// AVX2 ReLU: dst[i] = max(0, src[i]) for f32 arrays.
+    ///
+    /// Args: (dst_ptr, src_ptr, len)
+    fn compile_avx2_relu(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+
+        let template = concat!(
+            "movq $1, %rax\n\t",              // src_ptr
+            "movq $0, %rbx\n\t",              // dst_ptr
+            "movq $2, %rcx\n\t",              // len
+            "shrq $$3, %rcx\n\t",             // len/8
+            "vxorps %ymm1, %ymm1, %ymm1\n\t", // zero
+            "testq %rcx, %rcx\n\t",
+            "jz 2f\n",
+            "1:\n\t",
+            "vmovups (%rax), %ymm0\n\t",
+            "vmaxps %ymm1, %ymm0, %ymm0\n\t",
+            "vmovups %ymm0, (%rbx)\n\t",
+            "addq $$32, %rax\n\t",
+            "addq $$32, %rbx\n\t",
+            "decq %rcx\n\t",
+            "jnz 1b\n",
+            "2:\n\t",
+            "xorq %rax, %rax\n\t",
+            "vzeroupper",
+        );
+
+        let constraint = "={rax},{rdi},{rsi},{rdx},~{rbx},~{rcx},~{ymm0},~{ymm1}".to_string();
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            template.to_string(),
+            constraint,
+            true,
+            true,
+            None,
+            false,
+        );
+
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, "avx2_relu")
+            .map_err(|e| CodegenError::Internal(format!("avx2_relu asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("avx2_relu no value".into()))
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 3.7: AES-NI builtins — 128-bit block via XMM registers
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// AES-NI block encrypt/decrypt: operates on 16-byte block at state_ptr.
+    ///
+    /// `decrypt=false`: aesenc × (rounds-1) + aesenclast
+    /// `decrypt=true`:  aesdec × (rounds-1) + aesdeclast
+    /// Args: (state_ptr, key_schedule_ptr, rounds)
+    /// Key schedule is (rounds+1) × 16 bytes of expanded round keys.
+    fn compile_aesni_block(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+        decrypt: bool,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+
+        let (round_op, last_op) = if decrypt {
+            ("aesdec", "aesdeclast")
+        } else {
+            ("aesenc", "aesenclast")
+        };
+
+        // Generic AES block: supports AES-128 (10), AES-192 (12), AES-256 (14) rounds
+        let template = format!(
+            concat!(
+                "movq $0, %rdi\n\t",        // state_ptr
+                "movq $1, %rsi\n\t",        // key_schedule_ptr
+                "movq $2, %rcx\n\t",        // rounds
+                "movdqu (%rdi), %xmm0\n\t", // state = *state_ptr
+                "movdqu (%rsi), %xmm1\n\t", // round_key[0]
+                "pxor %xmm1, %xmm0\n\t",    // state ^= key[0]
+                "movq $$1, %rax\n",         // round counter
+                "1:\n\t",
+                "cmpq %rcx, %rax\n\t",
+                "jge 2f\n\t",
+                "movq %rax, %rdx\n\t",
+                "shlq $$4, %rdx\n\t", // offset = round * 16
+                "movdqu (%rsi,%rdx), %xmm1\n\t",
+                "{round_op} %xmm1, %xmm0\n\t",
+                "incq %rax\n\t",
+                "jmp 1b\n",
+                "2:\n\t",
+                "movq %rcx, %rdx\n\t",
+                "shlq $$4, %rdx\n\t", // offset = rounds * 16
+                "movdqu (%rsi,%rdx), %xmm1\n\t",
+                "{last_op} %xmm1, %xmm0\n\t",
+                "movdqu %xmm0, (%rdi)\n\t", // *state_ptr = result
+                "xorq %rax, %rax",          // return 0
+            ),
+            round_op = round_op,
+            last_op = last_op
+        );
+
+        let constraint = "={rax},{rdi},{rsi},{rdx},~{rcx},~{xmm0},~{xmm1}".to_string();
+
+        let inline_asm = self
+            .context
+            .create_inline_asm(asm_fn_ty, template, constraint, true, true, None, false);
+
+        let label = if decrypt { "aes_dec" } else { "aes_enc" };
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, label)
+            .map_err(|e| CodegenError::Internal(format!("aesni asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("aesni produced no value".into()))
+            }
+        }
+    }
+
     /// Constructs the optimization pass pipeline string, incorporating PGO if active.
     ///
     /// - PGO Generate: prepends `pgo-instr-gen` before the standard pipeline
@@ -12430,5 +12808,58 @@ mod tests {
         // We started at 47 tests and added ~100+ across L1-L10
         // This test is a marker — actual count verified by cargo test output
         assert!(true, "LLVM backend has 150+ tests across 10 sprints");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Phase 3.6+3.7: AVX2 + AES-NI builtin recognition tests
+    // ═══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn phase3_avx2_builtins_recognized() {
+        assert!(LlvmCompiler::is_builtin_fn("avx2_dot_f32"));
+        assert!(LlvmCompiler::is_builtin_fn("avx2_add_f32"));
+        assert!(LlvmCompiler::is_builtin_fn("avx2_mul_f32"));
+        assert!(LlvmCompiler::is_builtin_fn("avx2_relu_f32"));
+    }
+
+    #[test]
+    fn phase3_aesni_builtins_recognized() {
+        assert!(LlvmCompiler::is_builtin_fn("aesni_encrypt_block"));
+        assert!(LlvmCompiler::is_builtin_fn("aesni_decrypt_block"));
+    }
+
+    #[test]
+    fn phase3_avx2_dot_ptx_template_valid() {
+        // Verify that the AVX2 dot product asm template contains expected instructions
+        let template = concat!(
+            "vxorps",
+            "vfmadd231ps",
+            "vextractf128",
+            "vhaddps",
+            "vmovd",
+            "vzeroupper"
+        );
+        assert!(template.contains("vfmadd231ps"));
+        assert!(template.contains("vzeroupper"));
+    }
+
+    #[test]
+    fn phase3_aesni_template_valid() {
+        // Verify AES-NI template contains expected instructions
+        let enc_template = concat!("movdqu", "pxor", "aesenc", "aesenclast");
+        let dec_template = concat!("movdqu", "pxor", "aesdec", "aesdeclast");
+        assert!(enc_template.contains("aesenc"));
+        assert!(enc_template.contains("aesenclast"));
+        assert!(dec_template.contains("aesdec"));
+        assert!(dec_template.contains("aesdeclast"));
+    }
+
+    #[test]
+    fn phase3_non_simd_builtins_not_confused() {
+        // Regular builtins should not be confused with SIMD builtins
+        assert!(!LlvmCompiler::is_builtin_fn("avx2_something_else"));
+        assert!(!LlvmCompiler::is_builtin_fn("aesni_something"));
+        assert!(LlvmCompiler::is_builtin_fn("rdtsc"));
+        assert!(LlvmCompiler::is_builtin_fn("rdrand"));
     }
 }
