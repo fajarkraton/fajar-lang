@@ -488,6 +488,13 @@ impl Interpreter {
             "turboquant_inner_product" => self.builtin_turboquant_inner_product(args),
             // FajarQuant Phase 2: Adaptive rotation
             "fajarquant_compare" => self.builtin_fajarquant_compare(args),
+            // FajarQuant Phase 3: Fused quantized attention
+            "fq_kv_cache_create" => self.builtin_fq_kv_cache_create(args),
+            "fq_kv_cache_append" => self.builtin_fq_kv_cache_append(args),
+            "fq_fused_attention" => self.builtin_fq_fused_attention(args),
+            // FajarQuant Phase 4: Hierarchical multi-resolution
+            "fq_schedule_create" => self.builtin_fq_schedule_create(args),
+            "fq_hierarchical_stats" => self.builtin_fq_hierarchical_stats(args),
             // Loss functions
             "tensor_mse_loss" | "mse_loss" => self.builtin_tensor_loss(args, "mse"),
             "tensor_cross_entropy" | "cross_entropy_loss" | "cross_entropy" => {
@@ -6437,6 +6444,329 @@ impl Interpreter {
         result.insert("adaptive_mse".to_string(), Value::Float(adaptive_mse));
         result.insert("random_mse".to_string(), Value::Float(random_mse));
         result.insert("improvement_pct".to_string(), Value::Float(improvement));
+        Ok(Value::Map(result))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FajarQuant Phase 3: Fused Quantized Attention
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// `fq_kv_cache_create(dim, bits)` -> map with cache handle
+    fn builtin_fq_kv_cache_create(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let dim = match &args[0] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_kv_cache_create: dim must be int".into()).into(),
+                );
+            }
+        };
+        let bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_kv_cache_create: bits must be int".into()).into(),
+                );
+            }
+        };
+        let cache =
+            crate::runtime::ml::fajarquant::fused_attention::QuantizedKVCache::new(dim, bits);
+        let mut result = std::collections::HashMap::new();
+        result.insert("dim".to_string(), Value::Int(dim as i64));
+        result.insert("bits".to_string(), Value::Int(bits as i64));
+        result.insert("len".to_string(), Value::Int(cache.len() as i64));
+        result.insert("type".to_string(), Value::Str("fq_kv_cache".to_string()));
+        Ok(Value::Map(result))
+    }
+
+    /// `fq_kv_cache_append(dim, bits, key_tensor, val_tensor)` -> map with updated stats
+    fn builtin_fq_kv_cache_append(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let dim = match &args[0] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_kv_cache_append: dim must be int".into()).into(),
+                );
+            }
+        };
+        let bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_kv_cache_append: bits must be int".into()).into(),
+                );
+            }
+        };
+        let k_tensor = match &args[2] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_kv_cache_append: key must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let v_tensor = match &args[3] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_kv_cache_append: val must be tensor".into(),
+                )
+                .into());
+            }
+        };
+
+        // Quantize and measure compression
+        let config = crate::runtime::ml::turboquant::create_config(dim, bits);
+        let k_data: Vec<f64> = k_tensor.data().iter().copied().collect();
+        let v_data: Vec<f64> = v_tensor.data().iter().copied().collect();
+        let k_arr = ndarray::Array1::from_vec(k_data);
+        let v_arr = ndarray::Array1::from_vec(v_data);
+        let k_quant = crate::runtime::ml::turboquant::quant_mse(&k_arr, &config);
+        let v_quant = crate::runtime::ml::turboquant::quant_mse(&v_arr, &config);
+
+        let quant_bytes = (k_quant.indices.len() + v_quant.indices.len()) * (bits as usize + 7) / 8;
+        let full_bytes = dim * 2 * 8; // f64 = 8 bytes
+        let ratio = full_bytes as f64 / quant_bytes.max(1) as f64;
+
+        let mut result = std::collections::HashMap::new();
+        result.insert(
+            "quantized_bytes".to_string(),
+            Value::Int(quant_bytes as i64),
+        );
+        result.insert("full_bytes".to_string(), Value::Int(full_bytes as i64));
+        result.insert("compression_ratio".to_string(), Value::Float(ratio));
+        Ok(Value::Map(result))
+    }
+
+    /// `fq_fused_attention(query_tensor, key_tensor, val_tensor, dim, bits)` -> tensor
+    /// Demonstrates fused quantized attention: quantize KV, compute attention without dequant.
+    fn builtin_fq_fused_attention(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let q_tensor = match &args[0] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_fused_attention: query must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let k_tensor = match &args[1] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_fused_attention: key must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let v_tensor = match &args[2] {
+            Value::Tensor(t) => t.clone(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_fused_attention: val must be tensor".into(),
+                )
+                .into());
+            }
+        };
+        let dim = match &args[3] {
+            Value::Int(n) => *n as usize,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_fused_attention: dim must be int".into()).into(),
+                );
+            }
+        };
+        let bits = match &args[4] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("fq_fused_attention: bits must be int".into()).into(),
+                );
+            }
+        };
+
+        let config = crate::runtime::ml::turboquant::create_config(dim, bits);
+        let mut cache =
+            crate::runtime::ml::fajarquant::fused_attention::QuantizedKVCache::new(dim, bits);
+
+        // Quantize K and V and append to cache
+        let k_data: Vec<f64> = k_tensor.data().iter().copied().collect();
+        let v_data: Vec<f64> = v_tensor.data().iter().copied().collect();
+        let k_arr = ndarray::Array1::from_vec(k_data);
+        let v_arr = ndarray::Array1::from_vec(v_data);
+        let k_quant = crate::runtime::ml::turboquant::quant_mse(&k_arr, &config);
+        let v_quant = crate::runtime::ml::turboquant::quant_mse(&v_arr, &config);
+        cache.append(k_quant, v_quant);
+
+        // Fused attention: compute scores directly on quantized KV
+        // Rotate query through the same rotation matrix used for quantization
+        let q_data: Vec<f64> = q_tensor.data().iter().copied().collect();
+        let q_arr = ndarray::Array1::from_vec(q_data);
+        let q_rotated = config.rotation.dot(&q_arr);
+        let output = crate::runtime::ml::fajarquant::fused_attention::fused_quantized_attention(
+            &q_rotated,
+            &cache,
+            &config.codebook,
+        );
+
+        let shape = vec![output.len()];
+        let arr = ndarray::ArrayD::from_shape_vec(shape, output.to_vec()).map_err(|e| {
+            EvalError::Runtime(RuntimeError::TypeError(format!("fused_attention: {e}")))
+        })?;
+        Ok(Value::Tensor(
+            crate::runtime::ml::tensor::TensorValue::from_ndarray(arr),
+        ))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FajarQuant Phase 4: Hierarchical Multi-Resolution
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// `fq_schedule_create(base_bits, min_bits, decay)` -> map describing schedule
+    fn builtin_fq_schedule_create(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let base_bits = match &args[0] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_schedule_create: base_bits must be int".into(),
+                )
+                .into());
+            }
+        };
+        let min_bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_schedule_create: min_bits must be int".into(),
+                )
+                .into());
+            }
+        };
+        let decay = match &args[2] {
+            Value::Float(f) => *f,
+            Value::Int(n) => *n as f64,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "fq_schedule_create: decay must be number".into(),
+                )
+                .into());
+            }
+        };
+
+        let schedule = crate::runtime::ml::fajarquant::hierarchical::BitSchedule::exponential_decay(
+            base_bits, min_bits, decay, 4096,
+        );
+
+        let mut result = std::collections::HashMap::new();
+        result.insert("base_bits".to_string(), Value::Int(base_bits as i64));
+        result.insert("min_bits".to_string(), Value::Int(min_bits as i64));
+        result.insert("decay".to_string(), Value::Float(decay));
+        result.insert(
+            "bits_at_0".to_string(),
+            Value::Int(schedule.bits_for(0) as i64),
+        );
+        result.insert(
+            "bits_at_256".to_string(),
+            Value::Int(schedule.bits_for(256) as i64),
+        );
+        result.insert(
+            "bits_at_1024".to_string(),
+            Value::Int(schedule.bits_for(1024) as i64),
+        );
+        result.insert(
+            "bits_at_4096".to_string(),
+            Value::Int(schedule.bits_for(4096) as i64),
+        );
+        result.insert(
+            "type".to_string(),
+            Value::Str("fq_bit_schedule".to_string()),
+        );
+        Ok(Value::Map(result))
+    }
+
+    /// `fq_hierarchical_stats(dim, base_bits, min_bits, decay, n_tokens)` -> map with stats
+    fn builtin_fq_hierarchical_stats(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let dim = match &args[0] {
+            Value::Int(n) => *n as usize,
+            _ => return Err(RuntimeError::TypeError("dim must be int".into()).into()),
+        };
+        let base_bits = match &args[1] {
+            Value::Int(n) => *n as u8,
+            _ => return Err(RuntimeError::TypeError("base_bits must be int".into()).into()),
+        };
+        let min_bits = match &args[2] {
+            Value::Int(n) => *n as u8,
+            _ => return Err(RuntimeError::TypeError("min_bits must be int".into()).into()),
+        };
+        let decay = match &args[3] {
+            Value::Float(f) => *f,
+            Value::Int(n) => *n as f64,
+            _ => return Err(RuntimeError::TypeError("decay must be number".into()).into()),
+        };
+        let n_tokens = match &args[4] {
+            Value::Int(n) => *n as usize,
+            _ => return Err(RuntimeError::TypeError("n_tokens must be int".into()).into()),
+        };
+
+        let schedule = crate::runtime::ml::fajarquant::hierarchical::BitSchedule::exponential_decay(
+            base_bits, min_bits, decay, n_tokens,
+        );
+
+        // Compute total bits used vs flat allocation
+        let total_hierarchical: usize = (0..n_tokens)
+            .map(|age| schedule.bits_for(age) as usize * dim)
+            .sum();
+        let total_flat: usize = n_tokens * base_bits as usize * dim;
+        let savings_pct = if total_flat > 0 {
+            (1.0 - total_hierarchical as f64 / total_flat as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let mut result = std::collections::HashMap::new();
+        result.insert(
+            "total_bits_hierarchical".to_string(),
+            Value::Int(total_hierarchical as i64),
+        );
+        result.insert("total_bits_flat".to_string(), Value::Int(total_flat as i64));
+        result.insert("savings_pct".to_string(), Value::Float(savings_pct));
+        result.insert("n_tokens".to_string(), Value::Int(n_tokens as i64));
         Ok(Value::Map(result))
     }
 

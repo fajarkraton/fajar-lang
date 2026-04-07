@@ -1493,6 +1493,13 @@ impl Interpreter {
             "turboquant_inner_product",
             // FajarQuant Phase 2: Adaptive
             "fajarquant_compare",
+            // FajarQuant Phase 3: Fused attention
+            "fq_kv_cache_create",
+            "fq_kv_cache_append",
+            "fq_fused_attention",
+            // FajarQuant Phase 4: Hierarchical
+            "fq_schedule_create",
+            "fq_hierarchical_stats",
         ]
     }
 

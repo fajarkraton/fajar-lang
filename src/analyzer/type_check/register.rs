@@ -852,6 +852,39 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64],
                 Type::Unknown,
             ),
+            // FajarQuant Phase 3: Fused attention
+            (
+                "fq_kv_cache_create",
+                vec![Type::I64, Type::I64],
+                Type::Unknown,
+            ),
+            (
+                "fq_kv_cache_append",
+                vec![Type::I64, Type::I64, dyn_t.clone(), dyn_t.clone()],
+                Type::Unknown,
+            ),
+            (
+                "fq_fused_attention",
+                vec![
+                    dyn_t.clone(),
+                    dyn_t.clone(),
+                    dyn_t.clone(),
+                    Type::I64,
+                    Type::I64,
+                ],
+                dyn_t.clone(),
+            ),
+            // FajarQuant Phase 4: Hierarchical
+            (
+                "fq_schedule_create",
+                vec![Type::I64, Type::I64, Type::F64],
+                Type::Unknown,
+            ),
+            (
+                "fq_hierarchical_stats",
+                vec![Type::I64, Type::I64, Type::I64, Type::F64, Type::I64],
+                Type::Unknown,
+            ),
             // String free functions
             ("split", vec![Type::Str, Type::Str], Type::Unknown),
             ("trim", vec![Type::Str], Type::Str),
