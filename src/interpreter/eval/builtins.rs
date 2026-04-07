@@ -497,6 +497,17 @@ impl Interpreter {
             // FajarQuant Phase 4: Hierarchical multi-resolution
             "fq_schedule_create" => self.builtin_fq_schedule_create(args),
             "fq_hierarchical_stats" => self.builtin_fq_hierarchical_stats(args),
+            // AVX2/AES-NI — LLVM-only builtins (not available in tree-walking interpreter)
+            "avx2_dot_f32" | "avx2_add_f32" | "avx2_mul_f32" | "avx2_relu_f32" => {
+                Err(RuntimeError::TypeError(
+                    format!("{}() requires LLVM compilation: fj run --backend llvm file.fj (not available in interpreter)", &args.first().map(|_| name).unwrap_or(name))
+                ).into())
+            }
+            "aesni_encrypt_block" | "aesni_decrypt_block" => {
+                Err(RuntimeError::TypeError(
+                    format!("{}() requires LLVM compilation: fj run --backend llvm file.fj (not available in interpreter)", name)
+                ).into())
+            }
             // Loss functions
             "tensor_mse_loss" | "mse_loss" => self.builtin_tensor_loss(args, "mse"),
             "tensor_cross_entropy" | "cross_entropy_loss" | "cross_entropy" => {

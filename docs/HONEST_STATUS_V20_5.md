@@ -106,10 +106,10 @@ All previously-simulated builtins have been upgraded to production [x]:
 
 | Module | Status |
 |--------|--------|
-| generators_v12 | Superseded by V18 generators |
-| wasi_v12 | Superseded by wasi_p2 |
+| generators_v12 | Superseded by V18 generators (comment-only, no actual module) |
 
 *Note: stdlib/ (95 LOC) was removed in V20.8 dead code cleanup.*
+*V24 correction: wasi_v12 reclassified [s]→[x] — actively used by codegen/wasm/mod.rs (8 references for WASI preview1 imports).*
 
 ---
 

@@ -257,7 +257,7 @@ No prior work combines adaptive rotation, fused attention, hierarchical allocati
 % ═══════════════════════════════════════════════════════════
 \section{Conclusion}
 
-FajarQuant achieves 55--90\% lower MSE than TurboQuant on structured data by exploiting low-rank KV cache structure through adaptive PCA rotation. Combined with fused codebook attention ($O(N \cdot d) \to O(1)$ extra memory) and hierarchical bit allocation (48.7\% fewer bits), FajarQuant enables practical LLM inference on embedded devices.
+FajarQuant achieves 55--88\% lower MSE than TurboQuant on structured (low-rank) data by exploiting KV cache structure through adaptive PCA rotation. The improvement is data-dependent: structured data with concentrated variance yields the highest gains, while uniform random data shows minimal improvement at $b{=}1$. Combined with fused codebook attention ($O(N \cdot d) \to O(1)$ extra dequant memory) and hierarchical bit allocation (up to 65\% fewer bits at $N{=}4096$, 12\% at $N{=}256$), FajarQuant enables practical LLM inference on embedded devices.
 
 Fajar Lang's compile-time \texttt{@kernel}/\texttt{@device} enforcement provides unique safety guarantees, ensuring allocation-free quantization and pointer-safe attention without runtime overhead.
 

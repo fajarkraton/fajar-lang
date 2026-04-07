@@ -10,8 +10,8 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 [![LOC](https://img.shields.io/badge/LOC-446K_Rust-informational)]()
 [![FajarOS](https://img.shields.io/badge/FajarOS-boots_to_shell-success)]()
 [![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
-[![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_3x_speedup-76b900)]()
-[![FajarQuant](https://img.shields.io/badge/FajarQuant-88%25_MSE_improvement-orange)]()
+[![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_GPU_compute-76b900)]()
+[![FajarQuant](https://img.shields.io/badge/FajarQuant-55--88%25_MSE_improvement-orange)]()
 [![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -556,7 +556,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| [**v24.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0) | **Quantum** | **CUDA RTX 4090 GPU compute (9 PTX kernels, tiled matmul 3x speedup, async streams). FajarQuant complete (88% MSE improvement, 6.4x KV compression, 65% hierarchical savings). AVX2 SIMD + AES-NI via LLVM inline asm. GPU codebook dot product for quantized attention on RTX 4090. 11,395 tests.** |
+| [**v24.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0) | **Quantum** | **CUDA RTX 4090 GPU compute (9 PTX kernels, tiled matmul, async streams). FajarQuant complete (55-88% MSE improvement on structured data, 6.4x KV compression, up to 65% hierarchical savings). AVX2 SIMD + AES-NI via LLVM inline asm (LLVM-only). GPU codebook dot product for quantized attention. 11,395 tests.** |
 | [**v23.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v23.0.0) | **Boot** | **FajarOS boots to shell (105 commands, 90 auto-tested). Ring 3 user mode (IRETQ+SYSCALL+SYSRETQ→shell resume). FajarQuant kernel-native. NVMe storage. 22 bugs fixed: LLVM asm constraint ordering, iretq selectors, PIC/LAPIC handlers, entry block alloca, frame allocator BSF/POPCNT. x86_64-user standalone ELF target. 7,572 tests.** |
 | [v20.8.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v20.8.0) | Perfection | FajarQuant, JIT 76x speedup, GPU detection (RTX 4090), 131/131 features audit, plugin CLI, strict mode. 10,400+ tests. |
 | **v12.1.0** | **Delivery** | **V15: Multi-step effect continuations (replay-with-cache), resume() no-arg, effect type/arity checking, ML shorthand builtins (tanh/concat/accuracy), .forward() method dispatch, bindgen typedef struct fix, `fj run --check-only`, `fj registry-init`, LSP effect keywords, 22+ new .fj examples. 8,092 tests.** |

@@ -1501,6 +1501,13 @@ impl Interpreter {
             // FajarQuant Phase 4: Hierarchical
             "fq_schedule_create",
             "fq_hierarchical_stats",
+            // AVX2/AES-NI (LLVM-only, interpreter returns clear error)
+            "avx2_dot_f32",
+            "avx2_add_f32",
+            "avx2_mul_f32",
+            "avx2_relu_f32",
+            "aesni_encrypt_block",
+            "aesni_decrypt_block",
         ]
     }
 

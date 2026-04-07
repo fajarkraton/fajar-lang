@@ -897,6 +897,37 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64, Type::F64, Type::I64],
                 Type::Unknown,
             ),
+            // AVX2/AES-NI (LLVM-only — interpreter returns clear error)
+            (
+                "avx2_dot_f32",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "avx2_add_f32",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "avx2_mul_f32",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "avx2_relu_f32",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "aesni_encrypt_block",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "aesni_decrypt_block",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             // String free functions
             ("split", vec![Type::Str, Type::Str], Type::Unknown),
             ("trim", vec![Type::Str], Type::Str),

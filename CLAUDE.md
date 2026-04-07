@@ -105,7 +105,8 @@ Every Claude Code session MUST follow this order:
 Tests:     11,395 total (7,589 lib + 954 integ + 148 context + 43 LLVM E2E + 1,342 native + 15 CUDA + 8 safety + 1,296 other) | 0 failures
 LOC:       ~446,000 lines of Rust (392 files)
 Examples:  285 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
-Modules:   42 lib.rs pub mods | 48 [x], 0 [sim], 5 [f], 3 [s] (56 logical)
+Modules:   42 lib.rs pub mods | 49 [x], 0 [sim], 5 [f], 2 [s] (56 logical)
+           Note: wasi_v12 reclassified [s]→[x] (actively used by wasm codegen)
 CLI:       29 production, 4 partial, 2 stub (35 total)
 CI:        6 GitHub Actions workflows
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
@@ -125,17 +126,18 @@ Labeling: [x] = production (tested, works E2E)
   - 9 PTX kernels: matmul (tiled 16x16 shared mem), vector_add/sub/mul/div, relu, sigmoid, softmax, codebook_dot
   - Device cache (OnceLock), kernel cache, async CUDA stream pipeline
   - gpu_matmul/add/relu/sigmoid builtins → CUDA first, CPU fallback
-  - **3x speedup** at 1024x1024 matmul on RTX 4090 (76 SMs, 9728 cores)
+  - ~3x speedup at 1024x1024 matmul on RTX 4090 (measured, hardware-dependent)
 - **FajarQuant (all 7 phases):**
   - Phase 1: TurboQuant baseline (Lloyd-Max, quant_mse/prod) — 535 LOC
-  - Phase 2: Adaptive PCA rotation — **88% MSE improvement** over random
-  - Phase 3: Fused quantized attention — zero dequant memory, **6.4x KV compression**
-  - Phase 4: Hierarchical multi-resolution — **65.3% bit savings** at 4K tokens
+  - Phase 2: Adaptive PCA rotation — **55-88% MSE improvement** on structured data (peak 88% at d=128,b=3)
+  - Phase 3: Fused quantized attention — zero dequant buffer allocation, **6.4x KV compression**
+  - Phase 4: Hierarchical multi-resolution — **up to 65.3% bit savings** at N=4096 (12% at N=256)
   - Phase 5: Compiler safety tests (8 @kernel/@device tests)
   - Phase 6-7: Paper benchmarks + real numbers in fajarquant.tex
   - GPU codebook dot product: quantized attention on RTX 4090 via PTX
-- **AVX2 SIMD + AES-NI (Phase 3.6+3.7):**
-  - 6 LLVM builtins: avx2_dot_f32, avx2_add_f32, avx2_mul_f32, avx2_relu_f32, aesni_encrypt_block, aesni_decrypt_block
+- **AVX2 SIMD + AES-NI (Phase 3.6+3.7) — LLVM backend only:**
+  - 6 LLVM-only builtins: avx2_dot_f32, avx2_add_f32, avx2_mul_f32, avx2_relu_f32, aesni_encrypt_block, aesni_decrypt_block
+  - Interpreter returns clear error directing user to `--backend llvm`
   - Memory-based XMM/YMM operands via inline asm (no vector type changes needed)
 - **Tests:** 11,395 total, 0 failures | 15 CUDA E2E | 8 FajarQuant safety
 
@@ -801,5 +803,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 22.0 | V24 "Quantum" — 11,395 tests, ~446K LOC | CUDA RTX 4090 (9 PTX kernels, 3x speedup), FajarQuant (88% MSE improvement), AVX2+AES-NI*
+*CLAUDE.md Version: 22.0 | V24 "Quantum" — 11,395 tests, ~446K LOC | CUDA RTX 4090 (9 PTX kernels), FajarQuant (55-88% MSE), AVX2+AES-NI (LLVM-only)*
 *Last Updated: 2026-04-07*
