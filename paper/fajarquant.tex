@@ -117,9 +117,9 @@ where $Q$ is coordinate-wise Lloyd-Max quantization.
 Dimension & $b{=}1$ & $b{=}2$ & $b{=}3$ & $b{=}4$ \\
 \midrule
 $d{=}16$ & $-3\%$ & $55\%$ & $72\%$ & $82\%$ \\
-$d{=}32$ & $8\%$ & $66\%$ & $83\%$ & $85\%$ \\
-$d{=}64$ & $12\%$ & $71\%$ & $86\%$ & $88\%$ \\
-$d{=}128$ & $15\%$ & $74\%$ & $88\%$ & $\mathbf{90\%}$ \\
+$d{=}64$ & $18\%$ & $69\%$ & $81\%$ & $82\%$ \\
+$d{=}128$ & --- & $75\%$ & $\mathbf{88\%}$ & --- \\
+$d{=}256$ & --- & $55\%$ & $73\%$ & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -210,10 +210,11 @@ Fajar Lang's dual-context annotation system provides safety guarantees unavailab
 \toprule
 Innovation & Metric & Result \\
 \midrule
-Adaptive rotation ($b{=}3$, $d{=}32$) & MSE improvement & \textbf{83\%} \\
-Adaptive rotation ($b{=}4$, $d{=}32$) & MSE improvement & \textbf{85\%} \\
+Adaptive rotation ($b{=}3$, $d{=}128$) & MSE improvement & \textbf{88\%} \\
+Adaptive rotation ($b{=}3$, $d{=}64$) & MSE improvement & \textbf{81\%} \\
 Fused attention ($N{=}16$K) & Memory saved & 4~MB $\to$ 64~B \\
-Hierarchical ($N{=}10$K) & Bit savings & \textbf{48.7\%} \\
+Hierarchical ($N{=}4$K) & Bit savings & \textbf{65.3\%} \\
+KV cache ($d{=}64$, $b{=}3$) & Compression & \textbf{6.4$\times$} \\
 \texttt{@kernel}/\texttt{@device} & Runtime overhead & Zero \\
 JIT compilation (fib(30)) & Speedup & \textbf{76$\times$} \\
 \bottomrule
