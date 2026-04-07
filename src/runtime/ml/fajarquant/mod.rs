@@ -8,3 +8,4 @@
 pub mod adaptive;
 pub mod fused_attention;
 pub mod hierarchical;
+pub mod kivi;
