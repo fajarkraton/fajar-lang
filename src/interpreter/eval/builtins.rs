@@ -2284,6 +2284,12 @@ impl Interpreter {
                         m.insert(k, value);
                         Ok(Value::Map(m))
                     }
+                    // Auto-create map if first arg is Null (from `let m = {}`)
+                    (Value::Null, Value::Str(k)) => {
+                        let mut m = HashMap::new();
+                        m.insert(k, value);
+                        Ok(Value::Map(m))
+                    }
                     _ => Err(
                         RuntimeError::TypeError("map_insert(map, key: str, value)".into()).into(),
                     ),
