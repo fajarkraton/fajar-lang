@@ -2603,9 +2603,32 @@ fn cmd_deploy(target: &str, file: &std::path::Path, output: &str) -> ExitCode {
                 }
             }
         }
+        "k8s" | "kubernetes" => {
+            let image = format!("{binary_name}:latest");
+            let deploy = fajar_lang::deployment::containers::K8sDeployment::new(&binary_name, &image);
+            let manifest = fajar_lang::deployment::containers::generate_k8s_manifest(&deploy);
+            let out_path = std::path::Path::new(output).join(format!("{binary_name}-k8s.yaml"));
+            match std::fs::write(&out_path, &manifest) {
+                Ok(()) => {
+                    println!("Generated: {}", out_path.display());
+                    println!("  Deployment: {binary_name} ({} replicas)", deploy.replicas);
+                    println!("  Service: ClusterIP → port {}", deploy.port);
+                    println!("  Image: {image}");
+                    println!("  Resources: {}m-{}m CPU, {}Mi-{}Mi RAM",
+                        deploy.cpu_request, deploy.cpu_limit,
+                        deploy.mem_request_mi, deploy.mem_limit_mi);
+                    println!("\nApply: kubectl apply -f {}", out_path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: cannot write manifest: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         _ => {
             eprintln!("Unknown deploy target: '{target}'");
-            eprintln!("Available: container");
+            eprintln!("Available: container, k8s");
             ExitCode::from(EXIT_USAGE)
         }
     }
