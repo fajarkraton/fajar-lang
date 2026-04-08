@@ -11,6 +11,7 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{enumitem}
 \usepackage{listings}
+\usepackage{makecell}
 
 % ── Theorem Environments ──
 \newtheorem{theorem}{Theorem}
@@ -32,7 +33,7 @@
 \begin{abstract}
 Vector quantization is critical for deploying large language models on resource-constrained embedded devices, where KV cache memory dominates inference cost. A 7B-parameter model at 4K context requires ${\sim}4$~GB of KV cache in FP16---far exceeding the 256~KB to 8~MB SRAM available on typical embedded targets. TurboQuant \citep{zandieh2025turboquant} achieves near-optimal MSE distortion using random orthogonal rotation followed by coordinate-wise Lloyd-Max quantization, but its data-agnostic design leaves room for improvement on structured data.
 
-We present \textbf{FajarQuant}, a hardware-aware adaptive quantization system built natively into Fajar Lang. We evaluate on \textbf{real KV cache data from Google Gemma~4~E2B} (5B parameters, $d{=}256$, April 2026). FajarQuant introduces three innovations: (1)~\textbf{PCA-based adaptive rotation} that reduces key quantization MSE by 4--6\% over KIVI and TurboQuant on real Gemma~4 data; (2)~\textbf{fused quantized attention} that eliminates $O(N \cdot d)$ dequantization memory; and (3)~\textbf{hierarchical multi-resolution} allocation achieving 48.7\% bit savings at 10K context.
+We present \textbf{FajarQuant}, a hardware-aware adaptive quantization system built natively into Fajar Lang. We evaluate on \textbf{real KV cache data from Google Gemma~4~E2B} \citep{gemma2026} (5B parameters, $d{=}256$, April 2026). FajarQuant introduces three innovations: (1)~\textbf{PCA-based adaptive rotation} that reduces key quantization MSE by 4--6\% over KIVI and TurboQuant on real Gemma~4 data; (2)~\textbf{fused quantized attention} that eliminates $O(N \cdot d)$ dequantization memory; and (3)~\textbf{hierarchical multi-resolution} allocation achieving 48.7\% bit savings at 10K context.
 
 In perplexity evaluation on WikiText-2, FajarQuant achieves the \textbf{lowest perplexity at 2--3~bit} quantization (PPL~80.1 at 2-bit vs TurboQuant~117.1, KIVI~231.9), demonstrating that PCA rotation is most beneficial where quantization noise matters most.
 \end{abstract}
@@ -236,6 +237,33 @@ Samples & 150 & 50 \\
 Real KV cache keys exhibit $2.45\times$ stronger low-rank structure than synthetic random data. The structure varies significantly across layers: Layer~1 shows the strongest low-rank pattern ($\sigma_1/\sigma_2 = 4.04$), while Layer~9 is most uniform ($\sigma_1/\sigma_2 = 2.04$). This per-layer variation motivates adaptive per-head calibration.
 
 % ═══════════════════════════════════════════════════════════
+\section{Ablation Study}
+
+We isolate the contribution of each innovation on real Gemma~4~E2B key data (150 samples, 10 prompts). Table~\ref{tab:ablation} shows incremental gains as innovations are added.
+
+\begin{table}[t]
+\centering
+\caption{Ablation: Incremental Innovation Contributions (Gemma~4~E2B, $N{=}10$K)}
+\label{tab:ablation}
+\begin{tabular}{lcccc}
+\toprule
+Configuration & \makecell{Key MSE\\($b{=}2$)} & \makecell{MSE $\Delta$\\vs Turbo} & \makecell{Dequant\\Memory} & \makecell{Bit\\Savings} \\
+\midrule
+No rotation (KIVI-like) & $9.31 \times 10^{-4}$ & $+1.5\%$ & $O(N \!\cdot\! d)$ & 0\% \\
+Random rotation (TurboQuant) & $9.18 \times 10^{-4}$ & --- & $O(N \!\cdot\! d)$ & 0\% \\
+\midrule
+$+$ PCA rotation & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(N \!\cdot\! d)$ & 0\% \\
+$+$ Fused attention & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(2^b)$ & 0\% \\
+$+$ Hierarchical (Full FQ) & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(2^b)$ & $48.7\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key findings:} (1)~PCA rotation provides 4--5\% MSE improvement across all bit widths (4.9\% at 2-bit, 4.3\% at 3-bit, 4.8\% at 4-bit), confirming that exploiting low-rank structure in KV cache is consistently beneficial. (2)~Fused attention preserves identical MSE while reducing dequantization memory from $O(N \!\cdot\! d)$ to $O(2^b)$---a $524{,}288\times$ reduction at $N{=}16$K. (3)~Hierarchical allocation saves 48.7\% of bit budget at $N{=}10$K by assigning 4~bits to the 256 most recent tokens and 1~bit to tokens beyond position 4096. The savings increase with context length (55.7\% at $N{=}16$K).
+
+Notably, ``no rotation'' (equivalent to KIVI per-channel) is 1.5\% \textit{worse} than random rotation at 2-bit, confirming that rotation-based approaches---whether random or adaptive---are fundamentally superior for KV cache quantization.
+
+% ═══════════════════════════════════════════════════════════
 \section{End-to-End Results}
 
 \begin{table}[t]
@@ -328,6 +356,10 @@ python scripts/run_comparison.py \
 # Perplexity evaluation
 python scripts/eval_perplexity.py \
   --model google/gemma-4-E2B --bits 2,3,4
+
+# Ablation study
+python scripts/run_ablation.py \
+  --data data/kv_cache/ --num-prompts 10
 \end{lstlisting}
 
 \textbf{Environment:} NVIDIA RTX 4090 Laptop GPU (16~GB), Intel i9-14900HX, 32~GB RAM, Ubuntu 24.04, Rust~1.87, PyTorch~2.11+cu130, Transformers~5.5.
