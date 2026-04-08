@@ -506,6 +506,10 @@ pub struct LlvmCompiler<'ctx> {
     continue_target: Option<BasicBlock<'ctx>>,
     /// Maps constant name → LLVM constant value (from `const NAME: Type = value`).
     constants: HashMap<String, BasicValueEnum<'ctx>>,
+    /// Monotonically increasing counter for unique string global names.
+    str_counter: usize,
+    /// Deduplication cache: string content → LLVM global value.
+    string_globals: HashMap<String, inkwell::values::GlobalValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCompiler<'ctx> {
@@ -536,7 +540,31 @@ impl<'ctx> LlvmCompiler<'ctx> {
             break_target: None,
             continue_target: None,
             constants: HashMap::new(),
+            str_counter: 0,
+            string_globals: HashMap::new(),
         }
+    }
+
+    /// Returns (or creates) a unique LLVM global for the given string content.
+    /// Deduplicates: identical strings share the same global.
+    /// Fixes: all string literals previously used hardcoded name "str_const"
+    /// which caused LLVM global name collisions and garbled bare-metal output.
+    fn get_or_create_string_global(&mut self, s: &str) -> inkwell::values::GlobalValue<'ctx> {
+        if let Some(&existing) = self.string_globals.get(s) {
+            return existing;
+        }
+        self.str_counter += 1;
+        let name = format!("__fj_str_{}", self.str_counter);
+        let str_val = self.context.const_string(s.as_bytes(), false);
+        let global = self.module.add_global(
+            str_val.get_type(),
+            Some(inkwell::AddressSpace::default()),
+            &name,
+        );
+        global.set_initializer(&str_val);
+        global.set_constant(true);
+        self.string_globals.insert(s.to_string(), global);
+        global
     }
 
     /// Creates an alloca in the current function's entry block.
@@ -1201,14 +1229,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 let _ = self.compile_expr(arg_expr)?;
 
                 // Build a string constant for the type name.
-                let str_val = self.context.const_string(type_name.as_bytes(), false);
-                let global = self.module.add_global(
-                    str_val.get_type(),
-                    Some(inkwell::AddressSpace::default()),
-                    "type_name_str",
-                );
-                global.set_initializer(&str_val);
-                global.set_constant(true);
+                let global = self.get_or_create_string_global(&type_name);
 
                 let ptr = global.as_pointer_value();
                 let len = self
@@ -4365,14 +4386,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
         match part {
             FStringExprPart::Literal(s) => {
                 // Create a global string constant.
-                let str_val = self.context.const_string(s.as_bytes(), false);
-                let global = self.module.add_global(
-                    str_val.get_type(),
-                    Some(inkwell::AddressSpace::default()),
-                    "fstr_lit",
-                );
-                global.set_initializer(&str_val);
-                global.set_constant(true);
+                let global = self.get_or_create_string_global(s);
                 let ptr = global.as_pointer_value();
                 let len = i64_ty.const_int(s.len() as u64, false);
                 build_str_struct(&self.builder, ptr.into(), len.into())
@@ -4452,7 +4466,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
     /// Compiles a literal value.
     fn compile_literal(
-        &self,
+        &mut self,
         kind: &LiteralKind,
     ) -> Result<Option<BasicValueEnum<'ctx>>, CodegenError> {
         match kind {
@@ -4465,14 +4479,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             )),
             LiteralKind::String(s) => {
                 // Build global string constant and return {ptr, len} struct
-                let str_val = self.context.const_string(s.as_bytes(), false);
-                let global = self.module.add_global(
-                    str_val.get_type(),
-                    Some(inkwell::AddressSpace::default()),
-                    "str_const",
-                );
-                global.set_initializer(&str_val);
-                global.set_constant(true);
+                let global = self.get_or_create_string_global(s);
 
                 let ptr = global.as_pointer_value();
                 let len = self.context.i64_type().const_int(s.len() as u64, false);
@@ -4506,14 +4513,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             )),
             LiteralKind::RawString(s) => {
                 // Raw string: same as String but no escape processing
-                let str_val = self.context.const_string(s.as_bytes(), false);
-                let global = self.module.add_global(
-                    str_val.get_type(),
-                    Some(inkwell::AddressSpace::default()),
-                    "raw_str_const",
-                );
-                global.set_initializer(&str_val);
-                global.set_constant(true);
+                let global = self.get_or_create_string_global(s);
 
                 let ptr = global.as_pointer_value();
                 let len = self.context.i64_type().const_int(s.len() as u64, false);
@@ -9065,7 +9065,7 @@ mod tests {
         compiler.compile_program(&program).unwrap();
         let ir = compiler.print_ir();
         assert!(ir.contains("hello"));
-        assert!(ir.contains("str_const"));
+        assert!(ir.contains("__fj_str_"));
     }
 
     #[test]
@@ -11700,7 +11700,7 @@ mod tests {
     fn l6_string_literal_produces_struct() {
         LlvmCompiler::init_native_target().unwrap();
         let context = Context::create();
-        let compiler = LlvmCompiler::new(&context, "test_l6_str_lit");
+        let mut compiler = LlvmCompiler::new(&context, "test_l6_str_lit");
 
         // Create a function context
         let i64_type = context.i64_type();
