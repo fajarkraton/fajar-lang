@@ -918,6 +918,22 @@ impl TypeChecker {
                 vec![Type::I64, Type::I64, Type::I64],
                 Type::I64,
             ),
+            // AVX2 i64 integer SIMD (for kernel fixed-point vecmat)
+            (
+                "avx2_dot_i64",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "avx2_add_i64",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "avx2_mul_i64",
+                vec![Type::I64, Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             (
                 "aesni_encrypt_block",
                 vec![Type::I64, Type::I64, Type::I64],

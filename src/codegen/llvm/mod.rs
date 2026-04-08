@@ -865,6 +865,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "avx2_add_f32"
                 | "avx2_mul_f32"
                 | "avx2_relu_f32"
+                | "avx2_dot_i64"
+                | "avx2_add_i64"
+                | "avx2_mul_i64"
                 | "aesni_encrypt_block"
                 | "aesni_decrypt_block"
                 | "spin_lock"
@@ -1617,6 +1620,58 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 self.compile_avx2_relu(&compiled).map(Some)
+            }
+
+            // AVX2 i64 integer SIMD — for kernel fixed-point vecmat acceleration
+            // avx2_dot_i64(a_ptr, b_ptr, len) -> i64
+            "avx2_dot_i64" => {
+                if args.len() < 3 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(3)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_dot_i64(&compiled).map(Some)
+            }
+
+            // avx2_add_i64(dst_ptr, a_ptr, b_ptr, len) -> i64
+            "avx2_add_i64" => {
+                if args.len() < 4 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(4)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_elementwise_i64(&compiled, "vpaddq").map(Some)
+            }
+
+            // avx2_mul_i64(dst_ptr, a_ptr, b_ptr, len) -> i64
+            "avx2_mul_i64" => {
+                if args.len() < 4 {
+                    return Ok(Some(zero.into()));
+                }
+                let compiled: Vec<BasicValueEnum<'ctx>> = args
+                    .iter()
+                    .take(4)
+                    .map(|a| {
+                        self.compile_expr(&a.value).and_then(|v| {
+                            v.ok_or_else(|| CodegenError::Internal("avx2 arg void".into()))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.compile_avx2_elementwise_i64(&compiled, "vpmuludq").map(Some)
             }
 
             // AES-NI builtins — 128-bit block operations via XMM registers
@@ -8159,6 +8214,139 @@ impl<'ctx> LlvmCompiler<'ctx> {
             inkwell::values::ValueKind::Basic(v) => Ok(v),
             inkwell::values::ValueKind::Instruction(_) => {
                 Err(CodegenError::Internal("avx2_relu no value".into()))
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // AVX2 i64 integer SIMD — for kernel fixed-point inference
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// AVX2 dot product for i64 arrays: sum(a[i] * b[i]) for i in 0..len.
+    /// Uses vpmuludq (unsigned 32-bit multiply → 64-bit result per lane).
+    /// NOTE: Only correct when |a[i]|, |b[i]| < 2^31 (fits in lower 32 bits).
+    /// For FajarOS fixed-point (x1000 scale, values < 1M), this is always safe.
+    fn compile_avx2_dot_i64(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
+
+        let template = concat!(
+            "vpxor %ymm0, %ymm0, %ymm0\n\t",   // acc = 0 (4 x i64)
+            "movq $0, %rax\n\t",                 // a_ptr
+            "movq $1, %rbx\n\t",                 // b_ptr
+            "movq $2, %rcx\n\t",                 // len (count of i64 elements)
+            "shrq $$2, %rcx\n\t",                // len/4 (4 i64s per YMM)
+            "testq %rcx, %rcx\n\t",
+            "jz 2f\n",
+            "1:\n\t",
+            "vmovdqu (%rax), %ymm1\n\t",         // load 4 i64s from a
+            "vmovdqu (%rbx), %ymm2\n\t",         // load 4 i64s from b
+            "vpmuludq %ymm1, %ymm2, %ymm3\n\t",  // multiply low 32 bits → 64-bit results
+            "vpaddq %ymm3, %ymm0, %ymm0\n\t",   // acc += products
+            "addq $$32, %rax\n\t",
+            "addq $$32, %rbx\n\t",
+            "decq %rcx\n\t",
+            "jnz 1b\n",
+            "2:\n\t",
+            // Horizontal sum: ymm0 has 4 i64 lanes → reduce to 1
+            "vextracti128 $$1, %ymm0, %xmm1\n\t",
+            "vpaddq %xmm1, %xmm0, %xmm0\n\t",
+            "vpsrldq $$8, %xmm0, %xmm1\n\t",
+            "vpaddq %xmm1, %xmm0, %xmm0\n\t",
+            "vmovq %xmm0, %rax\n\t",
+            "vzeroupper",
+        );
+
+        let constraint =
+            "={rax},{rdi},{rsi},{rdx},~{rbx},~{rcx},~{ymm0},~{ymm1},~{ymm2},~{ymm3},~{xmm0},~{xmm1}"
+                .to_string();
+
+        let inline_asm = self.context.create_inline_asm(
+            asm_fn_ty,
+            template.to_string(),
+            constraint,
+            true,
+            true,
+            None,
+            false,
+        );
+
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, "avx2_dot_i64")
+            .map_err(|e| CodegenError::Internal(format!("avx2_dot_i64 asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("avx2_dot_i64 produced no value".into()))
+            }
+        }
+    }
+
+    /// AVX2 elementwise binary op for i64 arrays: dst[i] = op(a[i], b[i]).
+    /// `op` is the AVX2 instruction: "vpaddq" (add), "vpmuludq" (mul low32).
+    /// Processes 4 i64 values per iteration (256-bit YMM registers).
+    fn compile_avx2_elementwise_i64(
+        &mut self,
+        args: &[BasicValueEnum<'ctx>],
+        op: &str,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let i64_ty = self.context.i64_type();
+        let asm_fn_ty = i64_ty.fn_type(
+            &[i64_ty.into(), i64_ty.into(), i64_ty.into(), i64_ty.into()],
+            false,
+        );
+
+        let template = format!(
+            concat!(
+                "movq $1, %rax\n\t",  // a_ptr
+                "movq $2, %rbx\n\t",  // b_ptr
+                "movq $3, %rcx\n\t",  // len
+                "movq $0, %rdx\n\t",  // dst_ptr
+                "shrq $$2, %rcx\n\t", // len/4 (4 i64s per YMM)
+                "testq %rcx, %rcx\n\t",
+                "jz 2f\n",
+                "1:\n\t",
+                "vmovdqu (%rax), %ymm0\n\t",
+                "vmovdqu (%rbx), %ymm1\n\t",
+                "{op} %ymm1, %ymm0, %ymm2\n\t",
+                "vmovdqu %ymm2, (%rdx)\n\t",
+                "addq $$32, %rax\n\t",
+                "addq $$32, %rbx\n\t",
+                "addq $$32, %rdx\n\t",
+                "decq %rcx\n\t",
+                "jnz 1b\n",
+                "2:\n\t",
+                "xorq %rax, %rax\n\t",
+                "vzeroupper",
+            ),
+            op = op
+        );
+
+        let constraint =
+            "={rax},{rdi},{rsi},{rdx},{rcx},~{rbx},~{ymm0},~{ymm1},~{ymm2}".to_string();
+
+        let inline_asm = self
+            .context
+            .create_inline_asm(asm_fn_ty, template, constraint, true, true, None, false);
+
+        let call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+            args.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(asm_fn_ty, inline_asm, &call_args, "avx2_ewise_i64")
+            .map_err(|e| CodegenError::Internal(format!("avx2 i64 elementwise asm error: {e}")))?;
+
+        match call.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => Ok(v),
+            inkwell::values::ValueKind::Instruction(_) => {
+                Err(CodegenError::Internal("avx2 i64 elementwise no value".into()))
             }
         }
     }
