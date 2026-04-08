@@ -12,6 +12,7 @@
 \usepackage{enumitem}
 \usepackage{listings}
 \usepackage{makecell}
+\usepackage{balance}
 
 % ── Theorem Environments ──
 \newtheorem{theorem}{Theorem}
@@ -19,7 +20,7 @@
 \newtheorem{definition}[theorem]{Definition}
 
 % ── Code Listings ──
-\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single}
 
 % ── Title ──
 \title{FajarQuant: Hardware-Aware Adaptive Vector Quantization\\for Embedded ML Inference}
@@ -99,7 +100,8 @@ We evaluate on KV cache extracted from Google Gemma~4~E2B (35 layers, 1~KV head,
 
 \begin{table}[t]
 \centering
-\caption{Key Quantization MSE on Real Gemma~4 E2B KV Cache ($d{=}256$, 150 samples)}
+\small
+\caption{Key quantization MSE on real Gemma~4 E2B KV cache ($d{=}256$, 150 samples)}
 \label{tab:mse_real}
 \begin{tabular}{lccc}
 \toprule
@@ -109,7 +111,7 @@ $b{=}2$ & $\mathbf{8.72 \times 10^{-4}}$ & $9.31 \times 10^{-4}$ & $9.18 \times 
 $b{=}3$ & $\mathbf{1.60 \times 10^{-4}}$ & $1.66 \times 10^{-4}$ & $1.67 \times 10^{-4}$ \\
 $b{=}4$ & $\mathbf{3.46 \times 10^{-5}}$ & $3.60 \times 10^{-5}$ & $3.63 \times 10^{-5}$ \\
 \midrule
-\multicolumn{4}{l}{\textit{Improvement:}} \\
+\multicolumn{4}{l}{\textit{Improvement over baselines:}} \\
 $b{=}2$ & --- & $+6.3\%$ & $+4.9\%$ \\
 $b{=}3$ & --- & $+3.8\%$ & $+4.3\%$ \\
 $b{=}4$ & --- & $+4.0\%$ & $+4.8\%$ \\
@@ -134,11 +136,12 @@ The fused computation produces results identical to standard dequantize-then-att
 
 \begin{table}[t]
 \centering
-\caption{Memory Savings with Fused Attention ($d{=}128$, $b{=}3$)}
+\small
+\caption{Memory savings with fused attention ($d{=}128$, $b{=}3$)}
 \label{tab:memory}
 \begin{tabular}{lccc}
 \toprule
-Sequence Length & FP64 KV & Quantized KV & Fused Extra \\
+Seq.\ Length & FP64 KV & Quantized & Fused Extra \\
 \midrule
 1K tokens & 2,048 KB & 256 KB & 64 B \\
 4K tokens & 8,192 KB & 1,024 KB & 64 B \\
@@ -154,8 +157,10 @@ We define a bit schedule assigning more bits to recent tokens:
 
 \begin{table}[t]
 \centering
-\caption{Hierarchical Bit Budget ($N{=}10{,}000$, $d{=}128$)}
+\small
+\caption{Hierarchical bit budget ($N{=}10{,}000$, $d{=}128$)}
 \label{tab:budget}
+\setlength{\tabcolsep}{5pt}
 \begin{tabular}{lcccc}
 \toprule
 Tier & Token Age & Bits & Count & Subtotal \\
@@ -179,13 +184,13 @@ Fajar Lang's dual-context annotation system provides safety guarantees unavailab
 
 \begin{lstlisting}[language=C,caption={@kernel ensures allocation-free quantization}]
 @kernel fn quantize(x: [f32; 128],
-                    codebook: [f32; 8]) -> [u8; 128] {
-    // GUARANTEED: no heap, no tensor, no GC
-    let mut idx = [0u8; 128]
-    for i in 0..128 {
-        idx[i] = nearest_centroid(x[i], codebook)
-    }
-    idx
+    codebook: [f32; 8]) -> [u8; 128] {
+  // GUARANTEED: no heap, no tensor, no GC
+  let mut idx = [0u8; 128]
+  for i in 0..128 {
+    idx[i] = nearest_centroid(x[i], codebook)
+  }
+  idx
 }
 \end{lstlisting}
 
@@ -196,6 +201,7 @@ We evaluate perplexity on WikiText-2 using Gemma~4~E2B with quantized KV cache. 
 
 \begin{table}[t]
 \centering
+\small
 \caption{Perplexity on WikiText-2 (Gemma~4~E2B, quantized KV cache)}
 \label{tab:ppl}
 \begin{tabular}{lccc}
@@ -218,7 +224,8 @@ We analyze the singular value distribution of real KV cache from Gemma~4~E2B (Ta
 
 \begin{table}[t]
 \centering
-\caption{KV Cache Structure: Real Gemma~4 vs Synthetic}
+\small
+\caption{KV cache structure: real Gemma~4 vs synthetic}
 \label{tab:structure}
 \begin{tabular}{lcc}
 \toprule
@@ -241,23 +248,25 @@ Real KV cache keys exhibit $2.45\times$ stronger low-rank structure than synthet
 
 We isolate the contribution of each innovation on real Gemma~4~E2B key data (150 samples, 10 prompts). Table~\ref{tab:ablation} shows incremental gains as innovations are added.
 
-\begin{table}[t]
+% Full-width table to fit all 5 columns without truncation
+\begin{table*}[t]
 \centering
-\caption{Ablation: Incremental Innovation Contributions (Gemma~4~E2B, $N{=}10$K)}
+\small
+\caption{Ablation: incremental innovation contributions (Gemma~4~E2B, $N{=}10$K)}
 \label{tab:ablation}
 \begin{tabular}{lcccc}
 \toprule
-Configuration & \makecell{Key MSE\\($b{=}2$)} & \makecell{MSE $\Delta$\\vs Turbo} & \makecell{Dequant\\Memory} & \makecell{Bit\\Savings} \\
+Configuration & Key MSE ($b{=}2$) & MSE $\Delta$ vs TurboQuant & Dequant Memory & Bit Savings \\
 \midrule
-No rotation (KIVI-like) & $9.31 \times 10^{-4}$ & $+1.5\%$ & $O(N \!\cdot\! d)$ & 0\% \\
-Random rotation (TurboQuant) & $9.18 \times 10^{-4}$ & --- & $O(N \!\cdot\! d)$ & 0\% \\
+No rotation (KIVI-like) & $9.31 \times 10^{-4}$ & $+1.5\%$ & $O(N \cdot d)$ & 0\% \\
+Random rotation (TurboQuant) & $9.18 \times 10^{-4}$ & --- & $O(N \cdot d)$ & 0\% \\
 \midrule
-$+$ PCA rotation & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(N \!\cdot\! d)$ & 0\% \\
+$+$ PCA rotation & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(N \cdot d)$ & 0\% \\
 $+$ Fused attention & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(2^b)$ & 0\% \\
-$+$ Hierarchical (Full FQ) & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(2^b)$ & $48.7\%$ \\
+$+$ Hierarchical (Full FajarQuant) & $\mathbf{8.72 \times 10^{-4}}$ & $-4.9\%$ & $O(2^b)$ & $48.7\%$ \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 \textbf{Key findings:} (1)~PCA rotation provides 4--5\% MSE improvement across all bit widths (4.9\% at 2-bit, 4.3\% at 3-bit, 4.8\% at 4-bit), confirming that exploiting low-rank structure in KV cache is consistently beneficial. (2)~Fused attention preserves identical MSE while reducing dequantization memory from $O(N \!\cdot\! d)$ to $O(2^b)$---a $524{,}288\times$ reduction at $N{=}16$K. (3)~Hierarchical allocation saves 48.7\% of bit budget at $N{=}10$K by assigning 4~bits to the 256 most recent tokens and 1~bit to tokens beyond position 4096. The savings increase with context length (55.7\% at $N{=}16$K).
 
@@ -268,32 +277,36 @@ Notably, ``no rotation'' (equivalent to KIVI per-channel) is 1.5\% \textit{worse
 
 \begin{table}[t]
 \centering
-\caption{End-to-End Summary}
+\small
+\caption{End-to-end summary}
 \label{tab:e2e}
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{llr}
 \toprule
 Innovation & Metric & Result \\
 \midrule
-Adaptive rotation (keys, $b{=}2$) & MSE vs KIVI & $+6.3\%$ \\
-Adaptive rotation (keys, $b{=}3$) & MSE vs KIVI & $+3.8\%$ \\
-Perplexity ($b{=}2$) & PPL (lower is better) & $\mathbf{80.1}$ \\
-Perplexity ($b{=}3$) & PPL (lower is better) & $\mathbf{75.6}$ \\
-Fused attention ($N{=}16$K) & Memory saved & 4~MB $\to$ 64~B \\
-Hierarchical ($N{=}10$K) & Bit savings & $\mathbf{48.7\%}$ \\
-\texttt{@kernel}/\texttt{@device} & Runtime overhead & Zero \\
+Rotation ($b{=}2$) & MSE vs KIVI & $+6.3\%$ \\
+Rotation ($b{=}3$) & MSE vs KIVI & $+3.8\%$ \\
+PPL ($b{=}2$) & WikiText-2 & $\mathbf{80.1}$ \\
+PPL ($b{=}3$) & WikiText-2 & $\mathbf{75.6}$ \\
+Fused ($N{=}16$K) & Mem.\ saved & 4\,MB$\to$64\,B \\
+Hierarchical & Bit savings & $\mathbf{48.7\%}$ \\
+Safety & Overhead & Zero \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Memory Budget}
 
-\begin{table}[h]
+\begin{table}[t]
 \centering
-\caption{End-to-End Memory ($L{=}32$, $H{=}32$, $d{=}128$)}
+\small
+\caption{End-to-end memory ($L{=}32$, $H{=}32$, $d{=}128$)}
 \label{tab:memory_e2e}
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccc}
 \toprule
-Context $N$ & FP16 KV & Flat 3-bit & Hierarchical & Compression \\
+$N$ & FP16 & Flat 3-bit & Hier. & Ratio \\
 \midrule
 1K & 512 MB & 64 MB & 35 MB & 14.6$\times$ \\
 4K & 2 GB & 256 MB & 140 MB & 14.6$\times$ \\
@@ -323,7 +336,7 @@ No prior work combines adaptive rotation, fused attention, hierarchical allocati
 
 FajarQuant achieves the lowest key quantization MSE (4--6\% over KIVI and TurboQuant) and the lowest perplexity at 2--3~bit quantization on real KV cache from Google Gemma~4~E2B. The PCA rotation is most beneficial at low bit widths where preserving principal components is critical---exactly the regime relevant for embedded deployment.
 
-Combined with fused codebook attention ($O(N \cdot d) \to O(1)$ extra dequant memory) and hierarchical bit allocation (48.7\% savings at 10K context), FajarQuant enables practical LLM inference on embedded devices. Fajar Lang's \texttt{@kernel}/\texttt{@device} system provides compile-time safety guarantees for allocation-free quantization and pointer-safe attention.
+Combined with fused codebook attention ($O(N \cdot d) \to O(2^b)$ extra dequant memory) and hierarchical bit allocation (48.7\% savings at 10K context), FajarQuant enables practical LLM inference on embedded devices. Fajar Lang's \texttt{@kernel}/\texttt{@device} system provides compile-time safety guarantees for allocation-free quantization and pointer-safe attention.
 
 \subsection*{Future Work}
 \begin{enumerate}[nosep]
@@ -334,6 +347,8 @@ Combined with fused codebook attention ($O(N \cdot d) \to O(1)$ extra dequant me
 \end{enumerate}
 
 % ═══════════════════════════════════════════════════════════
+% Force page break before appendix to prevent overlap
+\clearpage
 \appendix
 
 \section{Reproducibility}
@@ -342,7 +357,7 @@ Combined with fused codebook attention ($O(N \cdot d) \to O(1)$ extra dequant me
 git clone https://github.com/fajarkraton/fajar-lang
 cd fajar-lang && cargo build --release
 
-# Rust tests (22 FajarQuant tests)
+# Rust tests (23 FajarQuant tests)
 cargo test --lib -- runtime::ml::fajarquant
 
 # KV cache extraction (requires GPU + PyTorch)
@@ -385,6 +400,7 @@ with equality iff all eigenvalues are identical (no structure to exploit).
 \end{proof}
 
 % ═══════════════════════════════════════════════════════════
+\balance
 \bibliographystyle{plainnat}
 \bibliography{references}
 
