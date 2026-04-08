@@ -555,7 +555,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
         }
         self.str_counter += 1;
         let name = format!("__fj_str_{}", self.str_counter);
-        let str_val = self.context.const_string(s.as_bytes(), false);
+        // null-terminate: bare-metal str_len scans for \0 boundary
+        let str_val = self.context.const_string(s.as_bytes(), true);
         let global = self.module.add_global(
             str_val.get_type(),
             Some(inkwell::AddressSpace::default()),
@@ -3349,6 +3350,21 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     inkwell::attributes::Attribute::get_named_enum_kind_id("nonnull");
                 let nonnull_attr = self.context.create_enum_attribute(nonnull_kind, 0);
                 function.add_attribute(inkwell::attributes::AttributeLoc::Return, nonnull_attr);
+            }
+        }
+
+        // ── Bare-metal: prevent inlining to preserve I/O call ordering ────
+        // In --no-std mode, LLVM's O2 inliner causes function call reordering:
+        // cprint/console_putchar get inlined, then LLVM reorders the inlined
+        // volatile stores across different original call sites.
+        // Fix: mark all user functions noinline (unless explicitly @inline).
+        if self.no_std {
+            let has_inline = fndef.annotation.as_ref().is_some_and(|a| a.name == "inline");
+            if !has_inline {
+                let noinline_kind =
+                    inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+                let noinline_attr = self.context.create_enum_attribute(noinline_kind, 0);
+                function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
             }
         }
     }
