@@ -1748,7 +1748,7 @@ impl TypeChecker {
         let in_kernel = self.symbols.is_inside_kernel();
         let in_device = self.symbols.is_inside_device();
 
-        // V18 2.12: Track taint — if we're in a plain function and call tensor/OS builtins,
+        // V18 2.12: Track taint — if we're in a plain function and call tensor/OS/heap builtins,
         // mark the function as tainted for transitive enforcement.
         if !in_kernel && !in_device {
             if let Some(ref fn_name) = self.current_fn_name.clone() {
@@ -1761,6 +1761,12 @@ impl TypeChecker {
                     || self.os_tainted_fns.contains(callee_name)
                 {
                     self.os_tainted_fns.insert(fn_name.clone());
+                }
+                // V25: Track heap taint for @kernel transitive enforcement
+                if self.heap_builtins.contains(callee_name)
+                    || self.heap_tainted_fns.contains(callee_name)
+                {
+                    self.heap_tainted_fns.insert(fn_name.clone());
                 }
             }
         }
@@ -1781,6 +1787,10 @@ impl TypeChecker {
             // V18 2.12: Transitive — calling a function that contains tensor ops
             if self.tensor_tainted_fns.contains(callee_name) {
                 self.errors.push(SemanticError::TensorInKernel { span });
+            }
+            // V25: Transitive — calling a function that contains heap ops
+            if self.heap_tainted_fns.contains(callee_name) {
+                self.errors.push(SemanticError::HeapAllocInKernel { span });
             }
         }
 

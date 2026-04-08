@@ -1311,6 +1311,8 @@ pub struct TypeChecker {
     tensor_tainted_fns: std::collections::HashSet<String>,
     /// V18: Functions that transitively use OS builtins (tainted for @device).
     os_tainted_fns: std::collections::HashSet<String>,
+    /// V25: Functions that transitively use heap builtins (tainted for @kernel).
+    heap_tainted_fns: std::collections::HashSet<String>,
     /// Registered trait definitions: trait name → method signatures.
     traits: HashMap<String, Vec<TraitMethodSig>>,
     /// Registered trait implementations: (trait_name, type_name) → implemented.
@@ -1816,6 +1818,7 @@ impl TypeChecker {
             tensor_builtins,
             tensor_tainted_fns: std::collections::HashSet::new(),
             os_tainted_fns: std::collections::HashSet::new(),
+            heap_tainted_fns: std::collections::HashSet::new(),
             traits: HashMap::new(),
             trait_impls: std::collections::HashSet::new(),
             type_aliases: HashMap::new(),
