@@ -3353,20 +3353,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
-        // ── Bare-metal: prevent inlining to preserve I/O call ordering ────
-        // In --no-std mode, LLVM's O2 inliner causes function call reordering:
-        // cprint/console_putchar get inlined, then LLVM reorders the inlined
-        // volatile stores across different original call sites.
-        // Fix: mark all user functions noinline (unless explicitly @inline).
-        if self.no_std {
-            let has_inline = fndef.annotation.as_ref().is_some_and(|a| a.name == "inline");
-            if !has_inline {
-                let noinline_kind =
-                    inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
-                let noinline_attr = self.context.create_enum_attribute(noinline_kind, 0);
-                function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-            }
-        }
+        // Note: bare-metal string interleave fixed by null-terminating string globals.
+        // A blanket noinline was tried but causes 50x NVMe polling slowdown.
+        // If future reordering issues appear, consider selective noinline on I/O functions.
     }
 
     /// Compiles a `static [mut] NAME: TYPE = VALUE` as an LLVM global variable.
