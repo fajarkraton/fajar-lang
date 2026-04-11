@@ -1,12 +1,36 @@
 # V26 "Final" — Path to 100% Production Across All Three Products
 
-> **Version:** 1.0 (2026-04-11)
+> **Version:** 1.1 (2026-04-11) — comprehensively revised after Phase A post-mortem
 > **Author:** Muhamad Fajar Putranto, SE., SH., MH. (TaxPrime / PrimeCore.id)
 > **Predecessor:** V25 v5.0 "Production" (2026-04-07) — partial completion
 > **Audit method:** Hands-on verification (run + read + cross-check), not document trust
 > **Standard:** [x] only when actual execution produces verifiable correct output
 > **Model:** Claude Opus 4.6 exclusively
-> **Status:** PLANNING
+> **Status:** Phase A1+A2+A3 DONE; Phase B+C plans hardened with §10.5 Plan Hygiene Rules
+
+### v1.1 Revision Notes (2026-04-11)
+
+Phase A1+A2+A3 surfaced 6 systemic patterns (inflated baselines, stale
+status, hypothesis-driven planning, missing prevention layers, agent
+errors, ignored prose decisions) that would otherwise repeat in Phase B
+and C. v1.1 adds:
+
+- **Phase B:** new B0 pre-flight audit, B2.5-B2.7 prevention layer
+  (FajarOS pre-commit hook + QEMU boot-stress CI + hot-path sentry
+  matrix), B5.0 mechanical decision gate, +25% surprise budget
+  (84h → 105h), runnable verification commands throughout
+- **Phase C:** new C0 pre-flight audit, C1.0 single-model dry run,
+  C1.5.5 go/no-go gate after first model, C2.0 benchmark methodology
+  lock-in, C3.2 hardcoded 2026-04-25 venue deadline, C4.2.5 reproduce.sh
+  CI smoke test, +30% surprise budget (84h → 110h)
+- **§10.5 Plan Hygiene Rules:** 6 permanent rules (Pre-Flight Audit,
+  Runnable Verification, Prevention Layer, Multi-Agent Cross-Check,
+  Surprise Budget, Mechanical Decision Gates) — each cites the Phase A
+  incident that produced it
+
+**Total effort recalibrated:** ~185h → ~219h across 6 weeks. Phase A
+real cost was ~8h (vs 37.5h estimated) so net schedule slack remains
+positive despite the +34h budget addition.
 
 ---
 
@@ -216,8 +240,30 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 > **Goal:** Fix every TODO blocking production. Ship a kernel that boots, runs LLM, and survives stress.
 > **Duration:** 2 weeks
-> **Effort:** ~80 hours
+> **Effort:** ~104 hours (83 base + 25% surprise budget, see §4.8)
 > **Risk:** Medium (LLVM O2 fragility, kernel debugging)
+> **Verification rule:** Every row in B0-B5 has a **runnable command** in its
+> Verification column. "Test passes" without a command is rejected — see
+> Plan Hygiene Rule 2 (§10.5). Lesson: Phase A2 found "174 unwraps" was a
+> script artifact; only hands-on commands catch that class of error.
+
+### B0: Pre-Flight Audit — NEW (Phase A lesson)
+
+> **Rationale:** Phase A2.1 discovered baseline assumptions can be inflated
+> 58× (claimed 174 unwraps → real 3). Phase A3 discovered `demos/` and
+> `generators_v12` already deleted but still in status doc. Before committing
+> effort to B1-B5, verify every TODO is still real and measure actual
+> scaffold state. **B1-B5 effort estimates are provisional until B0 lands.**
+
+| # | Task | Verification command | Est. |
+|---|------|----------------------|------|
+| B0.1 | Re-scan TODOs: compare live state to §3.7 of `docs/HONEST_AUDIT_V26.md` | `cd ~/Documents/fajaros-x86 && grep -rnE "TODO\|FIXME\|XXX\|HACK" kernel/ shell/ drivers/ fs/ services/ \| grep -v qemu_debug > audit/B0_todo_scan.txt` — diff against audit §3.7, flag silent closures | 30 min |
+| B0.2 | Read actual `fork()` + process exit paths, cite file:line | `audit/B0_kernel_state.md` with verbatim quotes from `kernel/core/syscall.fj` + `kernel/sched/process.fj` | 1 h |
+| B0.3 | Baseline snapshot: `make build-llvm`, record binary size + boot time + LOC | `audit/B0_baseline.json` with `{size_mb, boot_ms, loc}` | 30 min |
+| B0.4 | VFS scaffold reality audit: count real vs stub functions in `fs/ext2_ops.fj`, FAT32 code, ramfs | `audit/B0_vfs_state.md` — table: function → real/stub/partial, cite file:line | 1.5 h |
+| B0.5 | Hot-path sensitivity inventory: list every function that has hit LLVM O2 wild-pointer per git log + current TODOs | `audit/B0_hotpath_matrix.md` — one row per fragile function, with reproducer | 30 min |
+
+**Gate:** `docs/V26_B0_FINDINGS.md` committed, containing revised B1-B5 effort estimates. **B1 cannot start until B0 lands.** If B0 reveals surprises (e.g., `fork()` actually works, ext2 write is complete), re-scope downstream tasks before committing effort.
 
 ### B1: Critical Kernel Bugs
 
@@ -238,8 +284,11 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 | B2.2 | Add LLM E2E inference test: `nova> ask hello` → assert output ≥10 unique tokens | New test in `tests/kernel_tests.fj` | 2 h |
 | B2.3 | Add LLVM O2 sentry test: small program exercising `mdl_ram_lmhead_argmax_v5_4bit` hot path; fail if output corrupts | Sentry test in CI | 3 h |
 | B2.4 | Add memory regression test: boot, run 100 fork/exit cycles, check free frame count returns to baseline ±5 frames | Memory test in `kernel_tests.fj` | 2 h |
+| B2.5 | **FajarOS pre-commit hook** (mirror Fajar Lang `scripts/git-hooks/pre-commit` pattern from commits `6775e44` + `0fdf477`) — reject commits that: break `make build-llvm`, add new `unsafe` block without `// SAFETY:` comment, or add new `TODO` without severity tag (`P0/P1/P2/P3`) | `scripts/install-git-hooks.sh` in fajaros-x86 repo; tested 3 scenarios (build break / unsafe / unmarked TODO) | 2 h |
+| B2.6 | **QEMU boot-stress CI job** (mirror Fajar Lang `flake-stress` pattern from commit `73ed3f0`) — boot FajarOS 10× consecutive in CI, assert each reaches `nova>` prompt within 30s timeout. Catches non-deterministic boot regressions before they ship | `.github/workflows/qemu-boot-stress.yml`; 10 consecutive green boots per push | 3 h |
+| B2.7 | **Hot-path sentry matrix** (expand B2.3 from 1 sentry → N sentries) — one regression test per function in `audit/B0_hotpath_matrix.md` (from B0.5). Each test exercises a specific LLVM O2 fragility pattern (string display, wild pointer, asm constraint reorder) and detects regressions independently | `tests/llvm_o2_sentry.fj` with N tests; each documented with file:line of original incident | 4 h |
 
-**Gate:** CI green for 5 consecutive commits. ≥18/20 kernel tests pass. Sentry test catches simulated O2 regression.
+**Gate:** CI green for 5 consecutive commits. ≥18/20 kernel tests pass. **Boot-stress 10/10 across 5 commits.** Hot-path sentry matrix detects simulated O2 regression in every covered function.
 
 ### B3: VFS Completeness
 
@@ -276,6 +325,20 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 **Recommendation:** **Option B (SmolLM-360M)** — best ROI. Reserve Option C for V27.
 
+### B5.0: Decision Gate (Mechanical) — NEW (Phase A lesson)
+
+> **Rationale:** Phase A showed prose-level "decision required" markers
+> get skipped under execution pressure. The decision must be a committed
+> file that mechanically blocks downstream commits, not a paragraph in
+> the plan. Mirrors how A1.4 added a CI job rather than a comment.
+
+| # | Task | Verification command | Est. |
+|---|------|---------------------|------|
+| B5.0.1 | Create `docs/V26_B5_DECISION.md` with: (1) chosen option A/B/C, (2) ≥3 sentence justification, (3) rollback plan if option fails, (4) timestamp + signature | `git show HEAD:docs/V26_B5_DECISION.md` returns content with all 4 sections | 1 h |
+| B5.0.2 | Add pre-commit hook check: any commit with scope `v26-b5` is rejected if `docs/V26_B5_DECISION.md` does not exist in `HEAD` | Test commit `feat(v26-b5): noop` without decision file → rejected by hook | 30 min |
+
+**Gate:** `test -f docs/V26_B5_DECISION.md && grep -c "^## " docs/V26_B5_DECISION.md` ≥ 4 (4 required sections present). **B5.1-B5.5 cannot start until this gate is green.**
+
 | # | Task (Option B) | Verification | Est. |
 |---|------|-------------|------|
 | B5.1 | Adapt `scripts/export_smollm_v5.py` for SmolLM-360M (d_model=960, n_heads=15, 32 layers) | `.fjm v5` file generated, ~90 MB | 2 h |
@@ -300,14 +363,61 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 **Phase B target: 80% → 95% production.**
 
+### Phase B Effort Revision — Surprise Budget (Phase A lesson)
+
+> **Rationale:** Phase A1.3 found 14 wall-clock tests where the plan
+> hypothesized 1. Phase A2.1 found 3 unwraps where the plan estimated 174.
+> Effort estimates inflate or deflate ~10× without hands-on baseline.
+> Phase B allocates explicit **+25% surprise budget**. This is **not
+> negotiable** — if a subphase finishes early, the surplus rolls into
+> the next surprise pool, never into new scope.
+
+| Subphase | Original | + Surprise (25%) | Reasoning |
+|---|---|---|---|
+| B0 (pre-flight audit) | 4 h | 4 h | Audit IS the de-risking step; no surprise budget needed |
+| B1 (critical bugs) | 10 h | 13 h | Scheduler/IPC state may be more tangled than the TODO suggests |
+| B2 (test infra + prevention) | 11 h + 9 h new = 20 h | 26 h | Hot-path matrix size unknown until B0.5 lands |
+| B3 (VFS) | 19 h | 25 h | Existing scaffold reality unknown until B0.4 (could be near-zero or near-done) |
+| B4 (security) | 18 h | 23 h | SMEP audit may reveal hidden U/S=1 mappings requiring rework |
+| B5 (LLM) | 12 h + 1.5 h gate = 13.5 h | 14 h | Bounded by chosen option; small surprise pool |
+| **Total** | **84 h** | **105 h** | **+25% overall** |
+
+**Variance tracking rule:** Each commit must tag effort variance in its
+message — `feat(v26-b1): fork() PID return [actual 3h, est 2h, +50%]`.
+After Phase B closes, compare actual variance to budget. If average variance
+> +25%, **§10.5 Plan Hygiene Rule 5 triggers** — Phase C surprise budget
+escalates to +40%.
+
 ---
 
 ## 5. Phase C — FajarQuant Multi-Model + Paper (~75% → 100%)
 
 > **Goal:** Paper submission-ready for top-tier venue. Algorithm validated across 4+ models. Performance characterized end-to-end.
 > **Duration:** 3 weeks
-> **Effort:** ~80 hours (mostly GPU time + scripts)
+> **Effort:** ~104 hours (80 base + 30% surprise budget, see §5.6)
 > **Risk:** Medium (model availability, GPU compute time)
+> **Verification rule:** Every row in C0-C4 has a **runnable command** in
+> its Verification column. Lesson: V26 audit agent claimed "0 unwraps" and
+> "no LLM cmd" — both wrong, only commands catch this.
+
+### C0: Pre-Flight Audit — NEW (Phase A lesson)
+
+> **Rationale:** Phase A2.1 showed inflated baseline counts (174 → 3) and
+> Phase A3 showed stale module status (5 [f] → 2 real [f]). Before
+> committing GPU budget to C1's 12 hours of extraction + 6 hours of eval,
+> verify FajarQuant baseline is exactly what `HONEST_AUDIT_V26.md` claims.
+
+| # | Task | Verification command | Est. |
+|---|------|---------------------|------|
+| C0.1 | Re-verify algorithm LOC: confirm `1,743 LOC across 5 files` | `find src/runtime/ml/fajarquant -name "*.rs" \| xargs wc -l \| tail -1` matches audit §4.1 | 15 min |
+| C0.2 | Re-verify test count: 22 unit + 8 e2e + 8 safety = 38 | `cargo test fajarquant --lib 2>&1 \| grep "test result"` + `wc -l tests/fajarquant_*.rs` | 15 min |
+| C0.3 | Re-verify demo count: 5 in `examples/`, hierarchical missing | `ls examples/fajarquant_*.fj \| wc -l` | 5 min |
+| C0.4 | Re-verify paper data integrity: confirm `data/kv_cache/ablation_results.json:80` actually malformed | `jq . data/kv_cache/ablation_results.json 2>&1 \| head` | 10 min |
+| C0.5 | Re-verify 3-way comparison numbers in `paper/fajarquant.tex` against `data/kv_cache/comparison_results.json` (no doc drift between paper and source data) | `python3 scripts/verify_paper_tables.py` (script to be written in C0.5) | 1 h |
+| C0.6 | Snapshot HuggingFace model availability: `Mistral 7B`, `Llama 2 7B`, `Qwen 7B`, `Phi-3 mini` — confirm no license blockers | `audit/C0_model_availability.md` with HF URL + license + size | 1 h |
+| C0.7 | GPU budget snapshot: `nvidia-smi`, available VRAM, current other workloads | `audit/C0_gpu_state.json` | 15 min |
+
+**Gate:** `docs/V26_C0_FINDINGS.md` committed with revised C1-C4 estimates. **C1 cannot start until C0 lands.** If model availability blocks any of the 3 (e.g., Llama 2 license issue), substitute via Mistral variant + document.
 
 ### C1: Multi-Model Validation (P0 Blocker)
 
@@ -315,19 +425,41 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C1.1 | Adapt `scripts/extract_kv_cache.py` for HuggingFace models with `transformers` | Script accepts `--model <name>` arg | 2 h |
-| C1.2 | Extract KV cache: **Mistral 7B** (50 prompts, 32 layers × 8 KV heads × 128 dim) | `data/kv_cache/mistral_7b/` populated | 4 h GPU |
-| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) | `data/kv_cache/llama2_7b/` populated | 4 h GPU |
-| C1.4 | Extract KV cache: **Qwen 7B** or **Phi-3 mini** (modern arch, sliding window) | `data/kv_cache/qwen_7b/` populated | 4 h GPU |
-| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `comparison_results_<model>.json` for each | 8 h |
-| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers | 6 h GPU |
-| C1.7 | Update paper Table 1-5 with multi-model results | Tables show consistent 2-3 bit win | 4 h |
+| C1.0 | **Single-model dry run (NEW Phase A lesson):** extract Mistral 7B with **5 prompts only** (not 50), run 3-way comparison, sanity check ppl in expected range. Validates pipeline before committing 12 GPU hours. If broken: fix once, not 3× | `data/kv_cache/mistral_7b_dryrun/` exists; `comparison_results_mistral_dryrun.json` shows ppl ≥10 ≤500 (sanity floor/ceiling) | 1 h GPU |
+| C1.1 | Adapt `scripts/extract_kv_cache.py` for HuggingFace models with `transformers` | Script accepts `--model <name>` arg + `--num-prompts <n>` arg (so C1.0 dry run reuses same code) | 2 h |
+| C1.2 | Extract KV cache: **Mistral 7B** (50 prompts, 32 layers × 8 KV heads × 128 dim) | `data/kv_cache/mistral_7b/metadata.json` shows 50 prompts, 32 layers | 4 h GPU |
+| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) | `data/kv_cache/llama2_7b/metadata.json` shows 50 prompts, 32 layers | 4 h GPU |
+| C1.4 | Extract KV cache: **Qwen 7B** or **Phi-3 mini** (modern arch, sliding window) | `data/kv_cache/qwen_7b/metadata.json` shows 50 prompts | 4 h GPU |
+| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
+| **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `docs/V26_C1_GONOGO.md` exists with chosen path; `git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
+| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers in `eval_ppl_<model>.json` | 6 h GPU |
+| C1.7 | Update paper Table 1-5 with multi-model results | `git diff paper/fajarquant.tex` shows table updates; `pdflatex` produces clean PDF | 4 h |
 
-**Gate:** FajarQuant wins ≥2/3 of models at 2-bit and 3-bit, OR paper transparently documents where it loses and why.
+**Gate:** FajarQuant wins ≥2/3 of models at 2-bit and 3-bit, **OR** `docs/V26_C1_GONOGO.md` documents the alternative path with reasoning.
 
 ### C2: Performance Characterization (P0 Blocker)
 
 > **Goal:** Wall-clock numbers, not just MSE/PPL.
+> **CAUTION:** Phase A §6.7 forbids wall-clock assertions in unit tests
+> due to scheduler jitter. C2 benchmarks must use **criterion** with
+> statistical rigor — never `Instant::now() / Duration::from_millis()`
+> assertions. Otherwise paper numbers will be unreproducible by reviewers.
+
+### C2.0: Benchmark Methodology Lock-In — NEW (Phase A lesson)
+
+> **Rationale:** Phase A1.3 found 14 wall-clock tests flaking under parallel
+> load. The same statistical noise will corrupt paper benchmarks unless we
+> lock methodology BEFORE collecting numbers. Doing this after C2.1-C2.5
+> means re-running everything.
+
+| # | Task | Verification command | Est. |
+|---|------|---------------------|------|
+| C2.0.1 | Document methodology in `bench/METHODOLOGY.md`: criterion 100 samples, 10 warmup runs, report **median + 95% CI** (not mean), pin CPU governor to `performance`, disable turbo boost, single-threaded eval | File exists with all 6 parameters | 1 h |
+| C2.0.2 | Hardware provenance snapshot: `lscpu`, `nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv`, `uname -a`, kernel version, RAM size | `bench/hardware_snapshot.txt` committed | 15 min |
+| C2.0.3 | Baseline noise floor: run criterion on a no-op fn 5×, record CI width — establishes "smaller than this is statistical noise" threshold | `bench/results/noise_floor.json` with CI width | 30 min |
+| C2.0.4 | CPU pinning + frequency lock script: `bench/setup_perf.sh` sets governor, disables HT siblings on test core, locks frequency | Script runs without error; `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` returns `performance` | 1 h |
+
+**Gate:** All 4 methodology artifacts committed before C2.1 starts. **Any benchmark run without C2.0 setup is invalid and must be re-run.**
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
@@ -344,7 +476,7 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
 | C3.1 | Honest split: clearly distinguish "Rust runtime FajarQuant (Gemma 4 E2B benchmark)" vs "FajarOS kernel FajarQuant (SmolLM-135M demonstration)" | Section 5.2 rewritten | 2 h |
-| C3.2 | Choose target venue: **MLSys 2027** (best fit), or NeurIPS 2026 ML Systems workshop | Decision documented in `paper/SUBMISSION.md` | 1 h |
+| C3.2 | **Choose target venue (HARD DEADLINE: 2026-04-25):** MLSys 2027 (best fit), NeurIPS 2026 ML Systems workshop, or arXiv-only. Decision required by 2026-04-25 — Phase A lesson: prose-level "decision required" gets skipped without dates | `paper/SUBMISSION.md` exists with venue + cutoff timestamp; if 2026-04-25 passes without commit, `v26-c3` branch auto-blocks via pre-commit hook | 1 h |
 | C3.3 | Format for chosen venue (column width, font, citation style) | LaTeX template applied | 2 h |
 | C3.4 | Write supplementary materials: full reproduction commands, dataset checksums, model weights provenance | `paper/supplementary.tex` | 4 h |
 | C3.5 | Add broader impact statement (quantization affects model interpretability) | New section in paper | 1 h |
@@ -359,6 +491,7 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 |---|------|-------------|------|
 | C4.1 | Add download fallback: if Gemma 4 E2B unavailable, use SmolLM-135M as smoke test | Script runs without GPU access | 2 h |
 | C4.2 | Create `reproduce.sh` one-script entry point: extract → compare → eval → ablation → tables | Single command produces all paper results | 3 h |
+| C4.2.5 | **CI smoke test for `reproduce.sh` (NEW Phase A lesson):** GitHub Actions job that runs `bash paper/reproduce.sh --smoke` (5 prompts, 1 model, ~10 min) on every PR. Catches reproducibility breakage 2 weeks before submission deadline, not 2 days after. Mirrors `flake-stress` pattern from A1.4 | `.github/workflows/paper-reproduce-smoke.yml`; CI green on PR; smoke run produces ablation table delta < 5% from cached baseline | 2 h |
 | C4.3 | Add 6th demo: `examples/fajarquant_hierarchical_demo.fj` (V25 promised, never delivered) | Demo runs, exits 0 | 1 h |
 | C4.4 | Per-function rustdoc for all `pub fn` in `src/runtime/ml/fajarquant/*.rs` | `cargo doc` shows complete API docs | 4 h |
 | C4.5 | Fix `data/kv_cache/ablation_results.json:80` malformed JSON | `jq . ablation_results.json` succeeds | 30 min |
@@ -380,6 +513,25 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 **Phase C target: 75% → 100% production + paper submission-ready.**
 
+### Phase C Effort Revision — Surprise Budget (Phase A lesson)
+
+> **Rationale:** Phase C has higher uncertainty than Phase B because GPU
+> compute time, model availability, and statistical methodology setup
+> are all unknowns. Allocate **+30% surprise budget** (vs Phase B's +25%).
+
+| Subphase | Original | + Surprise (30%) | Reasoning |
+|---|---|---|---|
+| C0 (pre-flight audit) | 3 h | 3 h | Audit IS the de-risking step |
+| C1 (multi-model) | 32 h + 1 h dry run + 1 h gate = 34 h | 44 h | Model availability + license + GPU queue jitter |
+| C2 (perf characterization) | 19 h + 3 h methodology = 22 h | 28 h | Statistical noise floor unknown until C2.0.3 |
+| C3 (paper polish) | 15 h | 19 h | Reviewer-anticipation rewrites are unbounded |
+| C4 (reproducibility) | 11 h + 2 h CI = 13 h | 16 h | Reproduce.sh portability across machines |
+| **Total** | **84 h** | **110 h** | **+31% overall** |
+
+**If Phase B variance was > +25%** (per Phase B variance tracking rule),
+Phase C surprise budget escalates further: +40% across all subphases.
+**Variance tracking rule:** Same commit-message tagging as Phase B.
+
 ---
 
 ## 6. Phase D — Stretch Goal: Kernel LLM Phase 3+ (Optional)
@@ -400,40 +552,47 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 ---
 
-## 7. Timeline (Revised)
+## 7. Timeline (Revised v1.1)
 
 ```
-WEEK 1  ──  Phase A (Fajar Lang Polish)
-            └─ 25 hours: fmt, unwrap audit, module wiring, doc truth
-            └─ Fajar Lang: 95% → 100% ✅
+WEEK 1  ──  Phase A (Fajar Lang Polish) ✅ MOSTLY DONE
+            └─ A1+A2+A3: ~8 h actual (vs 37.5 h estimated)
+            └─ A2.5 + A4 remaining (~3 h)
+            └─ Fajar Lang: 95% → ~99% (target 100% on A4 close)
 
-WEEK 2  ──  Phase B Part 1 (FajarOS Critical Bugs + CI)
-            └─ B1: fork(), process exit (10 h)
-            └─ B2: CI + sentry tests (12 h)
+WEEK 2  ──  Phase B Part 1 (Pre-Flight + Critical Bugs + Test Infra)
+            └─ B0: pre-flight audit (4 h) — MUST land before B1
+            └─ B1: fork(), process exit, waitpid (13 h)
+            └─ B2: CI + sentry + prevention layer (26 h)
 
 WEEK 3  ──  Phase B Part 2 (VFS + Security + LLM Decision)
-            └─ B3: VFS write (19 h)
-            └─ B4: SMEP/SMAP/CPUID (18 h)
-            └─ B5: Decision + execution (12 h SmolLM-360M)
+            └─ B3: VFS write (25 h)
+            └─ B4: SMEP/SMAP/CPUID (23 h)
+            └─ B5.0: decision gate (1.5 h) → B5: execution (14 h)
             └─ FajarOS: 80% → 95% ✅
 
-WEEK 4  ──  Phase C Part 1 (Multi-Model Validation)
-            └─ C1: Mistral + Llama + Qwen extraction + comparison (32 h)
+WEEK 4  ──  Phase C Part 1 (Pre-Flight + Multi-Model Validation)
+            └─ C0: pre-flight audit (3 h) — MUST land before C1
+            └─ C1: dry run + Mistral + go/no-go + Llama + Qwen + eval (44 h)
 
-WEEK 5  ──  Phase C Part 2 (Perf + Paper Polish)
-            └─ C2: latency/throughput/memory benchmarks (19 h)
-            └─ C3: paper polish (15 h)
-            └─ C4: reproducibility (11 h)
+WEEK 5  ──  Phase C Part 2 (Perf + Paper Polish + Reproducibility)
+            └─ C2: methodology lock-in + benchmarks (28 h)
+            └─ C3: paper polish (19 h, deadline 2026-04-25 for venue)
+            └─ C4: reproducibility + CI smoke (16 h)
             └─ FajarQuant: 75% → 100% ✅
 
-WEEK 6  ──  V26 "Final" Release
+WEEK 6  ──  V26 "Final" Release + Variance Review
             └─ Paper submission to MLSys 2027 (or workshop)
             └─ FajarOS v1.0 release notes
             └─ Fajar Lang v1.0 stable
+            └─ Phase B + C variance review (per §10.5 Rule 5)
             └─ All three products: ≥95% production
 ```
 
-**Total effort:** ~185 hours over 6 weeks (assumes 1 dev, 30 h/week).
+**Total effort (v1.1):** ~219 hours over 6 weeks (84h base + ~47h
+surprise budgets across B+C + Phase A remaining + release week).
+Assumes 1 dev, ~36 h/week. Phase A's ~30 hours under-estimate becomes
+positive slack absorbed by the new B+C surprise budgets.
 
 ---
 
@@ -503,6 +662,135 @@ V26 audit confirmed corrections:
 - All V17 critical bugs: HashMap, JIT strings, AOT linking, native crash, tensor + — ALL FIXED
 - LLVM backend: production-grade with 30+ enhancements + 4 recent string display fixes
 ```
+
+---
+
+## 10.5. Plan Hygiene Rules (Phase A Post-Mortem)
+
+> **Why this section exists:** Phase A1+A2+A3 surfaced 6 systemic patterns
+> that, if left unaddressed, would repeat in Phase B and C. These rules
+> are derived from actual Phase A incidents — each one cites the lesson
+> that produced it. They are **non-negotiable for all future V26 work**.
+
+### Rule 1 — Pre-Flight Audit Mandatory
+
+**Statement:** Every Phase must start with a `B0` / `C0` / `D0` subphase
+that hands-on verifies the baseline state via runnable commands. The
+audit produces a `docs/V26_<phase>_FINDINGS.md` file. Downstream
+subphases cannot start until findings are committed.
+
+**Why (Phase A evidence):**
+- A2.1 found "174 production unwraps" was actually **3** (58× inflation)
+- A3 found `demos/` and `generators_v12` modules **already deleted**
+  but still in V20.5 status doc (4 months stale)
+- Cumulative effort estimate variance from these two surprises alone:
+  ~30 hours assumed → ~5 hours actual
+
+**How to apply:** Phase B has B0 (4h), Phase C has C0 (3h). Phase D
+inherits the rule when scheduled. Pre-flight audits are themselves
+not subject to surprise budgets — they ARE the de-risking step.
+
+### Rule 2 — Verification Columns Must Be Runnable Commands
+
+**Statement:** Every task in every plan table has a "Verification" column.
+That column must contain a **literal command** whose output can be checked,
+not a prose description like "test passes" or "feature works".
+
+**Why (Phase A evidence):**
+- CLAUDE.md claimed "11,395 tests" — actual `cargo test --lib` shows 7,581
+- CLAUDE.md claimed "285 examples" — actual `ls examples/*.fj | wc -l` shows 231
+- CLAUDE.md claimed "0 production unwraps" — pre-A2 reality was 3
+- Without runnable verification, doc drift accumulates silently
+
+**How to apply:** Anti-pattern: `Verification: "fork() works"`. Pattern:
+`Verification: "echo fork-test | qemu-monitor && grep 'child pid=' qemu.log"`.
+B0-B5 and C0-C4 tables in this plan now follow Pattern.
+
+### Rule 3 — Prevention Layer Per Phase
+
+**Statement:** Every fix that closes a class of bugs must spawn at least
+one **prevention mechanism**: a pre-commit hook, a CI job, or a CLAUDE.md
+rule. One-time fixes are forbidden — the prevention layer is the deliverable,
+not the patch.
+
+**Why (Phase A evidence):**
+- A1.1: `cargo fmt` patch alone didn't prevent regression — A1.2 added
+  pre-commit hook (commits `6775e44`+`0fdf477`)
+- A1.3: 14-test flake fix alone didn't prevent regression — A1.4 added
+  CI flake-stress job + CLAUDE.md §6.7 rule (commit `73ed3f0`)
+- A2.3: 3-unwrap fix alone won't prevent regression — A2.5 (pending)
+  adds `clippy::unwrap_used` lint at crate root
+
+**How to apply:** Phase B added B2.5 (FajarOS pre-commit hook), B2.6
+(QEMU boot-stress CI), B2.7 (hot-path sentry matrix). Phase C added
+C4.2.5 (reproduce.sh CI). Every future fix asks: "what prevents this
+class of bug coming back?"
+
+### Rule 4 — Multi-Agent Audit Cross-Check Mandatory
+
+**Statement:** Numbers produced by parallel sub-agents must be manually
+re-verified with a bash command before being committed to plans, status
+docs, or memory. Single-source agent claims are inadmissible.
+
+**Why (Phase A evidence):**
+- V26 audit agent claimed "4,062 production unwraps" — real is 3 (1,353× wrong)
+- V26 audit agent claimed "FajarOS has NO LLM shell commands" — 14 exist
+  but use byte-level dispatch the agent's grep didn't catch
+- Both errors would have shaped weeks of misdirected work if uncorrected
+
+**How to apply:** When the next audit (V27?) spawns parallel agents, the
+main thread must `Bash` the same command and compare. C0.5 in this plan
+explicitly cross-checks paper tables against source data.
+
+### Rule 5 — Surprise Budget +25% Minimum, Tracked Per Commit
+
+**Statement:** Every Phase allocates an explicit surprise budget on top
+of base estimates. Default is +25% (Phase B); higher-uncertainty phases
+use +30% (Phase C). Each commit tags actual variance in its message.
+At Phase close, average variance is computed; if > budget, the next
+Phase escalates to +40%.
+
+**Why (Phase A evidence):**
+- A1.3: hypothesized 1 flaky test, found 14 (1,400% scope expansion)
+- A2.1: hypothesized 174 unwraps, found 3 (98% scope contraction)
+- Either direction breaks naive estimates — explicit budget normalizes
+
+**How to apply:** Phase B: 84h → 105h (+25%). Phase C: 84h → 110h (+31%).
+Commit format: `feat(v26-b1): fork() PID return [actual 3h, est 2h, +50%]`.
+Surplus rolls into next surprise pool, never into new scope.
+
+### Rule 6 — Decision Gates Must Be Mechanical, Not Prose
+
+**Statement:** Plan paragraphs that say "decision required before X"
+are systematically ignored. Every decision must produce a **committed
+file** that pre-commit hooks can check, blocking downstream work
+until the file exists.
+
+**Why (Phase A evidence):**
+- Pre-V26 plans had multiple "decision pending" prose markers that were
+  silently skipped during execution pressure
+- A1.4's solution to wall-clock flakes was a CI job, not a comment —
+  mechanical enforcement worked where prose hadn't
+
+**How to apply:** Phase B5.0 requires `docs/V26_B5_DECISION.md`.
+Phase C1.5.5 requires `docs/V26_C1_GONOGO.md`. Phase C3.2 hardcodes
+`2026-04-25` as a hook-enforced date. All three are mechanical, not
+prose-level guidance.
+
+### Plan Hygiene Self-Check
+
+Before opening any V26 phase commit, the author must answer YES to:
+
+```
+[ ] Does my Phase have a B0/C0/D0 pre-flight audit? (Rule 1)
+[ ] Does every task in my Phase have a runnable verification command? (Rule 2)
+[ ] Does my Phase add at least one prevention mechanism (hook/CI/rule)? (Rule 3)
+[ ] If I cite agent-produced numbers, did I cross-check them? (Rule 4)
+[ ] Did I tag effort variance in my commit message? (Rule 5)
+[ ] If my Phase has decisions, are they mechanical files not prose? (Rule 6)
+```
+
+Six NO answers = revert. Six YES answers = ship.
 
 ---
 

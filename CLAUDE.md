@@ -27,76 +27,40 @@
 
 ## 2. Mandatory Session Protocol
 
-Every Claude Code session MUST follow this order:
+Every session: **READ** `CLAUDE.md` + `docs/HONEST_STATUS_V26.md` → **ORIENT**
+on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIFY**
+`cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
+**UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-1. **READ** → `CLAUDE.md` (this file) [auto-loaded]
-2. **READ** → `docs/HONEST_AUDIT_V17.md` [CRITICAL: V17 re-audit — true module/CLI status]
-3. **READ** → `docs/GAP_ANALYSIS_V2.md` [module-level gap analysis, corrected by V17]
-4. **READ** → `docs/V1_RULES.md` [coding conventions — still applies]
-5. **ORIENT** → "What does the user want?" Check V17 audit for what's real vs framework.
-6. **ACT** → Execute per TDD workflow
-7. **VERIFY** → `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check`
-8. **UPDATE** → Mark task `[x]` ONLY if feature works end-to-end. Use `[f]` for framework-only.
+### Completion Status (V26, 2026-04-11)
 
-### Completion Status (Honest Assessment — V26, 2026-04-11)
+**54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs.
+Every public mod has a callable surface from `.fj` or `fj` CLI. 23 CLI subcommands,
+all production.
 
-> **Source of truth:** `docs/HONEST_STATUS_V26.md` — current per-module status
-> after V26 Phase A1+A2+A3 closed all framework and stub modules.
-> Reference: `docs/HONEST_AUDIT_V26.md` for the audit trail of corrections.
->
-> Historical V13-V15 claims of "100% production" were inflated 40-55% per
-> the V17 re-audit. V20.5 corrected to 49 [x], 5 [f], 2 [s]. V26 closed
-> the remaining 5 [f] + 2 [s].
+> **Source of truth:** `docs/HONEST_STATUS_V26.md` — current per-module status.
+> Audit trail: `docs/HONEST_AUDIT_V26.md`. Older snapshots: `HONEST_STATUS_V20_5.md`,
+> `HONEST_AUDIT_V17.md`. Historical V13-V15 "100% production" claims were inflated
+> 40-55% per V17 re-audit; V26 closed the remaining gap.
 
-**Codebase Reality (V26, 54 logical modules — was 56 in V20.5):**
-- **54 modules PRODUCTION [x]** — every public mod has a callable surface from `.fj` or `fj` CLI
-- **0 modules PARTIAL [p]** — analyzer @kernel/@device transitive heap taint FIXED in V26 (commit `849943d`)
-- **0 modules FRAMEWORK [f]** — V26 Phase A3 closed all 5
-- **0 modules STUB [s]** — V24 promoted `wasi_v12`, V20.8 deleted `generators_v12`
-- **23 CLI subcommands** in `src/main.rs`, all production (V25 v5.0 verified)
-- **Module deletions since V20.5:** `demos/` and `generators_v12` (both gone)
+**Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
+lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
+RAII, async, test framework, iterators, f-strings.
 
-**Core Compiler (V1-V05): PRODUCTION — verified by code audit.**
-- v1.0: 506 tasks — lexer, parser, analyzer, Cranelift, ML runtime ✅
-- v0.2: Codegen type system, advanced types ✅
-- v0.3: 739 tasks — concurrency, OS runtime, GPU, ML native, self-hosting, packages ✅
-- v0.4: 40 tasks — generic enums, RAII/Drop, async, MNIST ✅
-- v0.5: 80 tasks — test framework, doc gen, trait objects, iterators, f-strings ✅
+**V06-V26 history:** see §3 Version History table or `CHANGELOG.md` (root) for
+detailed entries.
 
-**Advanced Features (V06-V12): Mixed production + framework.**
-- V06-V07: Core gaps closed, but ~530 tasks were framework-only (types/traits, not E2E)
-- V08-V10: Real networking (BLE, MQTT, WebSocket), async tokio, HTTP, regex, LSP ✅
-- V11: Website, tutorials, VS Code, benchmarks, self-hosting, borrow checker ✅
-- V12: LLVM, package registry, macros, generators, WASI, LSP — 6 options ✅
-
-**V13 "Beyond" (710 tasks): ~390 real [x] (55%), rest framework.**
-- Const fn, incremental compilation, WASI P2, FFI v2, SMT verification, distributed, self-hosting
-
-**V14 "Infinity" (500 tasks): ~302 real [x] (60%), not 500/500 as previously claimed.**
-- Effects, dependent types, GPU codegen, LSP, package registry, FajarOS Nova
-
-**V15 "Delivery" (120 tasks): ~55 real [x] (46%), not 120/120 as previously claimed.**
-- Bug fixes, MNIST pipeline, FFI interop, benchmarks, docs
-
-**V17 Bug Fixes (9 critical): ALL FIXED.** See `docs/HONEST_AUDIT_V17.md` §4.
+**V17 critical bugs (9):** ALL FIXED. See `docs/HONEST_AUDIT_V17.md` §4 for the list.
 
 ### Key Documents
 
-| Document | When to Read | Purpose |
-|----------|-------------|---------|
-| `docs/HONEST_STATUS_V26.md` | **EVERY SESSION** | V26 status — 54 [x], 0 [sim], 0 [f], 0 [s] (zero framework, zero stubs) |
-| `docs/HONEST_STATUS_V20_5.md` | Reference (snapshot) | V20.5 per-builtin status — superseded by V26 |
-| `docs/HONEST_AUDIT_V17.md` | Reference | V17 re-audit — 33/56 modules production, 9 bugs fixed |
-| `docs/HONEST_AUDIT_V26.md` | Reference | V26 hands-on audit + corrections to prior counts |
-| `docs/GAP_ANALYSIS_V2.md` | Reference | Module-level gap analysis, corrected by V17 |
-| `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules |
-| `docs/V12_TRANSCENDENCE_PLAN.md` | Reference | V12 plan (6 options) |
-| `docs/V12_GAP_CLOSURE_PLAN.md` | Reference | 40 tasks that wired V12 into pipeline |
-| `docs/V05_PLAN.md` | Reference | v0.5 plan (COMPLETE, verified real) |
-| `docs/V04_PLAN.md` | Reference | v0.4 plan (COMPLETE, verified real) |
-| `docs/V03_TASKS.md` | Reference | v0.3 tasks (739, COMPLETE, verified real) |
-| `docs/V1_TASKS.md` | Reference | v1.0 tasks (506, COMPLETE, verified real) |
-| `docs/V1_IMPLEMENTATION_PLAN.md` | Reference | Original 6-month plan (completed) |
+- **`docs/HONEST_STATUS_V26.md`** — read every session, source of truth for module status
+- **`docs/V26_PRODUCTION_PLAN.md`** — current 6-week plan (v1.1 with §10.5 Plan Hygiene)
+- **`docs/HONEST_AUDIT_V26.md`** — V26 hands-on verification, corrections to prior counts
+- `docs/HONEST_AUDIT_V17.md` — historical baseline re-audit
+- `docs/V1_RULES.md` — coding conventions (mostly subsumed by §6 below)
+- `docs/V0{1..5}_*.md`, `docs/V1_TASKS.md` — completed task plans (reference only)
+- See §18 for full document index.
 
 ---
 
@@ -143,221 +107,62 @@ trusts inflated counts. Audit corrections in V26:
   - prior "8 const_* modules" was inflated; real is 3
 ```
 
-### V24 "Quantum" (2026-04-07) — CUDA RTX 4090 + FajarQuant + AVX2/AES-NI
-- **CUDA GPU compute (Phase 7 complete):**
-  - Real cuModuleLoadData → cuModuleGetFunction → cuLaunchKernel pipeline
-  - 9 PTX kernels: matmul (tiled 16x16 shared mem), vector_add/sub/mul/div, relu, sigmoid, softmax, codebook_dot
-  - Device cache (OnceLock), kernel cache, async CUDA stream pipeline
-  - gpu_matmul/add/relu/sigmoid builtins → CUDA first, CPU fallback
-  - ~3x speedup at 1024x1024 matmul on RTX 4090 (measured, hardware-dependent)
-- **FajarQuant (all 7 phases):**
-  - Phase 1: TurboQuant baseline (Lloyd-Max, quant_mse/prod) — 535 LOC
-  - Phase 2: Adaptive PCA rotation — **55-88% MSE improvement** on structured data (peak 88% at d=128,b=3)
-  - Phase 3: Fused quantized attention — zero dequant buffer allocation, **6.4x KV compression**
-  - Phase 4: Hierarchical multi-resolution — **up to 65.3% bit savings** at N=4096 (12% at N=256)
-  - Phase 5: Compiler safety tests (8 @kernel/@device tests)
-  - Phase 6-7: Paper benchmarks + real numbers in fajarquant.tex
-  - GPU codebook dot product: quantized attention on RTX 4090 via PTX
-- **AVX2 SIMD + AES-NI (Phase 3.6+3.7) — LLVM backend only:**
-  - 6 LLVM-only builtins: avx2_dot_f32, avx2_add_f32, avx2_mul_f32, avx2_relu_f32, aesni_encrypt_block, aesni_decrypt_block
-  - Interpreter returns clear error directing user to `--backend llvm`
-  - Memory-based XMM/YMM operands via inline asm (no vector type changes needed)
-- **Tests:** 11,395 total, 0 failures | 15 CUDA E2E | 8 FajarQuant safety
+### Version History (V18 → V26)
 
-### V23 "Boot" (2026-04-06) — FajarOS Boots to Shell + 16 Bug Fixes
-- **FajarOS boots to shell:** 61 init stages, `nova>` prompt, 90/90 commands pass
-- **LLVM codegen fixes:**
-  - Asm constraint ordering: outputs before inputs (`"=r,r"` not `"r,=r"`) — fixes BSF/POPCNT
-  - InOut asm: tied output + input constraints for in-place register operations
-  - Entry block alloca helper: stable stack allocations for arrays
-  - CR4.OSXSAVE in sse_enable: required for ALL VEX-encoded instructions (BMI2)
-- **Runtime fixes:**
-  - Exception handler `__isr_common`: correct vector offset (+32), proper digit print
-  - Page fault `__isr_14`: CS offset +24 (was +16, reading RIP instead of CS)
-  - PIC IRQ handlers (vectors 34-47): send EOI and return (prevents unhandled IRQ crash)
-  - LAPIC spurious handler (vector 255): silent iretq
-- **FajarOS fixes:**
-  - Frame allocator: hardware BSF/POPCNT via inline asm (was software fallback)
-  - VGA cursor state moved (0x6FA00→0x6FB10): was inside history buffer overlap
-  - ACPI table page mapping: nproc/acpi/lspci now work
-  - NVMe interrupt masking (INTMS=0x7FFFFFFF): controller + disk I/O working
-  - GUI framebuffer: map Multiboot2 FB pages, dynamic front buffer address
-  - cprint_decimal: divisor-based (avoids stack array codegen issue)
-- **Tests:** 7,572 compiler lib tests pass | 90 FajarOS shell commands pass
-- **FajarOS:** boots to shell, NVMe 64MB, 4 PCI devices, 1 ACPI CPU, GUI FB mapped
+> **Detailed entries:** `CHANGELOG.md` (root) — has V20.8 → V26 with full
+> Added/Changed/Fixed/Removed/Stats sections. V18-V20 history lives in
+> git log (`git log --oneline --grep="V1[89]\|V20"`).
 
-### V22 "Hardened" (2026-04-06) — 30 LLVM Enhancements + Zero Test Failures
-- **LLVM backend:** 30 enhancements across 5 batches (E1-I6)
-  - E1-E5: Hardening — universal builtin override, asm constraint parser, silent error audit, type coercion, pre-link verification
-  - F1-F7: Correctness — match guards all patterns, enum payload extraction, method dispatch, string/float/bool patterns
-  - G1-G6: Features — float pow/rem, deref/ref operators, nested field access, bool/ptr casts, closure captures, indirect calls
-  - H1-H6: Completeness — Stmt::Item, yield, tuple.0 access, range/struct/tuple/array/binding patterns in match
-  - I1-I6: Final gaps — chained field assign, int power, float range patterns, better diagnostics
-- **Bug fixes:** 4 codegen bugs found by testing (bool cast, implicit return coercion, closure builder, var-as-fn-ptr)
-- **DCE fix:** kernel_main + @kernel annotated functions preserved (was eliminated as dead code)
-- **Actor API:** actor_spawn returns Map, actor_send returns handler result (synchronous dispatch)
-- **Tests:** 11,373 total, 0 failures | 38 LLVM E2E tests (was 15)
-- **FajarOS:** 1.02MB ELF, boots to shell (61 stages), 90/90 commands, NVMe + GUI + ACPI working
-
-### V21 "Production" (2026-04-04) — Real Actors + LLVM Hardening
-- **Real threaded actors:** actor_spawn/send/supervise use std::thread + mpsc channels
-- **New builtins:** actor_stop, actor_status
-- **5 [sim]→[x]:** actors, accelerate, pipeline, diffusion, rl_agent
-- **Zero [sim] remaining** — const_alloc upgraded (creates correct descriptors; .rodata via @section)
-
-### V20.8 "Cleanup" (2026-04-04) — Refactor + Dead Code + Bug Fixes
-- **Rc→Arc migration:** All Rc<RefCell> → Arc<Mutex> in interpreter (env + iterators)
-  - Iterative parent chain traversal, RUST_MIN_STACK=16MB for tests
-- **Dead code cleanup:** Removed 6 dead modules (-21.4K LOC)
-  - iot, rt_pipeline, package_v2, lsp_v2, stdlib, rtos
-- **Bug fixes:** 4 pre-existing integ failures, JIT match→string length, AOT TEXTREL
-- **Quality:** Zero .unwrap() in production code, PIC-enabled AOT (ASLR-compatible)
-
-### V20.5 "Hardening" (2026-04-04) — Stability + Honesty
-- Plan: `docs/FULL_REMEDIATION_PLAN.md` + `docs/V20_5_HARDENING_PLAN.md`
-- Status: `docs/HONEST_STATUS_V20_5.md` — per-builtin [x]/[sim]/[f]/[s] table
-- **Session 1:** 4 crash fixes (16MB thread), pipeline error propagation, [sim] labels
-- **Session 2:** 31 new tests (v20_builtin_tests.rs), 2 unwrap fixes in builtins.rs
-- **Session 3:** RuntimeError source spans (Binary/Call/Index), documentation honesty
-- **Module correction:** 48→42 [x], 0→6 [sim] (accelerator, actors, pipeline, diffusion, RL, debugger_v2)
-- **Env Weak parent:** DEFERRED — real cycle is through closure_env, not parent chain
-
-### V20 "Completeness" (2026-04-03) — ALL 7 PHASES COMPLETE (25/25 tasks)
-- Plan: `docs/V19_V21_COMPLETE_56_PLAN.md`
-- **Phase 1:** Debugger v2 record/replay — `fj debug --record/--replay`, JSON trace format
-- **Phase 2:** Package v2 build scripts — `[build]` section in fj.toml, pre/post hooks
-- **Phase 3:** ML Advanced — diffusion_create/denoise, rl_agent_create/step
-- **Phase 4:** RT Pipeline — pipeline_create/add_stage/run, sensor→ML→actuator
-- **Phase 5:** Accelerator dispatch — accelerate(fn, input), workload classification
-- **Phase 6:** Concurrency v2 — actor_spawn/send/supervise, supervision strategies
-- **Phase 7:** Const modules — const_alloc, const_size_of, const_align_of
-- New examples: diffusion_demo.fj, rl_demo.fj, rt_pipeline_demo.fj,
-  accelerator_demo.fj, actor_demo.fj
-
-### V19 "Precision" (2026-04-03) — ALL 6 PHASES COMPLETE (42/42 tasks)
-- Plan: `docs/V19_PLAN.md` + `docs/V19_V21_COMPLETE_56_PLAN.md`
-- **Phase 1-4:** user macro_rules! with $x metavariable substitution (nested, multi-arg),
-  macro_rules! inside blocks, real async_sleep (tokio), async_spawn/join with user functions,
-  async_timeout, pattern match destructuring verified E2E (Ok/Err/Some/None)
-- **Phase 5:** 4 new .fj demos (database, web, embedded-ml, cli), `fj demo --list` (13 demos),
-  LSP v3 QuickFixKind wired into code_action, suggest_cast for SE004,
-  const_type_name + const_field_names builtins, map_get_or builtin
-- **Phase 6:** fj test verified, fj watch verified, f-strings in all positions
-- Integration tests: 148 context_safety + 15 V19 E2E tests
-- Examples: `examples/macros.fj`, `examples/pattern_match.fj`, `examples/async_demo.fj`,
-  `examples/database_demo.fj`, `examples/web_demo.fj`, `examples/embedded_ml_demo.fj`,
-  `examples/cli_tool_demo.fj`
-
-### V18 "Integrity" (2026-04-03) — 35/37 tasks, 18 new real features
-- Plan: `docs/V18_HONEST_COMPLETION_PLAN.md`
-- New: http_get/post, tcp_connect, dns_resolve, ffi_load_library/call, gen fn + yield,
-  channels, @requires, MultiHeadAttention, fj deploy, fj demo, fj build (ELF),
-  fj bindgen (FFI output), const fn, LLVM backend fixed, LSP v2 completion
-- Context enforcement: 132 integration tests (was 85)
+| Version | Date | Highlight |
+|---|---|---|
+| **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
+| V25 "Production" | 2026-04-07 | Hands-on re-audit, K8s deploy, FajarQuant Phase C real Gemma 4 E2B, @kernel transitive fix |
+| V24 "Quantum" | 2026-04-07 | CUDA RTX 4090 (9 PTX kernels, ~3x matmul), AVX2 + AES-NI inline asm, FajarQuant Phase 5-7 |
+| V23 "Boot" | 2026-04-06 | FajarOS boots to shell, 16 LLVM/runtime fixes, NVMe + GUI + ACPI working |
+| V22 "Hardened" | 2026-04-06 | 30 LLVM enhancements (E1-I6 batches), 690→0 codegen errors |
+| V21 "Production" | 2026-04-04 | Real threaded actors (std::thread + mpsc), 5 [sim]→[x], LLVM JIT/AOT runtime |
+| V20.8 "Cleanup" | 2026-04-04 | Rc→Arc migration, removed 21.4K LOC dead code (rtos/iot/rt_pipeline/etc) |
+| V20 "Completeness" | 2026-04-03 | Debugger v2 record/replay, package v2 build scripts, accelerator dispatch |
+| V19 "Precision" | 2026-04-03 | macro_rules! with $x metavar, async_sleep tokio, pattern match destructure E2E |
+| V18 "Integrity" | 2026-04-03 | http/tcp/dns, ffi_load, gen+yield, @requires, MultiHeadAttention, const fn |
 
 ### FajarOS (two platforms)
-- **FajarOS v3.0 "Surya"** (ARM64): MMU, EL0, IPC, 65+ commands. Verified on Radxa Dragon Q6A.
-- **FajarOS Nova v1.4.0 "Zenith"** (x86_64): 21K lines, 240+ commands, CoW fork, TCP/IP, GPU, SMP, GDB stub. QEMU verified.
+- **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
+- **FajarOS Nova** (x86_64): 47,821 LOC, V26 LLM E2E (SmolLM-135M v5/v6), 14 LLM shell commands. Boot to `nova>` reliably in QEMU.
 
 ---
 
 ## 4. Architecture Overview
 
-### 4.1 Compilation Pipeline
+> **Full architecture:** `docs/ARCHITECTURE.md` — module contracts, data flow, dependency graph.
 
-```
-Source (.fj)
-    | raw text
-    v
-LEXER (src/lexer/)
-    Input:  &str
-    Output: Vec<Token>
-    Errors: LexError (LE001-LE008)
-    | token stream
-    v
-PARSER (src/parser/)
-    Input:  Vec<Token>
-    Output: AST (Program node)
-    Method: Recursive Descent + Pratt for expressions
-    | AST
-    v
-SEMANTIC ANALYZER (src/analyzer/)     [ACTIVE — integrated into pipeline]
-    Input:  &Program
-    Output: () or Vec<SemanticError>
-    Checks: types, scope, context, mutability
-    | analyzed AST
-    v
-    +-------------------+-------------------+
-    |                   |                   |
-    v                   v                   v
-INTERPRETER         BYTECODE VM         (v1.0) NATIVE COMPILER
-(tree-walking)      (45 opcodes)        Cranelift backend
-    |                   |                   |
-    v                   v                   v
-RUNTIME
-+-- OS Runtime (memory.rs, irq.rs, syscall.rs, port_io)
-+-- ML Runtime (tensor.rs, autograd.rs, ops.rs, optim.rs, metrics.rs)
-```
+### 4.1 Compilation Pipeline (one-line summary)
 
-### 4.2 Module Contracts
+`source.fj → lexer → parser → analyzer → {interpreter | vm | cranelift | llvm} → {os runtime | ml runtime}`
 
-| Module | Public API | Input -> Output |
-|--------|-----------|-----------------|
-| Lexer | `tokenize(source: &str)` | `&str` -> `Result<Vec<Token>, Vec<LexError>>` |
-| Parser | `parse(tokens: Vec<Token>)` | `Vec<Token>` -> `Result<Program, Vec<ParseError>>` |
-| Analyzer | `analyze(program: &Program)` | `&Program` -> `Result<(), Vec<SemanticError>>` |
-| Analyzer | `analyze_with_known(prog, names)` | REPL mode with pre-defined names |
-| Interpreter | `eval_source(&mut self, src)` | Lex + Parse + Analyze + Eval in one call |
-| Interpreter | `eval_program(&mut self, prog)` | `&Program` -> `Result<Value, RuntimeError>` |
-| VM | `compile(&Program)` + `vm.run()` | AST -> Bytecode -> Execute |
+- **Lexer** (`src/lexer/`): `&str → Vec<Token>` (LE001-LE008)
+- **Parser** (`src/parser/`): `Vec<Token> → Program` (recursive descent + Pratt, 19 levels)
+- **Analyzer** (`src/analyzer/`): `&Program → Result<(), Vec<SemanticError>>` (types, scope, @kernel/@device contexts)
+- **Backends:** tree-walking interpreter, bytecode VM (45 opcodes), Cranelift (embedded), LLVM (production w/ 30 enhancements)
 
-### 4.3 Top-Level Error Type
+### 4.2 Top-Level Types
 
 ```rust
-pub enum FjError {
-    Lex(Vec<LexError>),
-    Parse(Vec<ParseError>),
-    Semantic(Vec<SemanticError>),
-    Runtime(RuntimeError),
-}
+enum FjError { Lex, Parse, Semantic, Runtime }
+enum Value { Null, Int, Float, Bool, Char, Str, Array, Tuple, Tensor,
+             Map, Struct, Enum, Function, BuiltinFn, Pointer, Optimizer, Layer }
 ```
 
-### 4.4 Value Enum (All Runtime Types)
+### 4.3 Dependency Direction (STRICT)
 
-```rust
-pub enum Value {
-    Null, Int(i64), Float(f64), Bool(bool), Char(char), Str(String),
-    Array(Vec<Value>), Tuple(Vec<Value>), Tensor(TensorValue),
-    Map(HashMap<String, Value>),  // HashMap support
-    Struct { name: String, fields: HashMap<String, Value> },
-    Enum { variant: String, data: Option<Box<Value>> },
-    Function(FnValue), BuiltinFn(String), Pointer(PointerValue),
-    Optimizer(OptimizerValue), Layer(LayerValue),
-}
-```
+`main → interpreter → analyzer → parser → lexer` ; `interpreter → runtime/{os,ml}` ; `main → codegen`. **Forbidden:** any upward dep, parser → interpreter, runtime/os ↔ runtime/ml, any cycle.
 
-### 4.5 Dependency Direction (STRICT)
+### 4.4 Key Architectural Details
 
-```
-ALLOWED:  main.rs -> interpreter -> analyzer -> parser -> lexer
-          main.rs -> vm -> parser -> lexer
-          interpreter -> runtime/os
-          interpreter -> runtime/ml
-          main.rs -> codegen (v1.0)
-
-FORBIDDEN: lexer -> parser (no upward deps)
-           parser -> interpreter
-           runtime/os <-> runtime/ml (siblings, no cross-deps)
-           Any cycle
-```
-
-### 4.6 Key Architectural Details
-
-- `eval_source()` runs full pipeline: lex -> parse -> analyze -> eval
-- Analyzer in REPL mode uses `analyze_with_known()` to see prior definitions
+- `eval_source()` runs full pipeline; REPL uses `analyze_with_known()` for prior names
 - Warnings (SE009 UnusedVariable, SE010 UnreachableCode) do NOT block execution
-- `EvalError::Control` is boxed to avoid large_enum_variant clippy warning
-- `loss` is a Fajar Lang keyword — cannot use as variable name
+- `EvalError::Control` is boxed (avoids large_enum_variant clippy warning)
+- `loss` is a keyword — cannot use as variable name
 - `parse_int`/`parse_float` return `Value::Enum { Ok/Err }`, not RuntimeError
 
 ---
@@ -554,6 +359,65 @@ These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated cla
    }
    ```
 
+### 6.8 Plan Hygiene Rules (No Inflated Estimates, No Skipped Decisions)
+
+> **Reason:** V26 Phase A1+A2+A3 surfaced 6 systemic patterns that, if left
+> unchecked, distort future plans the same way prior plans were distorted.
+> A2.1 found "174 unwraps" was actually **3** (58× inflation). A1.3 found
+> "1 flaky test" was actually **14** (14× scope expansion). These are not
+> outliers — they are the default outcome of trusting baselines without
+> hands-on verification. Full evidence: `docs/V26_PRODUCTION_PLAN.md` §10.5.
+
+When writing or reviewing any plan, audit, or status doc:
+
+1. **Pre-flight audit mandatory.** Every Phase starts with a B0/C0/D0
+   subphase that hands-on verifies the baseline via runnable commands
+   and produces a `docs/V26_<phase>_FINDINGS.md`. Downstream subphases
+   cannot start until findings are committed. (Lesson: A2.1 inflated
+   174→3; A3 found 5 [f] modules already deleted.)
+
+2. **Verification columns must be runnable commands.** Every task table
+   has a "Verification" column. That column must contain a literal command
+   whose output can be checked, not prose like "test passes" or "feature
+   works". (Lesson: CLAUDE.md drift 11,395 tests claim → real 7,581.)
+
+3. **Prevention layer per phase.** Every fix that closes a class of bugs
+   must spawn at least one prevention mechanism: a pre-commit hook, a
+   CI job, or a CLAUDE.md rule. One-time fixes are forbidden — the
+   prevention layer is the deliverable, not the patch. (Lesson: A1.2
+   added pre-commit hook; A1.4 added flake-stress CI + §6.7.)
+
+4. **Multi-agent audit cross-check mandatory.** Numbers produced by
+   parallel sub-agents must be manually re-verified with `Bash` before
+   being committed. Single-source agent claims are inadmissible.
+   (Lesson: V26 audit agent claimed "4,062 unwraps" + "no LLM shell
+   commands" — both wrong by huge factors.)
+
+5. **Surprise budget +25% minimum, tracked per commit.** Every Phase
+   allocates an explicit surprise budget. Default +25%; high-uncertainty
+   phases use +30%. Commit messages tag actual variance:
+   `feat(v26-b1): fork() PID return [actual 3h, est 2h, +50%]`. If
+   average variance exceeds budget, the next Phase escalates to +40%.
+   (Lesson: A1.3 hypothesized 1 flaky test, found 14.)
+
+6. **Decision gates must be mechanical.** "Decision required before X"
+   prose markers get skipped under execution pressure. Every decision
+   must produce a committed file (e.g., `docs/V26_B5_DECISION.md`)
+   that pre-commit hooks check, mechanically blocking downstream work
+   until the file exists. (Lesson: A1.4 mechanical CI job worked where
+   prose hadn't.)
+
+**Self-check before any plan/audit commit:**
+```
+[ ] Pre-flight audit (B0/C0/D0) exists for the Phase?         (Rule 1)
+[ ] Every task has a runnable verification command?           (Rule 2)
+[ ] At least one prevention mechanism added (hook/CI/rule)?   (Rule 3)
+[ ] Agent-produced numbers cross-checked with Bash?           (Rule 4)
+[ ] Effort variance tagged in commit message?                 (Rule 5)
+[ ] Decisions are committed files, not prose paragraphs?      (Rule 6)
+```
+Six NO answers = revert. Six YES answers = ship.
+
 ---
 
 ## 7. Error Code System
@@ -641,72 +505,34 @@ fn s1_1_eval_source_runs_analyzer() { ... }
 
 ## 10. Git & Contributing
 
-### 10.1 Branch Strategy
+> **Full guide:** `docs/CONTRIBUTING.md`. CHANGELOG: root `CHANGELOG.md`.
 
-```
-main          <- stable releases only (tagged v0.X.Y)
-develop       <- integration branch (PR target)
-feat/XXX      <- feature branches (1 per sprint task)
-fix/XXX       <- bugfix branches
-release/v0.X  <- release preparation
-```
-
-### 10.2 Commit Convention
-
-```
-Format: <type>(<scope>): <description>
-
-Types: feat, fix, test, refactor, docs, perf, ci, chore
-Scope: lexer, parser, analyzer, interp, runtime, vm, codegen, cli, stdlib
-
-Examples:
-  feat(analyzer): integrate analyzer into eval_source pipeline
-  fix(analyzer): resolve module-qualified paths in type checker
-  test(eval): add S1.1 analyzer integration tests
-```
-
-### 10.3 Milestone Tags
-
-```
-v0.2.0  -- Month 1  -- Native compilation (Cranelift MVP)        ✅ DONE
-v0.3.0  -- Month 2  -- Generics + Traits + FFI                   ✅ DONE
-v0.4.0  -- Month 3  -- Ownership system + borrow checker         ✅ DONE
-v0.5.0  -- Month 4  -- Full ML runtime + quantization            ✅ DONE
-v0.6.0  -- Month 5  -- Cross-compilation + embedded targets      ✅ DONE
-v1.0.0  -- Month 6  -- Production release                        ✅ DONE
-
-v0.2    --         -- Codegen type system, self-hosting prep            ✅ DONE
-v0.3.0  -- 2026-03-10 -- "Dominion": concurrency, ML, bare metal      ✅ DONE (52 sprints, 739 tasks)
-v0.4.0  -- 2026-03-10 -- "Sovereignty": generic enums, RAII, async     ✅ DONE (6 sprints, 40 tasks)
-```
+- **Branches:** `main` (stable, tagged) | `feat/XXX` | `fix/XXX` | `release/vX.Y`
+- **Commits:** `<type>(<scope>): <desc>` — types: feat/fix/test/refactor/docs/perf/ci/chore; scopes: lexer/parser/analyzer/interp/runtime/vm/codegen/cli/stdlib + V26 phase scopes (`v26-a1`..`v26-c4`)
+- **Milestones:** v0.2-v1.0 (6 monthly Cranelift+ML+ownership) ✅ DONE; v0.3 "Dominion", v0.4 "Sovereignty", v0.5 "Apex" ✅ DONE
 
 ---
 
 ## 11. Standard Library Overview
 
-| Module | Domain | Key Items |
-|--------|--------|-----------|
-| `std::io` | General | `print`, `println`, `eprintln`, `read_file`, `write_file`, `append_file`, `file_exists` |
-| `std::collections` | General | `Array` (15+ methods), `HashMap` (8 builtins + 7 methods) |
-| `std::string` | General | 15 methods: `trim`, `split`, `replace`, `contains`, `starts_with`, `parse_int`, `parse_float`, etc. |
-| `std::math` | General | `PI`, `E`, `abs`, `sqrt`, `pow`, `sin`, `cos`, `tan`, `floor`, `ceil`, `round`, `clamp`, `min`, `max` |
-| `std::convert` | General | `to_string`, `to_int`, `to_float`, `as` cast |
-| `os::memory` | OS | `mem_alloc`, `mem_free`, `mem_read/write`, `page_map/unmap`, `memory_copy/set/compare` |
-| `os::irq` | OS | `irq_register`, `irq_unregister`, `irq_enable`, `irq_disable` |
-| `os::syscall` | OS | `syscall_define`, `syscall_dispatch` |
-| `os::io` | OS | `port_read`, `port_write` |
-| `nn::tensor` | ML | `zeros`, `ones`, `randn`, `eye`, `xavier`, `from_data`, `arange`, `linspace` |
-| `nn::ops` | ML | `add`, `sub`, `mul`, `div`, `matmul`, `transpose`, `reshape`, `flatten`, `squeeze`, `split`, `concat` |
-| `nn::activation` | ML | `relu`, `sigmoid`, `tanh`, `softmax`, `gelu`, `leaky_relu` |
-| `nn::loss` | ML | `mse_loss`, `cross_entropy`, `bce_loss`, `l1_loss` |
-| `nn::layer` | ML | `Dense`, `Conv2d`, `MultiHeadAttention`, `BatchNorm`, `Dropout`, `Embedding` |
-| `nn::autograd` | ML | `backward()`, `grad()`, `requires_grad`, `set_requires_grad` |
-| `nn::optim` | ML | `SGD` (lr + momentum), `Adam` (lr), `step()`, `zero_grad()` |
-| `nn::metrics` | ML | `accuracy`, `precision`, `recall`, `f1_score` |
+> **Full API:** `docs/STDLIB_SPEC.md`. Discover dynamically via REPL `:help` or grep `src/interpreter/builtins.rs`.
 
-**Built-in constructors:** `Some(v)`, `None`, `Ok(v)`, `Err(e)`
-**Built-in globals:** `print`, `println`, `len`, `type_of`, `assert`, `assert_eq`, `panic`, `todo`, `dbg`
-**Constants:** `PI`, `E`
+- **`std::io`**: print, println, eprintln, read_file, write_file, append_file, file_exists
+- **`std::collections`**: `Array` (15+ methods), `HashMap` (8 builtins + 7 methods)
+- **`std::string`**: 15 methods (trim, split, replace, contains, starts_with, parse_int, parse_float, …)
+- **`std::math`**: PI, E, abs, sqrt, pow, sin/cos/tan, floor, ceil, round, clamp, min, max
+- **`std::convert`**: to_string, to_int, to_float, `as` cast
+- **`os::*`**: memory (alloc/free/read/write, page_map/unmap), irq (register/enable), syscall, io (port_read/write)
+- **`nn::tensor`**: zeros, ones, randn, eye, xavier, from_data, arange, linspace
+- **`nn::ops`**: add, sub, mul, div, matmul, transpose, reshape, flatten, squeeze, split, concat
+- **`nn::activation`**: relu, sigmoid, tanh, softmax, gelu, leaky_relu
+- **`nn::loss`**: mse_loss, cross_entropy, bce_loss, l1_loss
+- **`nn::layer`**: Dense, Conv2d, MultiHeadAttention, BatchNorm, Dropout, Embedding
+- **`nn::autograd`**: backward, grad, requires_grad, set_requires_grad
+- **`nn::optim`**: SGD (lr + momentum), Adam (lr), step, zero_grad
+- **`nn::metrics`**: accuracy, precision, recall, f1_score
+
+**Built-in:** `Some/None/Ok/Err` constructors; `print/println/len/type_of/assert/assert_eq/panic/todo/dbg` globals; `PI/E` constants.
 
 ---
 
@@ -742,31 +568,9 @@ Priority: **CORRECTNESS > SAFETY > PERFORMANCE**
 
 ## 14. Cargo.toml Dependencies
 
-```toml
-[dependencies]
-thiserror = "2.0"           # Error types
-miette = "7.0"              # Beautiful error display
-clap = { version = "4.5", features = ["derive"] }  # CLI
-rustyline = "14.0"          # REPL
-ndarray = "0.16"            # Tensor backend
-ndarray-rand = "0.15"       # Random tensors
-serde = { version = "1.0", features = ["derive"] }  # Config
-serde_json = "1.0"
-toml = "0.8"                # fj.toml
-indexmap = "2.0"            # Ordered HashMap
-tokio = { version = "1", features = ["full"] }  # LSP server
-tower-lsp = "0.20"          # LSP protocol
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-proptest = "1.4"            # Property testing
-pretty_assertions = "1.4"
-
-# v1.0 additions (feature-gated):
-# cranelift-codegen, cranelift-frontend, cranelift-module
-# cranelift-jit, cranelift-object, target-lexicon
-# libloading, libffi
-```
+> **Source of truth:** `Cargo.toml` itself. Keys: `thiserror` (errors), `miette` (display),
+> `clap` (CLI), `ndarray` (tensors), `tokio` + `tower-lsp` (LSP), `cranelift-*` + `inkwell` (codegen,
+> feature-gated), `criterion` (benches), `proptest` (property tests).
 
 ---
 
@@ -779,65 +583,32 @@ Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (p
 ## 16. Quick Commands
 
 ```bash
-# Build & Run
-cargo build                           # build project
-cargo build --release                 # release build (optimized)
-cargo run -- run examples/hello.fj    # execute Fajar Lang program
-cargo run -- repl                     # start REPL (with analyzer)
-cargo run -- run --vm examples/hello.fj  # run with bytecode VM
-cargo run -- check examples/hello.fj  # type-check only (no execution)
+# Build & test (mandatory before commit)
+cargo build [--release]
+cargo test --lib                                 # 7,581 lib tests
+cargo test --lib -- --test-threads=64            # stress (V26 §6.7 rule)
+cargo clippy --lib -- -D warnings                # MUST pass
+cargo fmt -- --check                             # MUST pass
 
-# Testing & Quality
-cargo test                            # run default tests (non-native)
-cargo test --features native          # run lib + 1,342 native codegen tests (CLAUDE.md V24)
-cargo test --test eval_tests          # run integration tests
-cargo test -- s1_1_                   # run sprint-specific tests
-cargo clippy -- -D warnings           # linting (MUST pass before commit)
-cargo fmt                             # format code
-cargo fmt -- --check                  # check formatting
+# Run Fajar Lang programs
+cargo run -- run examples/hello.fj               # default (interpreter)
+cargo run -- run --vm file.fj                    # bytecode VM
+cargo run -- check file.fj                       # type-check only
+cargo run -- repl                                # interactive REPL
+cargo run -- dump-tokens|dump-ast file.fj        # debug
 
-# Documentation & Benchmarks
-cargo doc --open                      # generate + view docs
-cargo bench                           # run criterion benchmarks
+# Project lifecycle
+cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
-# Project Management
-cargo run -- new my_project           # create new Fajar Lang project
-cargo run -- build                    # build from fj.toml
-cargo run -- fmt file.fj              # format .fj source
-cargo run -- lsp                      # start LSP server
-cargo run -- gui examples/gui_hello.fj # launch GUI window (--features gui)
-cargo run -- dump-tokens file.fj      # inspect lexer output
-cargo run -- dump-ast file.fj         # inspect parser output
-
-# Feature-gated builds
-cargo run --features websocket -- run file.fj   # real WebSocket (tungstenite)
-cargo run --features mqtt -- run file.fj        # real MQTT (rumqttc)
-cargo run --features ble -- run file.fj         # real BLE (btleplug)
-cargo run --features https -- run file.fj       # HTTPS server (native-tls)
-cargo build --features gui                      # GUI windowing (winit)
+# Feature flags (cargo run --features X -- run file.fj)
+#   websocket | mqtt | ble | https | gui | native (Cranelift) | llvm | cuda
 ```
 
 ---
 
 ## 17. Repository Structure
 
-```
-src/
-  main.rs (CLI, 6.5K LOC) | lib.rs (module decls)
-  lexer/ (tokenize) | parser/ (parse, ast, pratt) | analyzer/ (type_check, scope, effects)
-  interpreter/ (eval, env, value) | vm/ (bytecode compiler+engine)
-  codegen/ (cranelift/, llvm/, types, abi, linker, analysis)
-  runtime/os/ (memory, IRQ, syscall) | runtime/ml/ (tensor, autograd, ops, layers)
-  gpu_codegen/ (spirv, ptx, metal, hlsl, fusion, gpu_memory)
-  dependent/ (nat, arrays, tensor_shapes, patterns) | verify/ (smt, pipeline, properties)
-  lsp/ (server, completion, advanced) | package/ (registry, server, signing, sbom)
-  distributed/ | wasi_p2/ | ffi_v2/ | formatter/ | selfhost/
-  const_alloc/ | const_generics/ | const_traits/ | gui/ (winit+wgpu, gated)
-docs/ (157 documents) | tests/ (46 files, 2,374 fns) | examples/ (231 .fj)
-fuzz/ (8 targets) | editors/vscode/ | book/ | benches/ | website/
-.github/workflows/ (6 workflows: ci, embedded, docs, nightly, nova, release)
-audit/ (V26 unwrap inventory) | scripts/ (audit_unwrap.py, git-hooks/, etc.)
-```
+`src/`: lexer, parser, analyzer, interpreter, vm, codegen/{cranelift,llvm}, runtime/{os,ml}, gpu_codegen, dependent, verify, lsp, package, distributed, wasi_p2, ffi_v2, formatter, selfhost, const_*, gui (gated). **Glob discovery preferred** — use `Glob "src/**/mod.rs"` rather than reading this map. Companion dirs: `tests/` (46 files), `examples/` (231 .fj), `docs/` (157), `benches/`, `fuzz/`, `audit/`, `scripts/`, `.github/workflows/`.
 
 ---
 
@@ -881,5 +652,5 @@ audit/ (V26 unwrap inventory) | scripts/ (audit_unwrap.py, git-hooks/, etc.)
 
 ---
 
-*CLAUDE.md Version: 24.0 | V26 "Final" partial — 7,581 lib + 2,374 integ + 14 doc tests, 0 flakes (80/80 stress), 231 examples, 0 production .unwrap(), 0 fmt diffs, 0 [f]/[s] modules | Phase A1+A2+A3 done, A4 in progress*
+*CLAUDE.md Version: 25.0 | V26 "Final" Phase A done — 7,581 lib + 2,374 integ + 14 doc tests, 0 flakes (80/80 stress), 231 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8 Plan Hygiene Rules added, doc trimmed from 885→~600 lines for context efficiency*
 *Last Updated: 2026-04-11*
