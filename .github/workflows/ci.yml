@@ -56,6 +56,37 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
         run: cargo bench --no-run
 
+  # Stress test: run lib tests under thread oversubscription to catch
+  # wall-clock timing flakes early. V26 A1.4 prevention measure.
+  # Background: tests that assert `elapsed < threshold` on microsecond-scale
+  # work are flaky under heavy parallel load because scheduler jitter parks
+  # threads for 100s of ms. See commit 13aa9e3 for details.
+  flake-stress:
+    name: Flake Stress (parallel test load)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stable-
+      - name: Build tests once
+        run: cargo test --lib --no-run
+      - name: Run lib tests 5x at --test-threads=64
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "=== stress run $i ==="
+            cargo test --lib -- --test-threads=64 || exit 1
+          done
+          echo "All 5 stress runs passed"
+
   # Feature-gated tests: LLVM, SMT (Z3), C++ FFI (libclang), Python FFI (pyo3)
   features:
     name: Feature Tests (${{ matrix.feature }})

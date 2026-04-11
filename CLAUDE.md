@@ -462,8 +462,10 @@ Error codes:         PREFIX + NUMBER -> SE004, KE001, CE003
 
 - [ ] No `.unwrap()` in `src/` (only in tests)
 - [ ] No `unsafe` without `// SAFETY:` comment
+- [ ] No wall-clock `assert!(elapsed < threshold)` in unit tests (see §6.7)
 - [ ] All `pub` items have doc comments
 - [ ] `cargo test` — all pass
+- [ ] `cargo test --lib -- --test-threads=64` — passes 5x in a row (stress test)
 - [ ] `cargo clippy -- -D warnings` — zero warnings
 - [ ] `cargo fmt` — formatted
 - [ ] New functions have at least 1 test
@@ -484,6 +486,50 @@ These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated cla
 5. **Audit before building.** Before creating new plans, verify previous plan claims are backed by real code.
 
 6. **Distinguish real vs framework.** When a module has type definitions but no external integration (no networking, no FFI, no solver calls), document it honestly as "framework — needs X integration".
+
+### 6.7 Test Hygiene Rules (No Wall-Clock Assertions in Unit Tests)
+
+> **Reason:** V26 A1.3 found 14 tests asserting `elapsed < threshold` on
+> microsecond-scale work. They flaked under `cargo test --test-threads=64`
+> because scheduler jitter parks threads for 100s of ms — far above the
+> assertion threshold. Pre-fix flake rate was ~20% per full test run.
+> Fixed by 10x threshold bump + noise floor (commit `13aa9e3`).
+
+1. **NEVER** write `assert!(elapsed < N_ms)` in unit tests when the work
+   measured is microsecond-scale or contains a no-op simulation. Wall-clock
+   timing is unreliable under parallel test load.
+
+2. **DO** put performance regression detection in **criterion benchmarks**
+   under `benches/`, not unit tests. Criterion handles statistical noise.
+
+3. **IF** a unit test must check timing (e.g., for asynchronous behavior),
+   set the threshold to **at least 10x** the actual expected value, OR use
+   a noise floor pattern that treats sub-millisecond differences as passing.
+
+4. **CI safeguard:** the `flake-stress` job in `.github/workflows/ci.yml`
+   runs `cargo test --lib -- --test-threads=64` 5x to catch new wall-clock
+   flakes before they're observed in production.
+
+5. **Antipattern example (DO NOT WRITE):**
+   ```rust
+   #[test]
+   fn fast_operation_is_fast() {
+       let start = Instant::now();
+       compute_thing();              // takes microseconds
+       assert!(start.elapsed() < Duration::from_millis(50));  // FLAKY
+   }
+   ```
+
+6. **Acceptable pattern:**
+   ```rust
+   #[test]
+   fn fast_operation_is_fast() {
+       let start = Instant::now();
+       compute_thing();
+       // Target: <50ms; test allows <500ms (10x) for parallel jitter immunity
+       assert!(start.elapsed() < Duration::from_millis(500));
+   }
+   ```
 
 ---
 
