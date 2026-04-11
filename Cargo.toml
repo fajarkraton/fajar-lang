@@ -71,7 +71,7 @@ inkwell = { version = "0.8.0", features = ["llvm18-1"], optional = true }
 # Real WebSocket client (feature-gated)
 tungstenite = { version = "0.26", optional = true, features = ["native-tls"] }
 # Real MQTT client (feature-gated)
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true }
 # Real BLE client (feature-gated, requires OS Bluetooth stack)
 btleplug = { version = "0.11", optional = true }
 # Native TLS for HTTPS server (feature-gated)

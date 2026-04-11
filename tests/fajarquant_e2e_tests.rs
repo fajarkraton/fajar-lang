@@ -112,7 +112,7 @@ println(i3)
     );
     let lines: Vec<&str> = out.trim().lines().collect();
     assert!(lines.len() >= 2, "expected 2 improvement values");
-    let i2: f64 = lines[0].trim().parse().unwrap_or(0.0);
+    let _i2: f64 = lines[0].trim().parse().unwrap_or(0.0);
     let i3: f64 = lines[1].trim().parse().unwrap_or(0.0);
     // At higher bits, adaptive should maintain or improve its advantage
     assert!(i3 > 0.0, "b=3 should show positive improvement, got: {i3}");

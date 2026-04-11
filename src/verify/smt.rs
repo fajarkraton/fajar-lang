@@ -487,6 +487,12 @@ pub fn prove_with_timeout(var_name: &str, constraint: &str, _timeout_ms: u64) ->
 
 /// Prove that an integer expression is always non-negative.
 /// Returns Unsat if proven (no counterexample exists), Sat with counterexample if disproven.
+///
+/// Accepts constraint in two forms:
+///   - operator-only: `">= 0"`, `"> 5"`, `"< 100"`
+///   - with var prefix: `"x >= 0"`, `"x > 5"`, `"x < 100"`
+///
+/// The var-prefix form is stripped before operator parsing.
 #[cfg(feature = "smt")]
 pub fn prove_non_negative(var_name: &str, constraint: &str) -> SmtResult {
     use z3::ast::Ast;
@@ -496,7 +502,12 @@ pub fn prove_non_negative(var_name: &str, constraint: &str) -> SmtResult {
 
     let x = z3::ast::Int::new_const(&ctx, var_name);
 
-    // Apply constraint: parse simple forms like "x > 0", "x < 100"
+    // Strip optional `<var_name> ` prefix so callers can pass either
+    // "x >= 0" or ">= 0". Both formats now work.
+    let var_prefix = format!("{var_name} ");
+    let constraint = constraint.strip_prefix(&var_prefix).unwrap_or(constraint);
+
+    // Apply constraint: parse simple forms like "> 0", "< 100", ">= 0"
     if let Some(rest) = constraint.strip_prefix("> ") {
         if let Ok(val) = rest.trim().parse::<i64>() {
             solver.assert(&x.gt(&z3::ast::Int::from_i64(&ctx, val)));
@@ -593,14 +604,61 @@ pub fn prove_array_bounds(index_constraint: &str, array_size: i64) -> SmtResult 
     let size = z3::ast::Int::from_i64(&ctx, array_size);
     let zero = z3::ast::Int::from_i64(&ctx, 0);
 
-    // Constraint on index
-    if let Some(rest) = index_constraint.strip_prefix("< ") {
+    // Accept several constraint forms:
+    //   "< N"               — operator-only (legacy)
+    //   "i < N"             — with var prefix
+    //   "i >= 0 && i < N"   — natural compound form
+    //   "any"               — unconstrained (must find counterexample)
+    //
+    // For natural-language forms, scan for `>=` and `<` against integer
+    // literals; assert each constraint we recognize. Anything we don't
+    // parse is ignored — the test will then expose a false counterexample
+    // and fail loudly, which is the right signal.
+    if index_constraint == "any" {
+        // No constraint on index — should find counterexample
+    } else if index_constraint.contains("&&")
+        || index_constraint.contains("index ")
+        || index_constraint.starts_with(|c: char| c.is_alphabetic())
+    {
+        // Natural-language form: split on `&&` and parse each clause.
+        for clause in index_constraint.split("&&").map(str::trim) {
+            // Strip optional var name prefix (e.g. "i", "index", "idx")
+            let clause = clause
+                .split_once(' ')
+                .map(|(first, rest)| {
+                    if first.chars().all(|c| c.is_alphanumeric() || c == '_')
+                        && !first.starts_with(|c: char| c.is_ascii_digit())
+                    {
+                        rest
+                    } else {
+                        clause
+                    }
+                })
+                .unwrap_or(clause);
+            if let Some(rest) = clause.strip_prefix(">= ")
+                && let Ok(val) = rest.trim().parse::<i64>()
+            {
+                solver.assert(&idx.ge(&z3::ast::Int::from_i64(&ctx, val)));
+            } else if let Some(rest) = clause.strip_prefix("> ")
+                && let Ok(val) = rest.trim().parse::<i64>()
+            {
+                solver.assert(&idx.gt(&z3::ast::Int::from_i64(&ctx, val)));
+            } else if let Some(rest) = clause.strip_prefix("<= ")
+                && let Ok(val) = rest.trim().parse::<i64>()
+            {
+                solver.assert(&idx.le(&z3::ast::Int::from_i64(&ctx, val)));
+            } else if let Some(rest) = clause.strip_prefix("< ")
+                && let Ok(val) = rest.trim().parse::<i64>()
+            {
+                solver.assert(&idx.lt(&z3::ast::Int::from_i64(&ctx, val)));
+            }
+        }
+    } else if let Some(rest) = index_constraint.strip_prefix("< ") {
+        // Legacy operator-only form
         if let Ok(val) = rest.trim().parse::<i64>() {
             solver.assert(&idx.ge(&zero));
             solver.assert(&idx.lt(&z3::ast::Int::from_i64(&ctx, val)));
         }
-    } else if index_constraint == "any" {
-        // No constraint on index — should find counterexample
     }
 
     // Negate: index < 0 || index >= size
@@ -732,6 +790,10 @@ pub fn prove_no_i32_overflow(a_min: i32, a_max: i32, b_min: i32, b_max: i32) -> 
 // ═══════════════════════════════════════════════════════════════════════
 
 /// Run a verification with a timeout.
+///
+/// Accepts constraint in two forms (same as `prove_non_negative`):
+///   - operator-only: `">= 0"`
+///   - with var prefix: `"n >= 0"` (var name is stripped before parsing)
 #[cfg(feature = "smt")]
 pub fn prove_with_timeout(var_name: &str, constraint: &str, timeout_ms: u64) -> SmtResult {
     use z3::ast::Ast;
@@ -741,6 +803,10 @@ pub fn prove_with_timeout(var_name: &str, constraint: &str, timeout_ms: u64) -> 
     let solver = z3::Solver::new(&ctx);
 
     let x = z3::ast::Int::new_const(&ctx, var_name);
+
+    // Strip optional `<var_name> ` prefix so callers can pass either form.
+    let var_prefix = format!("{var_name} ");
+    let constraint = constraint.strip_prefix(&var_prefix).unwrap_or(constraint);
 
     if let Some(rest) = constraint.strip_prefix(">= ") {
         if let Ok(val) = rest.trim().parse::<i64>() {
