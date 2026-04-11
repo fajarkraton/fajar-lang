@@ -272,26 +272,41 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 > effort to B1-B5, verify every TODO is still real and measure actual
 > scaffold state. **B1-B5 effort estimates are provisional until B0 lands.**
 
-| # | Task | Verification command | Est. |
+| # | Task | Verification command | Status / Commit |
 |---|------|----------------------|------|
-| B0.1 | Re-scan TODOs: compare live state to §3.7 of `docs/HONEST_AUDIT_V26.md` | `cd ~/Documents/fajaros-x86 && grep -rnE "TODO\|FIXME\|XXX\|HACK" kernel/ shell/ drivers/ fs/ services/ \| grep -v qemu_debug > audit/B0_todo_scan.txt` — diff against audit §3.7, flag silent closures | 30 min |
-| B0.2 | Read actual `fork()` + process exit paths, cite file:line | `audit/B0_kernel_state.md` with verbatim quotes from `kernel/core/syscall.fj` + `kernel/sched/process.fj` | 1 h |
-| B0.3 | Baseline snapshot: `make build-llvm`, record binary size + boot time + LOC | `audit/B0_baseline.json` with `{size_mb, boot_ms, loc}` | 30 min |
-| B0.4 | VFS scaffold reality audit: count real vs stub functions in `fs/ext2_ops.fj`, FAT32 code, ramfs | `audit/B0_vfs_state.md` — table: function → real/stub/partial, cite file:line | 1.5 h |
-| B0.5 | Hot-path sensitivity inventory: list every function that has hit LLVM O2 wild-pointer per git log + current TODOs | `audit/B0_hotpath_matrix.md` — one row per fragile function, with reproducer | 30 min |
+| B0.1 | Re-scan TODOs | `cd ~/Documents/fajaros-x86 && grep -rnE "TODO\|FIXME\|XXX\|HACK" kernel/ shell/ drivers/ fs/ services/ \| grep -v qemu_debug` → 6 lines, 5 real TODOs | ✅ DONE — `41f6fd1` (audit/B0_todo_scan.txt) |
+| B0.2 | Read actual `fork()` + process exit paths, cite file:line | `audit/B0_kernel_state.md` with verbatim quotes — **MAJOR: handoff was wrong about fork()** | ✅ DONE — `41f6fd1` |
+| B0.3 | Baseline snapshot | `make build-llvm` → 1.38 MB ELF in 10.1s, 47,821 LOC / 163 .fj files | ✅ DONE — `41f6fd1` (audit/B0_baseline.json) |
+| B0.4 | VFS scaffold reality audit | `wc -l fs/*.fj && grep -c "@kernel fn" fs/*.fj` → 95 fns / 10 files / 2,114 LOC — **REAL not scaffold** | ✅ DONE — `41f6fd1` (audit/B0_vfs_state.md) |
+| B0.5 | Hot-path sensitivity inventory | `grep -rnE "noinline\|wild.pointer\|km_vecmat_packed_raw\|interleave" kernel/` → 8 sites (3 Class A, 5 Class B) | ✅ DONE — `41f6fd1` (audit/B0_hotpath_matrix.md) |
 
-**Gate:** `docs/V26_B0_FINDINGS.md` committed, containing revised B1-B5 effort estimates. **B1 cannot start until B0 lands.** If B0 reveals surprises (e.g., `fork()` actually works, ext2 write is complete), re-scope downstream tasks before committing effort.
+**Gate:** ✅ `fajar-lang/docs/V26_B0_FINDINGS.md` (commit `b6f1a77`, 334 lines) committed. **B1 unblocked.** B0 surprises: **(1) fork() is fully implemented** (handoff confused SYS_GETPID with SYS_FORK) → B1.1 fork() task DELETED, replaced with 15-min B1.0 SYS_GETPID fix. **(2) VFS layer is real** (95 fns, not scaffold) → B3 estimate stands. Effort actual: **3.5 h vs 4 h estimate (−12.5%)**.
 
-### B1: Critical Kernel Bugs
+### B1: Critical Kernel Bugs (revised post-B0, 2026-04-11)
 
-| # | Task | File:Line | Verification | Est. |
+> **Revised post-B0:** B0.2 found that **`sys_fork()` is fully implemented**
+> in `kernel/process/fork.fj` (76 lines, deep page table copy, returns PID
+> at line 75). The handoff cited `kernel/core/syscall.fj:249` which is
+> actually SYS_GETPID, NOT SYS_FORK. The original B1.1 "fix fork() PID
+> return" task is **DELETED**. Replaced with a 15-minute SYS_GETPID polish
+> task. The original B1.3 zombie reaping is also **DONE** (`proc_v2_waitpid()`
+> at `kernel/sched/process.fj:99` correctly reaps zombies → FREE state); only
+> the **exit half** is incomplete. Detail in `audit/B0_kernel_state.md`.
+
+| # | Task | File:Line | Verification | Status / Est. |
 |---|------|-----------|-------------|------|
-| B1.1 | Fix `fork()` syscall to return actual PID from scheduler | `kernel/core/syscall.fj` (TODO line) | Userland fork() returns child PID > 0 | 2 h |
-| B1.2 | Implement process exit: signal parent + free resources (frames, fd table, IPC) | `kernel/sched/process.fj`, `kernel/core/sched.fj` | `ps` after exit shows no zombie; free frames reclaimed | 4 h |
-| B1.3 | Add zombie process reaping via `waitpid()` syscall | `kernel/core/syscall.fj` | Parent receives child exit code | 3 h |
-| B1.4 | Document v5_4bit sample workaround in `kernel/compute/transformer.fj:1426` with sentry test | Comment block + test that detects regression | 1 h |
+| **B1.0** | ~~Fix `fork()` PID return~~ → **Replaced**: fix SYS_GETPID hardcoded `return 0` in µkernel variant | `kernel/core/syscall.fj:249` | `grep "TODO.*PID from scheduler" kernel/core/syscall.fj` returns nothing | ✅ DONE — `5dc9901` (15 min) |
+| **B1.1.1** | Free child page tables in `proc_v2_exit()` (walk PML4 → free frames) | `kernel/sched/process.fj:93` | `tests/process_exit_test.fj` runs fork+exit×100 and verifies frame counter returns to baseline ±5 | 1 h |
+| **B1.1.2** | Free child kernel stack mapping on exit | `kernel/sched/process.fj:93` | Same test as B1.1.1 — kernel stack frames also reclaimed | 0.5 h |
+| **B1.1.3** | Walk fd table on exit, close all open files | `kernel/sched/process.fj:93` | `tests/process_exit_test.fj` checks fd count returns to baseline | 0.5 h |
+| **B1.1.4** | Wake parent if blocked in `waitpid()` (set ready flag) | `kernel/sched/process.fj:93` + `kernel/sched/scheduler.fj` | Parent resumes within 1 scheduler tick after child exit | 1 h |
+| **B1.1.5** | Stress test: fork 100 children, exit 100 children, verify frame counter returns to baseline | `tests/process_exit_test.fj` | `make run-llvm 2>&1 \| grep "exit_test PASS"` appears 1× | 1 h |
+| **B1.1.6** | Apply same B1.1.1-B1.1.5 fix to `kernel/core/sched.fj` (µkernel variant) | `kernel/core/sched.fj:96` | `grep -c "TODO: signal parent" kernel/core/sched.fj` = 0 after fix | 15 min |
+| **B1.4** | Document v5_4bit sample workaround in `kernel/compute/transformer.fj:1426` (subsumed by B2.7 sentry matrix Class A site #2) | Sentry test in B2.7 matrix covers this | 0 (covered by B2.7) |
 
-**Gate:** `nova> fork-test` spawns 5 children, all exit cleanly, no zombies, no leaked frames.
+**B1 effort revised:** ~5 h base (was 10 h). **−5 h savings** from deleted fork() + zombie reaping (already done) + B1.4 absorbed into B2.7. + 25% surprise budget = ~6.25 h.
+
+**Gate:** `nova> fork-test` spawns 5 children, all exit cleanly, no zombies, no leaked frames. **Plus** `tests/process_exit_test.fj` passes ×3 consecutive runs with frame counter ±5 of baseline.
 
 ### B2: Test Infrastructure & CI
 
@@ -389,15 +404,15 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 > negotiable** — if a subphase finishes early, the surplus rolls into
 > the next surprise pool, never into new scope.
 
-| Subphase | Original | + Surprise (25%) | Reasoning |
-|---|---|---|---|
-| B0 (pre-flight audit) | 4 h | 4 h | Audit IS the de-risking step; no surprise budget needed |
-| B1 (critical bugs) | 10 h | 13 h | Scheduler/IPC state may be more tangled than the TODO suggests |
-| B2 (test infra + prevention) | 11 h + 9 h new = 20 h | 26 h | Hot-path matrix size unknown until B0.5 lands |
-| B3 (VFS) | 19 h | 25 h | Existing scaffold reality unknown until B0.4 (could be near-zero or near-done) |
-| B4 (security) | 18 h | 23 h | SMEP audit may reveal hidden U/S=1 mappings requiring rework |
-| B5 (LLM) | 12 h + 1.5 h gate = 13.5 h | 14 h | Bounded by chosen option; small surprise pool |
-| **Total** | **84 h** | **105 h** | **+25% overall** |
+| Subphase | Original | + Surprise (25%) | Post-B0 Actual / Revised | Reasoning |
+|---|---|---|---|---|
+| B0 (pre-flight audit) | 4 h | 4 h | **3.5 h actual** ✅ (`41f6fd1` + `b6f1a77`) | Audit IS the de-risking step; ran under budget |
+| B1 (critical bugs) | 10 h | 13 h | **~5 h base / 6.25 h revised** | Post-B0: fork() task DELETED (was already implemented), zombie reaping DONE. B1.0 SYS_GETPID fix already shipped (`5dc9901`, 0.3 h). Remaining: B1.1.1-B1.1.6 process exit cleanup (~5 h) |
+| B2 (test infra + prevention) | 11 h + 9 h new = 20 h | 26 h | 26 h (no change) | Hot-path matrix scope locked by B0.5 (3 Class A sites enumerated for B2.7) |
+| B3 (VFS) | 19 h | 25 h | 25 h (validated) | B0.4 confirmed VFS is real implementation (95 fns), not scaffold; B3 is enhancement work as planned |
+| B4 (security) | 18 h | 23 h | 24 h (+1 h) | B0.2 added B4.1.3 compile-time U-bit assertion (1 h) |
+| B5 (LLM) | 12 h + 1.5 h gate = 13.5 h | 14 h | 14 h (no change) | Bounded by chosen option; small surprise pool |
+| **Total** | **84 h** | **105 h** | **~98.25 h post-B0** | **−6.75 h vs +25% budget**, surplus ~7 h returned to surprise pool |
 
 **Variance tracking rule:** Each commit must tag effort variance in its
 message — `feat(v26-b1): fork() PID return [actual 3h, est 2h, +50%]`.
@@ -434,17 +449,17 @@ escalates to +40%.
 > committing GPU budget to C1's 12 hours of extraction + 6 hours of eval,
 > verify FajarQuant baseline is exactly what `HONEST_AUDIT_V26.md` claims.
 
-| # | Task | Verification command | Est. |
+| # | Task | Verification command | Status / Commit |
 |---|------|---------------------|------|
-| C0.1 | Re-verify algorithm LOC in standalone repo | `cd ~/Documents/fajarquant && find src -name "*.rs" \| xargs wc -l \| tail -1` ≈ 2,276 LOC (1,743 fajarquant + 533 turboquant) | 15 min |
-| C0.2 | Re-verify test count: 29 unit (in fajarquant repo) + 16 integ (still in fajar-lang) = 45 total | `cd ~/Documents/fajarquant && cargo test --lib 2>&1 \| grep "test result"` shows 29 + `cd ~/Documents/Fajar\ Lang && cargo test --test fajarquant_e2e_tests --test fajarquant_safety_tests 2>&1 \| grep "test result"` shows 8+8 | 15 min |
-| C0.3 | Re-verify demo count: 5 in fajarquant repo, hierarchical missing | `cd ~/Documents/fajarquant && ls examples/*.fj \| wc -l` (no `fajarquant_` prefix anymore) | 5 min |
-| C0.4 | Re-verify paper data integrity: confirm `ablation_results.json:80` actually malformed | `cd ~/Documents/fajarquant && jq . data/kv_cache/ablation_results.json 2>&1 \| head` | 10 min |
-| C0.5 | Re-verify 3-way comparison numbers in paper against source data (no drift) | `cd ~/Documents/fajarquant && python3 scripts/verify_paper_tables.py` (script to be written in C0.5) | 1 h |
-| C0.6 | Snapshot HuggingFace model availability: `Mistral 7B`, `Llama 2 7B`, `Qwen 7B`, `Phi-3 mini` — confirm no license blockers | `~/Documents/fajarquant/audit/C0_model_availability.md` with HF URL + license + size | 1 h |
-| C0.7 | GPU budget snapshot: `nvidia-smi`, available VRAM, current other workloads | `~/Documents/fajarquant/audit/C0_gpu_state.json` | 15 min |
+| C0.1 | Algorithm LOC | `find src -name "*.rs" \| xargs wc -l \| tail -1` → 2,342 LOC (+66 vs handoff "~2,276", 2.9% drift) | ✅ DONE — `b0582e7` (audit/C0_baseline.md) |
+| C0.2 | Test count | `cargo test --lib` (fq) → 29; `cargo test --test fajarquant_e2e_tests --test fajarquant_safety_tests` (fl) → 8+8 = 16 wire-up; **45 total** | ✅ DONE — `b0582e7` |
+| C0.3 | Demo count | `ls examples/*.fj` → 5 (`hierarchical_demo.fj` still missing per C4.3) | ✅ DONE — `b0582e7` |
+| C0.4 | `ablation_results.json` integrity | `jq . data/kv_cache/ablation_results.json` → **PARSES CLEANLY** (handoff was wrong about "malformed at line 80") | ✅ DONE — `b0582e7` |
+| C0.5 | Paper tables vs source data | `python3 scripts/verify_paper_tables.py --strict` → 9/9 PASS within tolerance | ✅ DONE — `b0582e7` (new script as prevention layer) |
+| C0.6 | HF model availability | WebFetch on each — Mistral ✅, **Llama 2 GATED**, Qwen-7B reports 8B params, Phi-3 mini ✅ | ✅ DONE — `b0582e7` (audit/C0_model_availability.md) |
+| C0.7 | GPU snapshot | `nvidia-smi` → RTX 4090 Laptop 16,376 MiB / 15,933 MiB free / 0% util | ✅ DONE — `b0582e7` (audit/C0_gpu_state.json) |
 
-**Gate:** `docs/V26_C0_FINDINGS.md` committed with revised C1-C4 estimates. **C1 cannot start until C0 lands.** If model availability blocks any of the 3 (e.g., Llama 2 license issue), substitute via Mistral variant + document.
+**Gate:** ✅ `fajar-lang/docs/V26_C0_FINDINGS.md` (commit `59183f0`, 294 lines) committed. **C1 unblocked.** C0 surprises: **(1) `ablation_results.json` is NOT malformed** (handoff was wrong) → no remediation needed. **(2) Llama 2 7B is Meta-gated** → new C1.0.0 access task (already filed: `fajarquant/audit/C1_llama2_access.md` in commit `4195cfa`). **(3) Qwen-7B is actually 8B params** → new C1.0.1 variant pin task (already done: `Qwen/Qwen2-7B` in commit `4195cfa`). Effort actual: **2.5 h vs 3 h estimate (−17%)**.
 
 ### C1: Multi-Model Validation (P0 Blocker)
 
@@ -452,15 +467,17 @@ escalates to +40%.
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C1.0 | **Single-model dry run (NEW Phase A lesson):** extract Mistral 7B with **5 prompts only** (not 50), run 3-way comparison, sanity check ppl in expected range. Validates pipeline before committing 12 GPU hours. If broken: fix once, not 3× | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --model mistralai/Mistral-7B-v0.1 --num-prompts 5 --out-dir data/kv_cache/mistral_7b_dryrun && python3 scripts/run_comparison.py --data-dir data/kv_cache/mistral_7b_dryrun` shows ppl ≥10 ≤500 (sanity floor/ceiling) | 1 h GPU |
+| **C1.0.0** | **Llama 2 Meta access (NEW post-C0):** open https://huggingface.co/meta-llama/Llama-2-7b-hf logged in, submit access form, wait for Meta approval. Fallback pre-authorized: `NousResearch/Llama-2-7b-hf` (no gating, bit-identical) | `cd ~/Documents/fajarquant && huggingface-cli download meta-llama/Llama-2-7b-hf --include "config.json" --local-dir /tmp/l2 && rm -rf /tmp/l2` exit 0 (no 401 error), OR `audit/C1_llama2_access.md` deleted in a commit citing the NousResearch fallback | ✅ DONE filed — `4195cfa`; PENDING USER ACTION on HF |
+| **C1.0.1** | **Qwen variant pin (NEW post-C0):** decide between `Qwen-7B` (8B params, Tongyi license), `Qwen1.5-7B`, or `Qwen2-7B` (true 7B, Apache-2.0) | `cd ~/Documents/fajarquant && grep '^variant:' audit/C1_qwen_variant.md` returns `variant: Qwen/Qwen2-7B` | ✅ DONE — `4195cfa` (pinned `Qwen/Qwen2-7B`) |
+| C1.0 | **Single-model dry run (NEW Phase A lesson):** extract Mistral 7B with **5 prompts only** (not 50), run 3-way comparison, sanity check ppl in expected range. Validates pipeline before committing 12 GPU hours | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --model mistralai/Mistral-7B-v0.1 --num-prompts 5 --out-dir data/kv_cache/mistral_7b_dryrun && python3 scripts/run_comparison.py --data-dir data/kv_cache/mistral_7b_dryrun` shows ppl ≥10 ≤500 (sanity floor/ceiling) | 1 h GPU |
 | C1.1 | Adapt `scripts/extract_kv_cache.py` for HuggingFace models with `transformers` | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --help` shows `--model` + `--num-prompts` args | 2 h |
 | C1.2 | Extract KV cache: **Mistral 7B** (50 prompts, 32 layers × 8 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/mistral_7b/metadata.json` returns 50, 32 | 4 h GPU |
-| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/llama2_7b/metadata.json` returns 50, 32 | 4 h GPU |
-| C1.4 | Extract KV cache: **Qwen 7B** or **Phi-3 mini** (modern arch, sliding window) | `cd ~/Documents/fajarquant && jq '.num_prompts' data/kv_cache/qwen_7b/metadata.json` returns 50 | 4 h GPU |
-| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen_7b; do python3 scripts/run_comparison.py --data-dir data/kv_cache/$m; done` produces `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
-| **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `~/Documents/fajarquant/docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `cd ~/Documents/fajarquant && test -f docs/V26_C1_GONOGO.md && git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
-| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen_7b; do python3 scripts/eval_perplexity.py --data-dir data/kv_cache/$m; done` produces 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers in `eval_ppl_<model>.json` | 6 h GPU |
-| C1.7 | Update paper Table 1-5 with multi-model results | `cd ~/Documents/fajarquant && git diff paper/fajarquant.tex` shows table updates; `cd paper && make` produces clean PDF | 4 h |
+| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) — **gated by C1.0.0** | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/llama2_7b/metadata.json` returns 50, 32 | 4 h GPU |
+| C1.4 | Extract KV cache: **`Qwen/Qwen2-7B`** (pinned in C1.0.1 — actual 7B params, Apache-2.0, 32 layers × 4 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/qwen2_7b/metadata.json` returns 50, 32 | 4 h GPU |
+| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen2_7b; do python3 scripts/run_comparison.py --data-dir data/kv_cache/$m; done` produces `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
+| **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen2 — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `~/Documents/fajarquant/docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen2, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `cd ~/Documents/fajarquant && test -f docs/V26_C1_GONOGO.md && git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
+| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen2_7b; do python3 scripts/eval_perplexity.py --data-dir data/kv_cache/$m; done` produces 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers in `eval_ppl_<model>.json` | 6 h GPU |
+| C1.7 | Update paper Table 1-5 with multi-model results — rename "Qwen 7B" → "Qwen2 7B" with footnote citing released 2024-06 version | `cd ~/Documents/fajarquant && git diff paper/fajarquant.tex` shows table updates; `cd paper && make` produces clean PDF | 4 h |
 
 **Gate:** FajarQuant wins ≥2/3 of models at 2-bit and 3-bit, **OR** `docs/V26_C1_GONOGO.md` documents the alternative path with reasoning.
 
