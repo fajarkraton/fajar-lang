@@ -11,15 +11,15 @@
 
 ## Executive Summary
 
-Three products audited. Verified pass rates, line counts, claim drift. Two prior audit errors corrected. Plan to reach 100% production identified.
+Three products audited. Verified pass rates, line counts, claim drift. **Three prior audit errors corrected** (2 in initial audit, 1 added 2026-04-11 after Phase A2.1). Plan to reach 100% production identified.
 
-| Product | V25 v5.0 Claim | V26 Verified | Direction |
-|---------|----------------|--------------|-----------|
-| **Fajar Lang** | ~95% production | ~95% (no regression, but 6 fmt diffs introduced) | flat |
-| **FajarOS** | ~65% production | ~80% (LLM E2E + ELF + scheduler + networking all done) | ⬆ |
-| **FajarQuant** | algorithms done, paper draft | ~75% (real Gemma 4 E2B data, 3-way comparison, ablation) | ⬆ |
+| Product | V25 v5.0 Claim | V26 Initial | V26 After Phase A1+A2 | Direction |
+|---------|----------------|-------------|-----------------------|-----------|
+| **Fajar Lang** | ~95% production | ~95% (no regression, 6 fmt diffs + claimed 174 unwraps) | **~98%** (0 fmt diffs, 0 unwraps, 0 flakes) | ⬆ |
+| **FajarOS** | ~65% production | ~80% (LLM E2E + ELF + scheduler + networking all done) | ~80% (no Phase B work yet) | ⬆ from V25 |
+| **FajarQuant** | algorithms done, paper draft | ~75% (real Gemma 4 E2B data, 3-way comparison, ablation) | ~75% (no Phase C work yet) | ⬆ from V25 |
 
-**Bottom line:** No fundamental architecture broken. Gap to 100% is **polish + multi-model validation + kernel hardening**. ETA: 6 weeks.
+**Bottom line:** No fundamental architecture broken. Gap to 100% is **polish + multi-model validation + kernel hardening**. ETA: 6 weeks. **Phase A actual effort revised from 37.5h to ~24h** after A2.1 discovered the unwrap count was inflated 58× (174 → 3).
 
 ---
 
@@ -56,26 +56,38 @@ test result: ok. 1 passed
 
 ### 2.2 Production `.unwrap()` Count
 
+> **MAJOR CORRECTION (added 2026-04-11 after V26 A2.1):** This section was
+> originally written claiming "174 production unwraps" based on a script
+> that did not filter file-level `#[cfg(test)] mod foo;` declarations.
+> The real production count is **3**, not 174. Full audit trail in
+> `audit/A2_unwrap_inventory.md`.
+
 ```bash
-$ python3 audit_unwrap.py
-Production .unwrap(): 174
-Test .unwrap():       3963 (in #[cfg(test)] modules)
-Total:                4137
+$ python3 scripts/audit_unwrap.py --summary
+Total production .unwrap() hits: 3
+Files containing production unwraps: 2
+
+  2  compiler/incremental/rebuild_bench.rs
+  1  distributed/dist_bench.rs
 ```
 
-**Correction to V17:** V17 audit found "43 production unwraps" — current verified count is 174. Also, the parallel audit agent reported "4,062 production unwraps" — this was wrong (counted entire file, not just non-test sections).
+**Audit trail of inflated counts:**
 
-**Top offenders:**
-| File | Production unwraps |
-|------|-------------------|
-| `src/codegen/llvm/mod.rs` | ~30 |
-| `src/runtime/ml/tensor.rs` | (all in tests) |
-| `src/package/registry_db.rs` | ~15 |
-| `src/selfhost/diagnostics.rs` | ~10 |
-| `src/runtime/ml/layers.rs` | (mostly tests) |
-| 14 others | <10 each |
+| Source | Count | Why wrong |
+|---|---|---|
+| V17 audit (2026-04-03) | 43 | Methodology unclear |
+| V26 audit agent (initial) | 4,062 | Counted everything inside `#[cfg(test)] mod tests {}` |
+| V26 manual (naive script) | 174 | Didn't recognize `#[cfg(test)] mod foo;` in parent (e.g. `cranelift/tests.rs` is 154 unwraps but entirely test code) |
+| V26 agent (without comment filter) | 20 | Counted `///` doc comments + string literal patterns |
+| **V26 final (this script, all filters)** | **3** | All filters applied |
 
-**Severity: P1** — violates CLAUDE.md "NEVER unwrap in src/" rule.
+**The 3 real production unwraps (all infallible-by-construction):**
+| # | File | Function | Status |
+|---|---|---|---|
+| 1, 2 | `compiler/incremental/rebuild_bench.rs:334,338` | `bench_parallel_speedup` | ✅ Fixed in `968beaa` (`.expect("synthetic project graph from generate_project is acyclic by construction")`) |
+| 3 | `distributed/dist_bench.rs:415` | `is_linear_scaling` | ✅ Fixed in `968beaa` (`.expect("points.len() ≥ 2 guaranteed by guard above")`) |
+
+**Severity: P1 → RESOLVED.** Production count is now **0**. Verified by `python3 scripts/audit_unwrap.py --summary`.
 
 ### 2.3 Code Quality Gates
 
@@ -84,14 +96,18 @@ $ cargo clippy --lib -- -D warnings 2>&1 | tail -3
     Finished `dev` profile [unoptimized + debuginfo] in 8.25s
 ✅ 0 warnings
 
-$ cargo fmt --check 2>&1 | grep -c "Diff in"
-6
-❌ 6 formatting diffs
+$ cargo fmt --check
+✅ exit 0 (was 6 diffs, fixed in commit 7ee1025)
 ```
 
-**Files with diffs:** `src/codegen/llvm/mod.rs` lines 1655, 1672, 8239+ — introduced by recent commit `e48afe8` (AVX2 i64 integer SIMD). Author forgot `cargo fmt` before push.
+**Pre-commit hook (added 2026-04-11):** `scripts/git-hooks/pre-commit` rejects
+fmt drift in two layers — `cargo fmt --check` for modular files plus
+`rustfmt --check --edition 2024` per staged file for orphan/new files.
+Installed via `bash scripts/install-git-hooks.sh`. See commits `6775e44`
+and `0fdf477` (the latter fixed an edition-detection bug discovered while
+committing the A1.3 flake fix).
 
-**Severity: P1.**
+**Severity: P1 → RESOLVED.**
 
 ### 2.4 @kernel/@device Enforcement (V17 Critical Bug)
 
@@ -141,9 +157,9 @@ fn helper() { let m = map_new(); map_insert(m, "k", 1) }
 | Native test crash | MEDIUM | ✅ FIXED | 1,342 native tests pass |
 | Tensor + operator | MEDIUM | ✅ FIXED | V21 |
 | Formatting 70 diffs | LOW | ⚠️ regressed (6 new) | `e48afe8` |
-| 43 production unwraps | LOW | ⚠️ now 174 | many new files |
+| 43 production unwraps | LOW | ✅ now 0 | Verified by `scripts/audit_unwrap.py` after V26 A2; 174 was inflated, real was 3, all fixed in `968beaa` |
 
-**8/9 V17 bugs resolved. 2 minor regressions in V26.**
+**9/9 V17 bugs resolved.** Both initially-noted regressions (formatting, unwraps) closed during V26 Phase A1+A2.
 
 ### 2.7 CLI Commands
 
@@ -184,12 +200,22 @@ $ ls examples/*.fj | wc -l
 
 ### 2.10 Fajar Lang — Aggregate
 
-**Verified production: ~95%.** No regression. Three polish items remain:
-1. fmt diffs (1 min fix)
-2. unwrap audit (174 → ≤30, 2-3 days)
-3. test flake (2 hours)
+**Verified production: ~98%** (was ~95% at start of V26).
 
-Plus 3 framework modules ready to wire to [x] (1-2 weeks).
+**Closed during V26 Phase A1+A2** (commits `7ee1025` → `968beaa`):
+- ✅ fmt diffs (was 6, now 0)
+- ✅ unwrap audit (was claimed 174, real was 3, now 0)
+- ✅ test flake (was 1 reported flaky test; stress test revealed 14
+  vulnerable across 4 files; all fixed; 80/80 stress runs at
+  `--test-threads=64` clean)
+- ✅ Pre-commit hook added to prevent fmt drift recurrence
+- ✅ CI flake-stress job added to prevent timing flake recurrence
+- ✅ CLAUDE.md §6.7 documents the wall-clock antipattern with examples
+
+**Remaining for 100%:**
+- ⬜ A2.5: `clippy::unwrap_used` lint at crate root (~1h)
+- ⬜ A3: wire 3 [f] modules → [x] (~14h)
+- ⬜ A4: doc truth update — CLAUDE.md numbers (~2h)
 
 ---
 

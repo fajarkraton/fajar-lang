@@ -39,21 +39,24 @@ FORBIDDEN: Read code → Assume behavior → Classify
 SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 ```
 
-### Fajar Lang — **~95% Production** (verified, no change from V25)
+### Fajar Lang — **~98% Production** (was ~95%, up after Phase A1+A2 partial)
 
 | Subsystem | Verified | Status |
 |-----------|----------|--------|
-| Test suite | `cargo test --lib` → **7,580 pass + 1 flake** | ✅ |
+| Test suite | `cargo test --lib` → **7,581 pass, 0 flakes** (80/80 stress runs at `--test-threads=64`) | ✅ |
 | Clippy | `cargo clippy --lib -- -D warnings` → 0 warnings | ✅ |
-| Format | `cargo fmt --check` → **6 diffs** in `src/codegen/llvm/mod.rs` (AVX2 i64 commit) | ❌ regression |
-| Production `.unwrap()` | Verified count: **174** in `src/` (excluding `#[cfg(test)]` modules) | ⚠️ violates rule |
+| Format | `cargo fmt --check` → exit 0 (was 6 diffs, fixed in `7ee1025`) | ✅ |
+| Pre-commit hook | `scripts/git-hooks/pre-commit` rejects fmt drift (commit `6775e44`) | ✅ |
+| CI flake stress | New `flake-stress` job runs `--test-threads=64 × 5` per push (commit `73ed3f0`) | ✅ |
+| Production `.unwrap()` | **0** verified by `scripts/audit_unwrap.py` (was claimed 174, real was 3, all replaced with `.expect()` in `968beaa`) | ✅ |
 | @kernel transitive heap taint | Commit `849943d` — V17 critical bug FIXED, now blocks indirect heap alloc | ✅ |
-| LLVM backend | 30+ enhancements + recent fixes (`b14f136` null-term, `3e5bae0` name collision, `e48afe8` AVX2 i64) | ✅ |
+| LLVM backend | 30+ enhancements + recent fixes (`b14f136`, `3e5bae0`, `e48afe8`, `d36661e`) | ✅ |
 | All V17 critical bugs | HashMap, JIT strings, AOT linking, native test crash, tensor `+` | ✅ ALL FIXED |
 | CLI commands | 23/23 subcommands declared in `src/main.rs` | ✅ |
-| Examples | `ls examples/*.fj | wc -l` → **228** (CLAUDE.md says 285 — drift) | ⚠️ doc drift |
-| Framework [f] modules | 5 remaining: `const_alloc`, `const_generics`, `const_traits`, `gui` (partial), `demos/` | ⚠️ |
+| Examples | `ls examples/*.fj | wc -l` → **228** (CLAUDE.md says 285 — drift, fix in A4) | ⚠️ doc drift |
+| Framework [f] modules | 5 remaining: `const_alloc`, `const_generics`, `const_traits`, `gui` (partial), `demos/` | ⚠️ A3 |
 | Modules logical | 49 [x], 0 [sim], 5 [f], 2 [s] (per V20.5 honest classification) | ✅ |
+| **Test hygiene rules** | CLAUDE.md §6.7 forbids wall-clock assertions in unit tests (commit `73ed3f0`) | ✅ |
 
 ### FajarOS — **~80% Production** (up from ~65% in V25 v5.0)
 
@@ -102,35 +105,54 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 ## 3. Phase A — Fajar Lang Polish (~95% → 100%)
 
 > **Goal:** Eliminate every drift, every unwrap, every doc lie.
-> **Duration:** 1 week
-> **Effort:** ~25 hours
+> **Duration:** 1 week (revised: A1+A2 done in ~6h instead of estimated 15h)
+> **Effort:** ~25 hours estimated; **~6h actual so far** (A1+A2 effort revised down after audit)
 > **Risk:** Low
 
-### A1: Code Quality Hygiene
+### A1: Code Quality Hygiene — ✅ ALL DONE
 
-| # | Task | Verification | Est. |
-|---|------|-------------|------|
-| A1.1 | Run `cargo fmt` to fix 6 diffs in `src/codegen/llvm/mod.rs` (AVX2 i64 commit `e48afe8`) | `cargo fmt --check` exit 0 | 1 min |
-| A1.2 | Add pre-commit hook: reject commits with fmt drift | `.git/hooks/pre-commit` runs `cargo fmt --check` | 30 min |
-| A1.3 | Investigate `compiler::incremental::validation::tests::i10_10_report_display` flake (passes isolated, fails parallel) | Test passes 10/10 in `cargo test --lib` runs | 2 h |
-| A1.4 | Fix root cause (likely shared global state in incremental cache test setup) | Identify + fix | 2 h |
+| # | Task | Verification | Status | Commit |
+|---|------|-------------|--------|--------|
+| A1.1 | Run `cargo fmt` to fix 6 diffs in `src/codegen/llvm/mod.rs` (AVX2 i64 commit `e48afe8`) | `cargo fmt --check` exit 0 | ✅ DONE | `7ee1025` |
+| A1.2 | Add pre-commit hook: reject commits with fmt drift | Hook installed via `scripts/install-git-hooks.sh`; tested 3 scenarios | ✅ DONE | `6775e44`, `0fdf477` |
+| A1.3 | Investigate flake — turned out to be 14 wall-clock timing tests across 4 files (not just `i10_10_report_display`) | 80/80 stress runs at `--test-threads=64` after fix | ✅ DONE | `13aa9e3` |
+| A1.4 | Fix root cause — was wall-clock antipattern (not shared global state as plan hypothesized); also added prevention | CI flake-stress job + CLAUDE.md §6.7 rule + memory entry | ✅ DONE | `73ed3f0` |
 
-**Gate:** `cargo test --lib && cargo clippy --lib -- -D warnings && cargo fmt --check` exit 0, three runs, no flake.
+**Discovery during A1.3:** initial audit found 1 flaky test (`i10_10_report_display`); stress testing revealed 14 vulnerable tests across 4 files all sharing the same root cause: wall-clock `assert!(elapsed < N_ms)` on simulated/microsecond-scale work, unreliable under parallel test load. Pre-fix flake rate was ~20% per full run; post-fix is 0% across 80 consecutive runs.
+
+**Gate:** `cargo test --lib && cargo clippy --lib -- -D warnings && cargo fmt --check` exit 0, **80 consecutive runs at `--test-threads=64`, 0 failures**. ✅ PASSED.
 
 ### A2: Production `.unwrap()` Audit
 
 > **Reality:** 174 production `.unwrap()` (verified, not 4062 — that's including `#[cfg(test)]` modules).
 > **Target:** ≤30 production `.unwrap()`, all justified by `// SAFETY:` comment or in unsafe block.
 
-| # | Task | Verification | Est. |
-|---|------|-------------|------|
-| A2.1 | Inventory: list all 174 production `.unwrap()` by file (grep + script) | `audit/unwrap_inventory.csv` created | 1 h |
-| A2.2 | Categorize: `infallible-by-construction` (keep + comment), `should-be-?` (refactor), `should-be-expect` (rename), `actually-fallible` (replace) | Each row classified | 2 h |
-| A2.3 | Top 5 hot files: `codegen/llvm/mod.rs`, `runtime/ml/tensor.rs`, `package/registry_db.rs`, `selfhost/diagnostics.rs`, `runtime/ml/layers.rs` | Hot files audited | 4 h |
-| A2.4 | Remaining 14 files | All replaced/justified | 8 h |
-| A2.5 | Add clippy lint `#![deny(clippy::unwrap_used)]` at crate root with `#[allow]` for justified cases | Lint enforced | 1 h |
+### A2: Production `.unwrap()` Audit — ✅ A2.1-A2.3 DONE, A2.5 PENDING
 
-**Gate:** `cargo clippy --lib -- -D clippy::unwrap_used` reports ≤30 instances, each documented.
+> **MAJOR DISCOVERY (A2.1):** the V26 plan assumed 174 production unwraps based
+> on the V26 audit's initial figure. After three layers of false-positive
+> filtering (file-level `#[cfg(test)]` declarations, inline test modules,
+> doc comments, string literals), the **real production count is 3**, not 174.
+> The 4,062 figure from the V26 audit agent was inflated 1,353× by missing
+> filters. See `audit/A2_unwrap_inventory.md` for the full audit trail.
+>
+> **Effort revision: 16 hours estimated → ~1.5 hours actual.**
+
+| # | Task | Verification | Status | Commit |
+|---|------|-------------|--------|--------|
+| A2.1 | Inventory production `.unwrap()` via `scripts/audit_unwrap.py` | `audit/unwrap_inventory.csv` created | ✅ DONE | `99a5133` |
+| A2.2 | Categorize: all 3 are `infallible-by-construction` | Documented in `audit/A2_unwrap_inventory.md` | ✅ DONE | (in `99a5133`) |
+| A2.3 | Replace 3 unwraps with `.expect("rationale")` | `python3 scripts/audit_unwrap.py --summary` → 0 hits | ✅ DONE | `968beaa` |
+| A2.4 | ~~Remaining files~~ — **N/A**, superseded by A2.1 reality (no remaining files) | — | ⚪ N/A | — |
+| A2.5 | Add `clippy::unwrap_used` lint at crate root, scoped to non-test code | `cargo clippy -- -D clippy::unwrap_used` exit 0 | ⬜ TODO | — |
+
+**The 3 real production unwraps (now fixed):**
+1. `compiler/incremental/rebuild_bench.rs:334` → `.expect("synthetic project graph from generate_project is acyclic by construction")`
+2. `compiler/incremental/rebuild_bench.rs:338` → (same expect)
+3. `distributed/dist_bench.rs:415` → `.expect("points.len() ≥ 2 guaranteed by guard above")`
+
+**Gate (revised):** `python3 scripts/audit_unwrap.py --summary` → **0 production unwraps**. ✅ ACHIEVED.
+**Lint gate (A2.5):** `cargo clippy --lib -- -D clippy::unwrap_used` → exit 0 with `#[cfg_attr(not(test), ...)]` scoping.
 
 ### A3: Module Wiring (Framework → Production)
 
@@ -158,15 +180,28 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 ### Phase A Success Criteria
 
 ```
-✅ cargo fmt --check          → exit 0
-✅ cargo clippy -- -D warnings → exit 0
-✅ cargo clippy -- -D unwrap   → ≤30 instances, all justified
-✅ cargo test --lib            → 0 failures, 0 flakes (10 runs)
-✅ Module count                → 52 [x], 0 [f]
-✅ Doc numbers                 → 100% match runnable commands
+✅ cargo fmt --check          → exit 0                                       (A1.1)
+✅ Pre-commit hook installed  → rejects fmt drift                            (A1.2)
+✅ cargo clippy -- -D warnings → exit 0                                      (ongoing)
+✅ cargo test --lib            → 0 failures, 0 flakes (80 stress runs)       (A1.3+A1.4)
+✅ CI flake-stress job         → runs --test-threads=64 × 5 per push         (A1.4)
+✅ Production .unwrap() count  → 0 (verified by scripts/audit_unwrap.py)     (A2.3)
+⬜ cargo clippy -- -D unwrap_used → exit 0 with cfg_attr(not(test))          (A2.5)
+⬜ Module count                → 52 [x], 0 [f]                                (A3)
+⬜ Doc numbers                 → 100% match runnable commands                 (A4)
 ```
 
-**Phase A target: 95% → 100% production.**
+**Phase A current: 95% → ~98% production. Target 100% pending A2.5 + A3 + A4.**
+
+### Phase A Progress Snapshot (2026-04-11)
+
+| Subphase | Estimate | Actual | Commits |
+|---|---|---|---|
+| A1 (Code Quality) | 4.5 h | ~5 h (slightly over due to flake hunt depth) | `7ee1025`, `6775e44`, `0fdf477`, `13aa9e3`, `73ed3f0` |
+| A2 (Unwrap audit) | 16 h | **~1.5 h** (count was 3 not 174) | `99a5133`, `968beaa`, A2.5 pending |
+| A3 (Module wiring) | 15 h | not started | — |
+| A4 (Doc truth) | 2 h | not started | — |
+| **Phase A total** | **37.5 h** | **~6.5 h done**, ~17 h remaining | — |
 
 ---
 

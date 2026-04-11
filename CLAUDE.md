@@ -99,25 +99,34 @@ Every Claude Code session MUST follow this order:
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V24 "Quantum", 2026-04-07)
+### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     11,395 total (7,589 lib + 954 integ + 148 context + 43 LLVM E2E + 1,342 native + 15 CUDA + 8 safety + 1,296 other) | 0 failures
-LOC:       ~446,000 lines of Rust (392 files)
-Examples:  285 .fj programs | Binary: 14 MB release | MSRV: Rust 1.87
+Tests:     7,581 lib pass + ~954 integ + ~148 context + 43 LLVM E2E + 1,342 native
+           + 15 CUDA + 8 safety + ~1,296 other ≈ 11,387 total | 0 failures, 0 flakes
+           Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
+LOC:       ~446,000 lines of Rust (~392 files)
+Examples:  228 .fj programs in examples/ | Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 49 [x], 0 [sim], 5 [f], 2 [s] (56 logical)
            Note: wasi_v12 reclassified [s]→[x] (actively used by wasm codegen)
-CLI:       29 production, 4 partial, 2 stub (35 total)
-CI:        6 GitHub Actions workflows
+CLI:       23 subcommands declared in src/main.rs, all production
+CI:        6 GitHub Actions workflows + new flake-stress job (V26 A1.4)
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
-Quality:   0 clippy warnings | 0 .unwrap() in production code | 0 test failures (11,395/11,395)
+Quality:   0 clippy warnings | 0 production .unwrap() (verified by scripts/audit_unwrap.py)
+           0 fmt diffs | 0 test failures (7,581/7,581) | 0 flakes (80 stress runs)
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, async streams, 3x speedup)
+Hooks:     Pre-commit rejects fmt drift (scripts/git-hooks/pre-commit, V26 A1.2)
 
 Labeling: [x] = production (tested, works E2E)
           [sim] = simulated — NONE REMAINING (all upgraded to [x] in V21)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
+
+Numbers verified by runnable commands as of 2026-04-11. CLAUDE.md no longer
+trusts inflated counts: prior 11,395 was 7,581+integ rounded up, 285 examples
+was incorrect (real: 228), 0 unwraps was aspirational (real before V26: 3,
+real after V26 A2.3: 0).
 ```
 
 ### V24 "Quantum" (2026-04-07) — CUDA RTX 4090 + FajarQuant + AVX2/AES-NI
@@ -849,5 +858,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 22.0 | V24 "Quantum" — 11,395 tests, ~446K LOC | CUDA RTX 4090 (9 PTX kernels), FajarQuant (55-88% MSE), AVX2+AES-NI (LLVM-only)*
-*Last Updated: 2026-04-07*
+*CLAUDE.md Version: 23.0 | V26 "Final" partial — 7,581 lib tests + 0 flakes (80/80 stress), 228 examples, 0 production .unwrap(), 0 fmt diffs | Phase A1+A2 done, A2.5+A3+A4 pending*
+*Last Updated: 2026-04-11*
