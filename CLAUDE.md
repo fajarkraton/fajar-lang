@@ -371,10 +371,12 @@ These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated cla
 
 ### 6.8 Plan Hygiene Rules (No Inflated Estimates, No Skipped Decisions)
 
-> **Reason:** V26 Phase A1+A2+A3 surfaced 6 systemic patterns that, if left
+> **Reason:** V26 Phase A1+A2+A3 surfaced 6 systemic patterns + Phase A4
+> and C3.2 added 2 more (cross-repo drift), for **8 total** that, if left
 > unchecked, distort future plans the same way prior plans were distorted.
 > A2.1 found "174 unwraps" was actually **3** (58× inflation). A1.3 found
-> "1 flaky test" was actually **14** (14× scope expansion). These are not
+> "1 flaky test" was actually **14** (14× scope expansion). A4 found
+> fajaros-x86 had **40 commits unpushed for 5 days**. These are not
 > outliers — they are the default outcome of trusting baselines without
 > hands-on verification. Full evidence: `docs/V26_PRODUCTION_PLAN.md` §10.5.
 
@@ -413,20 +415,41 @@ When writing or reviewing any plan, audit, or status doc:
 6. **Decision gates must be mechanical.** "Decision required before X"
    prose markers get skipped under execution pressure. Every decision
    must produce a committed file (e.g., `docs/V26_B5_DECISION.md`)
-   that pre-commit hooks check, mechanically blocking downstream work
-   until the file exists. (Lesson: A1.4 mechanical CI job worked where
-   prose hadn't.)
+   that pre-commit/commit-msg hooks check, mechanically blocking
+   downstream work until the file exists. (Lesson: A1.4 mechanical CI
+   job worked where prose hadn't; C3.2 implemented `commit-msg` hook
+   in fajarquant for the venue decision file.)
+
+7. **Public-facing artifact sync.** When fixing internal doc drift
+   (CLAUDE.md, status, plan), audit public artifacts in the same
+   session: README badges, git tags, GitHub Releases, project
+   description, README links. Internal fix alone is incomplete.
+   (Lesson: V26 §A4 fixed CLAUDE.md `11,395 → 7,581 tests` but missed
+   the README badge for 6 hours; V24/V25/V26 release tags didn't exist
+   on GitHub despite being in CHANGELOG; fajaros-x86 README claimed
+   `v3.0.0 Nusantara` for weeks with no matching tag.)
+
+8. **Multi-repo state check.** Before any session that crosses repo
+   boundaries, run `git status -sb` AND
+   `git rev-list --count origin/main..main` for every known local
+   repo (currently `Fajar Lang/`, `fajaros-x86/`, `fajarquant/`).
+   Single-repo `git status` misses silent accumulation. (Lesson:
+   fajaros-x86 had **40 commits unpushed for 5 days** of major
+   FajarQuant Phase 1-8 + Gemma 3 + SmolLM-135M v3-v6 work — at risk
+   of total loss on a disk failure; only manual GitHub audit caught it.)
 
 **Self-check before any plan/audit commit:**
 ```
-[ ] Pre-flight audit (B0/C0/D0) exists for the Phase?         (Rule 1)
-[ ] Every task has a runnable verification command?           (Rule 2)
-[ ] At least one prevention mechanism added (hook/CI/rule)?   (Rule 3)
-[ ] Agent-produced numbers cross-checked with Bash?           (Rule 4)
-[ ] Effort variance tagged in commit message?                 (Rule 5)
-[ ] Decisions are committed files, not prose paragraphs?      (Rule 6)
+[ ] Pre-flight audit (B0/C0/D0) exists for the Phase?           (Rule 1)
+[ ] Every task has a runnable verification command?             (Rule 2)
+[ ] At least one prevention mechanism added (hook/CI/rule)?     (Rule 3)
+[ ] Agent-produced numbers cross-checked with Bash?             (Rule 4)
+[ ] Effort variance tagged in commit message?                   (Rule 5)
+[ ] Decisions are committed files, not prose paragraphs?        (Rule 6)
+[ ] Internal doc fixes audited for public-artifact drift?       (Rule 7)
+[ ] Multi-repo state check run before starting work?            (Rule 8)
 ```
-Six NO answers = revert. Six YES answers = ship.
+Eight NO answers = revert. Eight YES answers = ship.
 
 ---
 

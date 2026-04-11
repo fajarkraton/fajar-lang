@@ -37,10 +37,12 @@ and C. v1.1 adds:
   C1.5.5 go/no-go gate after first model, C2.0 benchmark methodology
   lock-in, C3.2 hardcoded 2026-04-25 venue deadline, C4.2.5 reproduce.sh
   CI smoke test, +30% surprise budget (84h → 110h)
-- **§10.5 Plan Hygiene Rules:** 6 permanent rules (Pre-Flight Audit,
-  Runnable Verification, Prevention Layer, Multi-Agent Cross-Check,
-  Surprise Budget, Mechanical Decision Gates) — each cites the Phase A
-  incident that produced it
+- **§10.5 Plan Hygiene Rules:** initially 6 permanent rules (Pre-Flight
+  Audit, Runnable Verification, Prevention Layer, Multi-Agent
+  Cross-Check, Surprise Budget, Mechanical Decision Gates), extended to
+  **8 rules** in the C3.2 session (Public-Facing Artifact Sync,
+  Multi-Repo State Check) — each cites the Phase A or A4 incident that
+  produced it
 
 **Total effort recalibrated:** ~185h → ~219h across 6 weeks. Phase A
 real cost was ~8h (vs 37.5h estimated) so net schedule slack remains
@@ -692,10 +694,12 @@ V26 audit confirmed corrections:
 
 ## 10.5. Plan Hygiene Rules (Phase A Post-Mortem)
 
-> **Why this section exists:** Phase A1+A2+A3 surfaced 6 systemic patterns
-> that, if left unaddressed, would repeat in Phase B and C. These rules
-> are derived from actual Phase A incidents — each one cites the lesson
-> that produced it. They are **non-negotiable for all future V26 work**.
+> **Why this section exists:** Phase A1+A2+A3 surfaced 6 systemic
+> patterns and the Phase A4 + C3.2 sessions surfaced 2 more (cross-repo
+> drift), for a total of **8 systemic patterns** that, if left
+> unaddressed, would repeat in Phase B and C. These rules are derived
+> from actual Phase A incidents — each one cites the lesson that
+> produced it. They are **non-negotiable for all future V26 work**.
 
 ### Rule 1 — Pre-Flight Audit Mandatory
 
@@ -799,23 +803,92 @@ until the file exists.
 
 **How to apply:** Phase B5.0 requires `docs/V26_B5_DECISION.md`.
 Phase C1.5.5 requires `docs/V26_C1_GONOGO.md`. Phase C3.2 hardcodes
-`2026-04-25` as a hook-enforced date. All three are mechanical, not
-prose-level guidance.
+`2026-04-25` as a hook-enforced date — and the C3.2 session
+2026-04-11 implemented this as a real `commit-msg` hook in
+`fajarquant/.git/hooks/commit-msg` (installed via
+`fajarquant/scripts/install-git-hooks.sh`), tested both dormant and
+rejection paths. All three are mechanical, not prose-level guidance.
+
+### Rule 7 — Public-Facing Artifact Sync
+
+**Statement:** When fixing drift in internal docs (CLAUDE.md, status
+docs, plan docs), audit **public-facing artifacts** for matching drift
+in the same session. Internal fix alone is incomplete because internal
+and external artifacts are NOT automatically synchronized.
+
+**Public-facing artifacts to audit each time:**
+- README badges (version, tests, LOC, modules, status)
+- Git tags vs CHANGELOG.md / CLAUDE.md version mentions
+- GitHub Release notes for every version mentioned in CHANGELOG
+- GitHub project description
+- README links to releases / tags (do they 404?)
+
+**Why (Phase A4 session evidence, 2026-04-11):**
+- V26 §A4 fixed CLAUDE.md drift `11,395 → 7,581 tests` but missed the
+  identical README badge — required a follow-up commit 6 hours later
+- V23.0.0 release was tagged on GitHub but V24, V25, V26 were never
+  tagged despite being in CHANGELOG.md and CLAUDE.md — discovered only
+  by manual GitHub audit (4 release backfills required)
+- fajaros-x86 README claimed `v3.0.0 Nusantara` for weeks with no
+  matching git tag
+
+**How to apply:** Every "doc fix" commit checklist item:
+`[ ] Have I checked README badges, git tags, GitHub Releases, project
+description, README release links for the same drift?` If the answer
+is "I don't know," the doc fix is incomplete — open the GitHub repo
+page and the Releases page in a browser before claiming done.
+
+### Rule 8 — Multi-Repo State Check
+
+**Statement:** Before starting any session that crosses repo
+boundaries, run a cross-repo status check on **all known local repos**.
+Detect unpushed commits, dirty working trees, and divergence from
+origin. Single-repo `git status` is not enough — multi-repo work
+accumulates silently and a single disk failure can lose days of work.
+
+**Canonical local repos for V26 (keep this list current in MEMORY.md):**
+- `~/Documents/Fajar Lang/`
+- `~/Documents/fajaros-x86/`
+- `~/Documents/fajarquant/`
+
+**Why (Phase A4 session evidence, 2026-04-11):**
+- fajaros-x86 had 40 commits unpushed for 5 days (full FajarQuant
+  Phase 1-8 kernel port, Gemma 3 phases A-H, SmolLM-135M v3-v6) —
+  discovered only by manual GitHub audit
+- 5 days of major work was at risk if local disk had failed
+- Each individual session in fajaros-x86 felt fine; only the cross-repo
+  audit revealed the silent accumulation
+- After the V26 A4 split, fajarquant became a new repo and the C3.2
+  commit `d537b22` also sat unpushed until the user explicitly approved
+  the push — proving the silent-accumulation pattern is structural
+
+**How to apply:** Before any V26 session that touches more than one
+repo, run for each known local repo:
+```bash
+git -C "$REPO" status -sb
+git -C "$REPO" rev-list --count origin/main..main 2>/dev/null
+```
+Flag any repo with `ahead > 0` OR a dirty tree as **"needs attention"**
+in the session opener message. The hand-off doc's "Three Repos State"
+table is the canonical state record. A `scripts/multi-repo-check.sh`
+helper that wraps this loop is the natural prevention layer (Rule 3).
 
 ### Plan Hygiene Self-Check
 
 Before opening any V26 phase commit, the author must answer YES to:
 
 ```
-[ ] Does my Phase have a B0/C0/D0 pre-flight audit? (Rule 1)
-[ ] Does every task in my Phase have a runnable verification command? (Rule 2)
-[ ] Does my Phase add at least one prevention mechanism (hook/CI/rule)? (Rule 3)
-[ ] If I cite agent-produced numbers, did I cross-check them? (Rule 4)
-[ ] Did I tag effort variance in my commit message? (Rule 5)
-[ ] If my Phase has decisions, are they mechanical files not prose? (Rule 6)
+[ ] Does my Phase have a B0/C0/D0 pre-flight audit?               (Rule 1)
+[ ] Does every task in my Phase have a runnable verification cmd? (Rule 2)
+[ ] Does my Phase add at least one prevention mechanism?          (Rule 3)
+[ ] If I cite agent-produced numbers, did I cross-check them?     (Rule 4)
+[ ] Did I tag effort variance in my commit message?               (Rule 5)
+[ ] If my Phase has decisions, are they mechanical files?         (Rule 6)
+[ ] If I touched internal docs, did I check public-facing drift?  (Rule 7)
+[ ] Did I run a multi-repo state check before starting?           (Rule 8)
 ```
 
-Six NO answers = revert. Six YES answers = ship.
+Eight NO answers = revert. Eight YES answers = ship.
 
 ---
 
