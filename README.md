@@ -5,13 +5,16 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v24.0.0](https://img.shields.io/badge/release-v24.0.0_Quantum-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0)
-[![Tests](https://img.shields.io/badge/tests-11%2C395_passing-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Release v26.1.0-phase-a](https://img.shields.io/badge/release-v26.1.0--phase--a_Final-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v26.1.0-phase-a)
+[![Tests](https://img.shields.io/badge/tests-7%2C581_lib_+_2%2C374_integ-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Stress](https://img.shields.io/badge/stress-80%2F80_at_threads%3D64-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()
+[![Modules](https://img.shields.io/badge/modules-54_%5Bx%5D_%2F_0_%5Bf%5D_%2F_0_%5Bs%5D-success)]()
 [![LOC](https://img.shields.io/badge/LOC-446K_Rust-informational)]()
-[![FajarOS](https://img.shields.io/badge/FajarOS-boots_to_shell-success)]()
+[![FajarOS](https://img.shields.io/badge/FajarOS-LLM_E2E_in_kernel-success)]()
 [![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
 [![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_GPU_compute-76b900)]()
-[![FajarQuant](https://img.shields.io/badge/FajarQuant-55--88%25_MSE_improvement-orange)]()
+[![FajarQuant](https://img.shields.io/badge/FajarQuant-wins_at_2--3_bit_on_Gemma_4_E2B-orange)]()
 [![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -556,7 +559,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| [**v24.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0) | **Quantum** | **CUDA RTX 4090 GPU compute (9 PTX kernels, tiled matmul, async streams). FajarQuant complete (55-88% MSE improvement on structured data, 6.4x KV compression, up to 65% hierarchical savings). AVX2 SIMD + AES-NI via LLVM inline asm (LLVM-only). GPU codebook dot product for quantized attention. 11,395 tests.** |
+| [**v26.1.0-phase-a**](https://github.com/fajarkraton/fajar-lang/releases/tag/v26.1.0-phase-a) | **Final (Phase A)** | **V26 Phase A1+A2+A3 complete: pre-commit hook, CI flake-stress (80/80 stress runs at `--test-threads=64`), 14 wall-clock test flakes hardened, production `.unwrap()` audit (4,062 → 174 → 3 → 0, all replaced with `.expect()`), `clippy::unwrap_used` lint at crate root, 3 `const_*` modules wired (const_serialize/const_eval_nat/const_traits builtins). Modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s] — zero framework, zero stubs. CLAUDE.md §6.7 Test Hygiene + §6.8 Plan Hygiene Rules. 7,581 lib + 2,374 integ tests, 0 failures, 0 flakes.** |
+| [**v25.1.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v25.1.0) | **Production** | **V25 Production Plan v5.0 + 4 rounds of hands-on re-audit. HashMap auto-create, K8s deploy target, WGSL CodebookDot shader. FajarQuant Phase C complete: real Gemma 4 E2B 50-prompt 3-way comparison vs KIVI + TurboQuant (FajarQuant **wins at 2-bit 80.14 ppl** and **3-bit 75.65 ppl**, design tradeoff at 4-bit). Ablation: PCA 4-6%, fused attention 524,288× memory reduction, hierarchical 48.7% bit savings @ 10K context. Paper finalized (5-page LaTeX, real numbers). **`@kernel` transitive heap taint FIXED** (V17 critical bug closed). LLVM release JIT (LTO=false), println segfault, f-string codegen. ~7,581 lib tests.** |
+| [**v24.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0) | **Quantum** | **CUDA RTX 4090 GPU compute (9 PTX kernels, tiled matmul, async streams). FajarQuant Phase 5-7 wired (8 safety tests, paper benchmarks, GPU codebook dot product). AVX2 SIMD + AES-NI builtins via LLVM inline asm (LLVM-only). PTX sm_89 (Ada Lovelace) + BF16/FP8. ~3× speedup at 1024×1024 matmul on RTX 4090. ~7,572 tests.** |
 | [**v23.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v23.0.0) | **Boot** | **FajarOS boots to shell (105 commands, 90 auto-tested). Ring 3 user mode (IRETQ+SYSCALL+SYSRETQ→shell resume). FajarQuant kernel-native. NVMe storage. 22 bugs fixed: LLVM asm constraint ordering, iretq selectors, PIC/LAPIC handlers, entry block alloca, frame allocator BSF/POPCNT. x86_64-user standalone ELF target. 7,572 tests.** |
 | [v20.8.0](https://github.com/fajarkraton/fajar-lang/releases/tag/v20.8.0) | Perfection | FajarQuant, JIT 76x speedup, GPU detection (RTX 4090), 131/131 features audit, plugin CLI, strict mode. 10,400+ tests. |
 | **v12.1.0** | **Delivery** | **V15: Multi-step effect continuations (replay-with-cache), resume() no-arg, effect type/arity checking, ML shorthand builtins (tanh/concat/accuracy), .forward() method dispatch, bindgen typedef struct fix, `fj run --check-only`, `fj registry-init`, LSP effect keywords, 22+ new .fj examples. 8,092 tests.** |
