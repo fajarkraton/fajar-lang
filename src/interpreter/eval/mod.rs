@@ -1473,6 +1473,8 @@ impl Interpreter {
             "const_alloc",
             "const_size_of",
             "const_align_of",
+            // V26 A3.1: wire serialize_const() from src/const_alloc.rs
+            "const_serialize",
             // V20.5 Tier 4: New tensor/scalar ops
             "sign",
             "argmin",

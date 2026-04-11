@@ -1752,6 +1752,37 @@ impl Interpreter {
                 };
                 Ok(Value::Int(align))
             }
+            // V26 A3.1: wire src/const_alloc.rs::serialize_const() — converts a
+            // runtime value into a `.rodata`-ready byte serialization. Previously
+            // the serialize_const + ConstAllocation API was framework-only ([f] in
+            // V20.5 status). Now callable from .fj as `const_serialize(value)`.
+            "const_serialize" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let cv = value_to_comptime(&args[0]).ok_or_else(|| {
+                    RuntimeError::TypeError(
+                        "const_serialize: unsupported value type (only int, float, bool, str, array, tuple, null are serializable)".into(),
+                    )
+                })?;
+                let target = crate::const_alloc::TargetInfo::x86_64();
+                let alloc = crate::const_alloc::serialize_const("anon", &cv, &target);
+                let mut m = std::collections::HashMap::new();
+                m.insert("_type".to_string(), Value::Str("ConstAlloc".into()));
+                m.insert("size".to_string(), Value::Int(alloc.size() as i64));
+                m.insert("align".to_string(), Value::Int(alloc.align as i64));
+                m.insert("section".to_string(), Value::Str(alloc.section));
+                m.insert("type_desc".to_string(), Value::Str(alloc.type_desc));
+                m.insert(
+                    "bytes".to_string(),
+                    Value::Array(alloc.bytes.iter().map(|b| Value::Int(*b as i64)).collect()),
+                );
+                Ok(Value::Map(m))
+            }
             "metric_accuracy" | "accuracy" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
@@ -11051,5 +11082,44 @@ fn is_known_method_name(type_name: &str, field: &str) -> bool {
                 | "collect"
         ),
         _ => false,
+    }
+}
+
+/// V26 A3.1: Convert a runtime `Value` to a `ComptimeValue` for serialization
+/// via `crate::const_alloc::serialize_const`.
+///
+/// Supported: Int, Float, Bool, Str, Array, Tuple, Null. Recursive on container
+/// types. Returns `None` for unsupported variants (Tensor, Map, Function,
+/// Pointer, Layer, Optimizer, BuiltinFn, Char, Struct, Enum) — these have no
+/// well-defined serialization to a static `.rodata` byte layout.
+///
+/// Char and Struct are technically representable but not yet wired:
+/// - Char would need to map to a fixed-width encoding (u32?)
+/// - Struct field iteration order from the runtime HashMap is non-deterministic
+///   without an explicit field-name sort, which would cause serialization to
+///   produce different bytes across runs. Future work.
+fn value_to_comptime(v: &Value) -> Option<crate::analyzer::comptime::ComptimeValue> {
+    use crate::analyzer::comptime::ComptimeValue;
+    match v {
+        Value::Int(n) => Some(ComptimeValue::Int(*n)),
+        Value::Float(f) => Some(ComptimeValue::Float(*f)),
+        Value::Bool(b) => Some(ComptimeValue::Bool(*b)),
+        Value::Str(s) => Some(ComptimeValue::Str(s.clone())),
+        Value::Null => Some(ComptimeValue::Null),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(value_to_comptime(item)?);
+            }
+            Some(ComptimeValue::Array(out))
+        }
+        Value::Tuple(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(value_to_comptime(item)?);
+            }
+            Some(ComptimeValue::Tuple(out))
+        }
+        _ => None,
     }
 }

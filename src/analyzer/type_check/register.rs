@@ -1538,6 +1538,8 @@ impl TypeChecker {
             ("const_alloc", vec![Type::I64], Type::Unknown),
             ("const_size_of", vec![Type::Unknown], Type::I64),
             ("const_align_of", vec![Type::Unknown], Type::I64),
+            // V26 A3.1: serialize_const() bridge — accepts any value, returns descriptor map
+            ("const_serialize", vec![Type::Unknown], Type::Unknown),
         ];
         for (name, params, ret) in layer_fns {
             self.symbols.define(Symbol {

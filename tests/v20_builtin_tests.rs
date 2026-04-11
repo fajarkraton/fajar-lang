@@ -514,6 +514,99 @@ println(map_get_or(alloc, "size", -1))
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 12b. const_serialize — V26 A3.1: wire serialize_const() to .fj
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v26_a3_1_const_serialize_int() {
+    // i64 → 8 bytes little-endian, type "i64"
+    let out = eval_capture(
+        r#"
+let s = const_serialize(42)
+println(map_get_or(s, "size", -1))
+println(map_get_or(s, "align", -1))
+println(map_get_or(s, "type_desc", "none"))
+"#,
+    );
+    assert!(out.contains("8"), "i64 size should be 8, got: {out}");
+    assert!(out.contains("i64"), "type_desc should be i64, got: {out}");
+}
+
+#[test]
+fn v26_a3_1_const_serialize_bool() {
+    // bool → 1 byte
+    let out = eval_capture(
+        r#"
+let s = const_serialize(true)
+println(map_get_or(s, "size", -1))
+println(map_get_or(s, "align", -1))
+println(map_get_or(s, "type_desc", "none"))
+"#,
+    );
+    let lines: Vec<&str> = out
+        .trim()
+        .lines()
+        .filter(|l| !l.starts_with("[warn]") && !l.starts_with("[sim]"))
+        .collect();
+    assert!(
+        lines.contains(&"1"),
+        "bool should serialize to 1 byte: {out}"
+    );
+    assert!(out.contains("bool"), "type_desc should be bool: {out}");
+}
+
+#[test]
+fn v26_a3_1_const_serialize_str() {
+    // str → 8-byte length prefix + utf8 bytes
+    // "hello" → 8 (len prefix) + 5 (utf8) = 13 bytes
+    let out = eval_capture(
+        r#"
+let s = const_serialize("hello")
+println(map_get_or(s, "size", -1))
+println(map_get_or(s, "type_desc", "none"))
+"#,
+    );
+    assert!(out.contains("13"), "str hello should be 13 bytes: {out}");
+    assert!(
+        out.contains("str(len=5)"),
+        "type_desc should be str(len=5): {out}"
+    );
+}
+
+#[test]
+fn v26_a3_1_const_serialize_array() {
+    // [i64; 3] → 8 (count prefix) + 3*8 (elements) = 32 bytes
+    let out = eval_capture(
+        r#"
+let s = const_serialize([1, 2, 3])
+println(map_get_or(s, "size", -1))
+println(map_get_or(s, "type_desc", "none"))
+"#,
+    );
+    assert!(out.contains("32"), "[i64; 3] should be 32 bytes: {out}");
+    assert!(
+        out.contains("[i64; 3]"),
+        "type_desc should be [i64; 3]: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_1_const_serialize_returns_bytes_array() {
+    // Verify the bytes array is actually populated, not just the descriptor
+    let out = eval_capture(
+        r#"
+let s = const_serialize(42)
+let bytes = map_get_or(s, "bytes", [])
+println(len(bytes))
+"#,
+    );
+    assert!(
+        out.contains("8"),
+        "bytes array should have 8 entries: {out}"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 13. const_size_of + const_align_of (task 1.4.13)
 // ════════════════════════════════════════════════════════════════════════
 

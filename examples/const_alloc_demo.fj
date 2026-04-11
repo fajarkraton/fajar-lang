@@ -1,0 +1,59 @@
+// V26 A3.1: const_alloc + const_serialize demo
+//
+// Demonstrates the two builtin entry points to the `const_alloc` module:
+//
+//   const_alloc(size)        — reserve a fixed-size buffer descriptor
+//   const_serialize(value)   — serialize a runtime value to .rodata bytes
+//
+// Both return a Map descriptor that mirrors a real `.rodata` allocation
+// (size, alignment, section name, type description). For const_serialize,
+// the actual bytes are also returned so the caller can inspect them.
+
+fn main() {
+    println("=== const_alloc(size) — fixed-size buffer descriptor ===")
+    let buffer = const_alloc(4096)
+    println(buffer)
+    println("size  = " + to_string(map_get_or(buffer, "size", 0)))
+    println("align = " + to_string(map_get_or(buffer, "align", 0)))
+
+    println("")
+    println("=== const_serialize(value) — actual byte serialization ===")
+
+    // i64 → 8 bytes little-endian
+    let i = const_serialize(42)
+    println("int 42:")
+    println("  size  = " + to_string(map_get_or(i, "size", 0)))
+    println("  align = " + to_string(map_get_or(i, "align", 0)))
+    println("  type  = " + map_get_or(i, "type_desc", ""))
+
+    // f64 → 8 bytes
+    let f = const_serialize(3.14)
+    println("float 3.14:")
+    println("  size  = " + to_string(map_get_or(f, "size", 0)))
+    println("  type  = " + map_get_or(f, "type_desc", ""))
+
+    // bool → 1 byte
+    let b = const_serialize(true)
+    println("bool true:")
+    println("  size  = " + to_string(map_get_or(b, "size", 0)))
+    println("  align = " + to_string(map_get_or(b, "align", 0)))
+    println("  type  = " + map_get_or(b, "type_desc", ""))
+
+    // str → 8-byte length prefix + utf8 bytes
+    let s = const_serialize("hello")
+    println("str hello:")
+    println("  size  = " + to_string(map_get_or(s, "size", 0)))
+    println("  type  = " + map_get_or(s, "type_desc", ""))
+
+    // array → 8-byte count prefix + element bytes
+    let a = const_serialize([1, 2, 3])
+    println("array [1,2,3]:")
+    println("  size  = " + to_string(map_get_or(a, "size", 0)))
+    println("  type  = " + map_get_or(a, "type_desc", ""))
+
+    // null → 1 byte zero
+    let n = const_serialize(null)
+    println("null:")
+    println("  size  = " + to_string(map_get_or(n, "size", 0)))
+    println("  type  = " + map_get_or(n, "type_desc", ""))
+}
