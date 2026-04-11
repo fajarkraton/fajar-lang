@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Fajar Lang pre-commit hook — V26 Phase A1.2
+#
+# Rejects commits that introduce formatting drift.
+# Bypass with --no-verify if absolutely necessary (discouraged).
+#
+# Source of truth: scripts/git-hooks/pre-commit
+# Install via:    bash scripts/install-git-hooks.sh
+#
+# Two checks:
+#   1. cargo fmt --check        — catches drift in modular files (reachable via mod)
+#   2. rustfmt --check <files>  — catches drift in staged orphan files (new files
+#                                  not yet declared in lib.rs/main.rs)
+
+set -e
+
+# Only run if there are staged Rust files. If none, skip.
+RUST_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.rs$' || true)
+
+if [ -z "$RUST_FILES" ]; then
+    exit 0
+fi
+
+LOG=/tmp/fajar-fmt-check.log
+FAIL=0
+
+# Check 1: cargo fmt --check (whole crate, modular files only)
+if ! cargo fmt --check > "$LOG" 2>&1; then
+    FAIL=1
+fi
+
+# Check 2: rustfmt --check on each staged .rs file (catches orphan files)
+ORPHAN_DRIFT=""
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    [ -f "$f" ] || continue  # skip deleted files
+    if ! rustfmt --check --quiet "$f" 2>/dev/null; then
+        ORPHAN_DRIFT="$ORPHAN_DRIFT  $f"$'\n'
+        FAIL=1
+    fi
+done <<< "$RUST_FILES"
+
+if [ "$FAIL" -eq 1 ]; then
+    echo ""
+    echo "❌ Pre-commit blocked: formatting drift detected."
+    echo ""
+    if grep -q "^Diff in" "$LOG" 2>/dev/null; then
+        echo "Modular files with diffs (cargo fmt --check):"
+        grep "^Diff in" "$LOG" | sed 's/^/  /'
+        echo ""
+    fi
+    if [ -n "$ORPHAN_DRIFT" ]; then
+        echo "Staged files with diffs (rustfmt --check):"
+        echo -n "$ORPHAN_DRIFT"
+        echo ""
+    fi
+    echo "Fix with:    cargo fmt"
+    echo "             rustfmt <orphan_file>  # for files not in mod tree"
+    echo "Then:        git add -u && git commit"
+    echo ""
+    echo "Bypass (discouraged):  git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+exit 0
