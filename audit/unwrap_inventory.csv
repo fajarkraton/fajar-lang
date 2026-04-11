@@ -1,0 +1,4 @@
+file,line,function,snippet
+distributed/dist_bench.rs,415,fn is_linear_scaling,let last = self.points.last().unwrap();
+compiler/incremental/rebuild_bench.rs,334,fn bench_parallel_speedup,let _levels_1 = topological_levels(&units).unwrap();
+compiler/incremental/rebuild_bench.rs,338,fn bench_parallel_speedup,let levels_8 = topological_levels(&units).unwrap();
