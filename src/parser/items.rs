@@ -911,6 +911,9 @@ impl Parser {
     /// Parses a trait method: signature with optional body.
     ///
     /// If no `{` follows the signature, an empty block body is used (abstract method).
+    ///
+    /// V26 A3.3: Accepts an optional `const` (or `comptime`) keyword before
+    /// `fn`, marking the method as const-evaluable. Sets `FnDef.is_const`.
     fn parse_trait_method(&mut self, annotation: Option<Annotation>) -> Result<FnDef, ParseError> {
         let start = if let Some(ref ann) = annotation {
             ann.span.start
@@ -919,6 +922,8 @@ impl Parser {
         };
 
         let is_async = self.eat(&TokenKind::Async);
+        // V26 A3.3: optional `const`/`comptime` before `fn`
+        let is_const = self.eat(&TokenKind::Const) || self.eat(&TokenKind::Comptime);
 
         self.expect(&TokenKind::Fn)?;
         let (name, _) = self.expect_ident()?;
@@ -953,7 +958,7 @@ impl Parser {
 
         Ok(FnDef {
             is_pub: false,
-            is_const: false,
+            is_const,
             is_async,
             is_gen: false,
             is_test: false,

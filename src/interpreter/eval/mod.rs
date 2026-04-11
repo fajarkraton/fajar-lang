@@ -1477,6 +1477,10 @@ impl Interpreter {
             "const_serialize",
             // V26 A3.2: wire parse_nat_expr() + eval_nat() from src/const_generics.rs
             "const_eval_nat",
+            // V26 A3.3: wire ConstTraitRegistry from src/const_traits.rs
+            "const_trait_list",
+            "const_trait_implements",
+            "const_trait_resolve",
             // V20.5 Tier 4: New tensor/scalar ops
             "sign",
             "argmin",

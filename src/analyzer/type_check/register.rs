@@ -1547,6 +1547,18 @@ impl TypeChecker {
                 vec![Type::Str, Type::Unknown],
                 Type::Unknown,
             ),
+            // V26 A3.3: ConstTraitRegistry bridge — query built-in const traits.
+            ("const_trait_list", vec![], Type::Unknown),
+            (
+                "const_trait_implements",
+                vec![Type::Str, Type::Str],
+                Type::Bool,
+            ),
+            (
+                "const_trait_resolve",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Unknown,
+            ),
         ];
         for (name, params, ret) in layer_fns {
             self.symbols.define(Symbol {

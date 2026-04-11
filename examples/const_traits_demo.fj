@@ -1,0 +1,49 @@
+// V26 A3.3: const_traits demo
+//
+// Demonstrates the const_traits module's two production surfaces:
+//
+// 1. SYNTAX: `const fn` inside a `trait` body. The parser now accepts the
+//    `const` (or `comptime`) keyword before `fn` in trait method declarations,
+//    setting `FnDef.is_const = true`. The method bodies typecheck normally.
+//
+// 2. REGISTRY (builtins): The const_traits module ships with 5 built-in
+//    const traits and impls for 14 numeric types. These were sitting in
+//    memory with zero callers from .fj. Now queryable via:
+//
+//    const_trait_list()                              → [trait names]
+//    const_trait_implements(type_name, trait_name)   → bool
+//    const_trait_resolve(type, trait, method)        → mangled name | null
+
+// === 1. const fn inside trait body (V26 A3.3 parser fix) ===
+// Before A3.3 this caused a PE002 parse error.
+trait NumOps {
+    const fn add_one() -> i64 { 1 }
+    const fn double() -> i64 { 2 }
+    fn dynamic() -> i64 { 99 }   // regular (non-const) method also allowed
+}
+
+fn main() {
+    println("=== const fn in trait body ===")
+    println("compiled")
+
+    println("")
+    println("=== const_trait_list — registered built-in const traits ===")
+    let traits = const_trait_list()
+    println(traits)
+    println("count = " + to_string(len(traits)))
+
+    println("")
+    println("=== const_trait_implements — query the registry ===")
+    println("i64 implements ConstAdd  = " + to_string(const_trait_implements("i64", "ConstAdd")))
+    println("f64 implements ConstMul  = " + to_string(const_trait_implements("f64", "ConstMul")))
+    println("u32 implements ConstOrd  = " + to_string(const_trait_implements("u32", "ConstOrd")))
+    println("str implements ConstAdd  = " + to_string(const_trait_implements("str", "ConstAdd")))
+    println("bool implements ConstEq  = " + to_string(const_trait_implements("bool", "ConstEq")))
+
+    println("")
+    println("=== const_trait_resolve — get mangled method name ===")
+    println("(i64, ConstAdd, const_add)  = " + to_string(const_trait_resolve("i64", "ConstAdd", "const_add")))
+    println("(f64, ConstMul, const_mul)  = " + to_string(const_trait_resolve("f64", "ConstMul", "const_mul")))
+    println("(str, ConstAdd, const_add)  = " + to_string(const_trait_resolve("str", "ConstAdd", "const_add")))
+    println("(i64, ConstAdd, missing)    = " + to_string(const_trait_resolve("i64", "ConstAdd", "missing")))
+}

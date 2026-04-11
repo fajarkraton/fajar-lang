@@ -1752,6 +1752,104 @@ impl Interpreter {
                 };
                 Ok(Value::Int(align))
             }
+            // V26 A3.3: wire src/const_traits.rs::ConstTraitRegistry — exposes
+            // the 5 built-in const traits (ConstEq, ConstOrd, ConstDefault,
+            // ConstAdd, ConstMul) and their 70 numeric-type implementations.
+            // Previously imported by analyzer but only PoC-wired (registry
+            // created and discarded). Now queryable from .fj.
+            "const_trait_list" => {
+                if !args.is_empty() {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 0,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let reg = crate::const_traits::ConstTraitRegistry::new();
+                let mut names: Vec<String> = reg.traits.keys().cloned().collect();
+                names.sort(); // deterministic order
+                Ok(Value::Array(
+                    names.into_iter().map(Value::Str).collect::<Vec<_>>(),
+                ))
+            }
+            // const_trait_implements(type_name: str, trait_name: str) -> bool
+            // Returns true if `type_name` has a registered impl for `trait_name`
+            // in the built-in registry. E.g., ("i64", "ConstAdd") → true.
+            "const_trait_implements" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let type_name = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_trait_implements: first arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let trait_name = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_trait_implements: second arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let reg = crate::const_traits::ConstTraitRegistry::new();
+                Ok(Value::Bool(reg.type_implements(&type_name, &trait_name)))
+            }
+            // const_trait_resolve(type_name: str, trait_name: str, method: str) -> str | null
+            // Returns the mangled method impl name if the type implements the
+            // trait and the method exists. E.g.:
+            //   ("i64", "ConstAdd", "const_add") → "ConstAdd_i64_const_add"
+            //   ("str", "ConstAdd", "const_add") → null (str isn't numeric)
+            "const_trait_resolve" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 3,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let type_name = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_trait_resolve: first arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let trait_name = match &args[1] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_trait_resolve: second arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let method = match &args[2] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_trait_resolve: third arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let reg = crate::const_traits::ConstTraitRegistry::new();
+                match reg.resolve_method(&type_name, &trait_name, &method) {
+                    Some(name) => Ok(Value::Str(name)),
+                    None => Ok(Value::Null),
+                }
+            }
             // V26 A3.2: wire src/const_generics.rs::parse_nat_expr() + eval_nat()
             // — evaluates a Nat expression like "5+3" or "N*2-1" given an
             // optional bindings map. Bridges the const_generics module's

@@ -713,6 +713,120 @@ println(b.capacity)
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 12d. const_traits — V26 A3.3: parser fix + ConstTraitRegistry builtins
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v26_a3_3_const_fn_in_trait_body_parses() {
+    // Before A3.3 this caused PE002 — parse_trait_method didn't accept
+    // optional `const` keyword before `fn`. Now it does.
+    let out = eval_capture(
+        r#"
+trait NumOps {
+    const fn add_one() -> i64 { 1 }
+    const fn double() -> i64 { 2 }
+    fn dynamic() -> i64 { 99 }
+}
+println("compiled")
+"#,
+    );
+    assert!(
+        out.contains("compiled"),
+        "trait with const fn should compile: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_3_const_trait_list_returns_5_builtins() {
+    // ConstTraitRegistry::new() registers 5 built-in const traits.
+    let out = eval_capture(
+        r#"
+let traits = const_trait_list()
+println(len(traits))
+println(traits)
+"#,
+    );
+    assert!(
+        out.contains("5"),
+        "should have 5 built-in const traits: {out}"
+    );
+    // Names sorted alphabetically: ConstAdd, ConstDefault, ConstEq, ConstMul, ConstOrd
+    assert!(out.contains("ConstAdd"), "should contain ConstAdd: {out}");
+    assert!(out.contains("ConstEq"), "should contain ConstEq: {out}");
+    assert!(out.contains("ConstMul"), "should contain ConstMul: {out}");
+    assert!(out.contains("ConstOrd"), "should contain ConstOrd: {out}");
+    assert!(
+        out.contains("ConstDefault"),
+        "should contain ConstDefault: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_3_const_trait_implements_numeric() {
+    // All 14 numeric types implement ConstAdd, ConstMul, ConstEq, ConstOrd, ConstDefault.
+    let out = eval_capture(
+        r#"
+println(const_trait_implements("i64", "ConstAdd"))
+println(const_trait_implements("f64", "ConstMul"))
+println(const_trait_implements("u32", "ConstOrd"))
+"#,
+    );
+    let trues = out.matches("true").count();
+    assert!(trues >= 3, "all 3 should be true: {out}");
+}
+
+#[test]
+fn v26_a3_3_const_trait_implements_negative_cases() {
+    // str only implements ConstEq, not ConstAdd. unknown_type implements nothing.
+    let out = eval_capture(
+        r#"
+println(const_trait_implements("str", "ConstAdd"))
+println(const_trait_implements("xyz_unknown", "ConstAdd"))
+println(const_trait_implements("str", "ConstEq"))
+"#,
+    );
+    let lines: Vec<&str> = out
+        .trim()
+        .lines()
+        .filter(|l| !l.starts_with("[warn]") && !l.starts_with("[sim]"))
+        .collect();
+    // First two should be false, third (str+ConstEq) should be true
+    assert!(
+        lines.iter().any(|l| l.trim() == "false"),
+        "should have false: {out}"
+    );
+    assert!(
+        lines.iter().any(|l| l.trim() == "true"),
+        "should have true: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_3_const_trait_resolve_returns_mangled_name() {
+    let out = eval_capture(
+        r#"
+println(const_trait_resolve("i64", "ConstAdd", "const_add"))
+"#,
+    );
+    assert!(
+        out.contains("ConstAdd_i64_const_add"),
+        "should return mangled name: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_3_const_trait_resolve_unknown_returns_null() {
+    let out = eval_capture(
+        r#"
+println(const_trait_resolve("str", "ConstAdd", "const_add"))
+println(const_trait_resolve("i64", "ConstAdd", "nonexistent"))
+"#,
+    );
+    let null_count = out.matches("null").count();
+    assert!(null_count >= 2, "both should return null: {out}");
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 13. const_size_of + const_align_of (task 1.4.13)
 // ════════════════════════════════════════════════════════════════════════
 
