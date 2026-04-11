@@ -331,11 +331,15 @@ pub fn bench_parallel_speedup() -> BenchResult {
     let units = generate_project(50);
 
     // 1 thread
-    let _levels_1 = topological_levels(&units).unwrap();
+    // generate_project(50) builds a deterministic DAG (core → mod_0..mod_47 → main),
+    // so topological_levels cannot fail with a cycle error.
+    let _levels_1 = topological_levels(&units)
+        .expect("synthetic project graph from generate_project is acyclic by construction");
 
     // 8 threads (simulated — levels allow parallelism)
     let start8 = Instant::now();
-    let levels_8 = topological_levels(&units).unwrap();
+    let levels_8 = topological_levels(&units)
+        .expect("synthetic project graph from generate_project is acyclic by construction");
     let max_level_size = levels_8.iter().map(|l| l.modules.len()).max().unwrap_or(1);
     let dur_8 = start8.elapsed();
 

@@ -412,7 +412,11 @@ impl ScalabilityReport {
             return false;
         }
         let first = &self.points[0];
-        let last = self.points.last().unwrap();
+        // Guarded by `self.points.len() < 2` check above: len ≥ 2 ⇒ last() is Some.
+        let last = self
+            .points
+            .last()
+            .expect("points.len() ≥ 2 guaranteed by guard above");
         if first.throughput == 0.0 || first.nodes == 0 {
             return false;
         }
