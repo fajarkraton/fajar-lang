@@ -11,6 +11,10 @@ name = "fj"
 path = "src/main.rs"
 
 [dependencies]
+# FajarQuant — extracted to standalone crate (V26 Phase A4 split, 2026-04-11).
+# Path dep during local dev; switch to git/version dep before publishing fajar-lang to crates.io.
+fajarquant = { path = "../fajarquant" }
+
 thiserror = "2.0"
 miette = { version = "7.0", features = ["fancy"] }
 clap = { version = "4.5", features = ["derive"] }

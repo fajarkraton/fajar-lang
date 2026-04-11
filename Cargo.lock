@@ -1400,6 +1400,7 @@ dependencies = [
  "criterion",
  "dap",
  "ed25519-dalek",
+ "fajarquant",
  "getrandom 0.2.17",
  "hmac",
  "inkwell",
@@ -1432,6 +1433,13 @@ dependencies = [
  "wgpu",
  "winit",
  "z3",
+]
+
+[[package]]
+name = "fajarquant"
+version = "0.1.0"
+dependencies = [
+ "ndarray",
 ]
 
 [[package]]

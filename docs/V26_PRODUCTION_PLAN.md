@@ -1,12 +1,26 @@
 # V26 "Final" — Path to 100% Production Across All Three Products
 
-> **Version:** 1.1 (2026-04-11) — comprehensively revised after Phase A post-mortem
+> **Version:** 1.2 (2026-04-11) — FajarQuant extracted to standalone repo (Phase A4 split)
 > **Author:** Muhamad Fajar Putranto, SE., SH., MH. (TaxPrime / PrimeCore.id)
 > **Predecessor:** V25 v5.0 "Production" (2026-04-07) — partial completion
 > **Audit method:** Hands-on verification (run + read + cross-check), not document trust
 > **Standard:** [x] only when actual execution produces verifiable correct output
 > **Model:** Claude Opus 4.6 exclusively
-> **Status:** Phase A1+A2+A3 DONE; Phase B+C plans hardened with §10.5 Plan Hygiene Rules
+> **Status:** Phase A1+A2+A3+A4 DONE; Phase B+C plans hardened with §10.5 Plan Hygiene Rules; FajarQuant now in standalone repo `fajarkraton/fajarquant`
+
+### v1.2 Revision Notes (2026-04-11)
+
+After v1.1 plan hardening was committed, an audit of GitHub state surfaced
+a **third pattern** not covered by Plan Hygiene Rules 1-6: FajarQuant
+positioning. The repo split decision encoded the answer.
+
+- **FajarQuant extracted to standalone repo `fajarkraton/fajarquant`** (Phase A4 split):
+  - Algorithm sources moved from `fajar-lang/src/runtime/ml/{turboquant.rs, fajarquant/}` → standalone Cargo crate at `~/Documents/fajarquant/src/`
+  - Paper, data (61 MB Gemma 4 E2B KV cache), reproducibility scripts moved
+  - Integration tests stay in `fajar-lang/tests/fajarquant_*.rs` (verify wire-up, all 16 pass)
+  - fajar-lang depends via Cargo path/git dep + re-export shim in `src/runtime/ml/{fajarquant/mod.rs, turboquant.rs}` — zero call sites in `builtins.rs` had to change
+  - **Reasons:** match competitor precedent (KIVI/AQLM/TurboQuant all standalone); cleaner MLSys 2027 paper citation; lower onboarding friction for researchers (~6K LOC vs 446K compiler clone); independent versioning and issue tracker; matches "three products" narrative
+  - **All Phase C task verification commands updated** to `cd ~/Documents/fajarquant && ...`
 
 ### v1.1 Revision Notes (2026-04-11)
 
@@ -45,11 +59,11 @@ positive despite the +34h budget addition.
 
 ### Three Products, One Ecosystem
 
-| Product | Mission | Surpasses |
-|---------|---------|-----------|
-| **Fajar Lang** | The best systems programming language for ML + OS integration — explicitness, dual-context safety, native tensor types | Rust (no lifetime annotations), C++ (compile-time ML safety), Python (bare-metal capable) |
-| **FajarOS** | A production OS written 100% in Fajar Lang with kernel-native LLM inference (SmolLM-135M) — no userspace, no syscall, no driver — pure Ring 0 | Linux/macOS (none have kernel LLM), seL4 (no ML), MINIX (no GPU) |
-| **FajarQuant** | State-of-the-art adaptive vector quantization for LLM KV cache — wins at 2-3 bit on real Gemma 4 E2B perplexity, with compile-time safety guarantees no PyTorch implementation has | TurboQuant (2-3 bit), KIVI (memory + perplexity), AQLM (deployment safety) |
+| Product | Repo | Mission | Surpasses |
+|---------|------|---------|-----------|
+| **Fajar Lang** | [`fajarkraton/fajar-lang`](https://github.com/fajarkraton/fajar-lang) | The best systems programming language for ML + OS integration — explicitness, dual-context safety, native tensor types | Rust (no lifetime annotations), C++ (compile-time ML safety), Python (bare-metal capable) |
+| **FajarOS** | [`fajarkraton/fajaros-x86`](https://github.com/fajarkraton/fajaros-x86) | A production OS written 100% in Fajar Lang with kernel-native LLM inference (SmolLM-135M) — no userspace, no syscall, no driver — pure Ring 0 | Linux/macOS (none have kernel LLM), seL4 (no ML), MINIX (no GPU) |
+| **FajarQuant** | [`fajarkraton/fajarquant`](https://github.com/fajarkraton/fajarquant) **(NEW 2026-04-11)** | State-of-the-art adaptive vector quantization for LLM KV cache — wins at 2-3 bit on real Gemma 4 E2B perplexity, with compile-time safety guarantees no PyTorch implementation has | TurboQuant (2-3 bit), KIVI (memory + perplexity), AQLM (deployment safety) |
 
 ---
 
@@ -109,11 +123,12 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 
 | Subsystem | Verified | Status |
 |-----------|----------|--------|
-| Algorithm modules | `src/runtime/ml/fajarquant/` — **1,743 LOC** in 5 files (adaptive 518 + fused_attention 320 + hierarchical 401 + kivi 493 + mod 11) | ✅ |
+| **Repo location** | **Standalone repo `fajarkraton/fajarquant`** (extracted 2026-04-11, V26 Phase A4 split). fajar-lang depends via path/git Cargo dep + thin re-export shim in `src/runtime/ml/{fajarquant/mod.rs, turboquant.rs}`. All Phase C tasks below run in `~/Documents/fajarquant/`, NOT in fajar-lang. | ✅ |
+| Algorithm modules | `~/Documents/fajarquant/src/` — **1,743 LOC** in 5 files (adaptive 518 + fused_attention 320 + hierarchical 401 + kivi 493 + lib.rs 80) + turboquant.rs (baseline, 533 LOC) | ✅ |
 | Test count | **38 tests pass:** 22 unit + 8 e2e + 8 safety (V25 promised 31) | ✅ exceeds |
 | Demos | **5 demos** in `examples/`: adaptive, benchmark, fused, kv_cache, paper_benchmark (V25 promised 6 — `hierarchical_demo` missing) | ⚠️ |
-| Paper | `paper/fajarquant.tex` 407 lines → **5-page PDF** (507 KB), 6 tables, 7 references, ablation, reproducibility | ✅ |
-| Real KV cache data | Gemma 4 E2B, 50 prompts, `data/kv_cache/` populated | ✅ |
+| Paper | `~/Documents/fajarquant/paper/fajarquant.tex` 407 lines → **5-page PDF** (507 KB), 6 tables, 7 references, ablation, reproducibility | ✅ |
+| Real KV cache data | Gemma 4 E2B, 50 prompts, `~/Documents/fajarquant/data/kv_cache/` (61 MB) | ✅ |
 | 3-way comparison | FajarQuant **WINS at 2-bit** (80.14 ppl) and **3-bit** (75.65 ppl); LOSES at 4-bit (157 vs TurboQuant 92.84) | ✅ design tradeoff |
 | Ablation study | PCA rotation 4-6%, fused attention 524,288× memory reduction, hierarchical 48.7% bit savings @ 10K context | ✅ |
 | Kernel port (Phase 1-2) | `kernel/compute/fajarquant.fj` + `kmatrix.fj` (1,743 LOC, all `@kernel`-safe) | ✅ |
@@ -122,7 +137,7 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 | **Kernel Phase 3-8** | Plan describes 8 phases; only 1-2 done. "Kernel-native LLM" claim premature | ⚠️ scope clarity |
 | **Reproducibility automation** | Scripts work IF Gemma 4 E2B available; no fallback | ⚠️ |
 | **Per-function rustdoc** | Section-level `//!` exists; per-`pub fn` sparse | ⚠️ |
-| **Ablation JSON** | `data/kv_cache/ablation_results.json:80` malformed (paper tables OK) | ⚠️ |
+| **Ablation JSON** | `~/Documents/fajarquant/data/kv_cache/ablation_results.json:80` malformed (paper tables OK) | ⚠️ |
 
 ---
 
@@ -399,6 +414,16 @@ escalates to +40%.
 > **Verification rule:** Every row in C0-C4 has a **runnable command** in
 > its Verification column. Lesson: V26 audit agent claimed "0 unwraps" and
 > "no LLM cmd" — both wrong, only commands catch this.
+>
+> **REPO LOCATION (NEW 2026-04-11):** All Phase C work happens in the
+> standalone repo `~/Documents/fajarquant/` (GitHub: `fajarkraton/fajarquant`),
+> not in `Fajar Lang/`. The extraction was done in V26 Phase A4 split because
+> FajarQuant is now positioned as one of three independent products with its
+> own paper, versioning, citation, and reproducibility CI. The fajar-lang
+> compiler still uses FajarQuant via a Cargo path/git dependency + thin
+> re-export shim, so all 16 integration tests in `Fajar Lang/tests/fajarquant_*.rs`
+> continue to pass unchanged. Each verification command below specifies the
+> exact `cd` target.
 
 ### C0: Pre-Flight Audit — NEW (Phase A lesson)
 
@@ -409,13 +434,13 @@ escalates to +40%.
 
 | # | Task | Verification command | Est. |
 |---|------|---------------------|------|
-| C0.1 | Re-verify algorithm LOC: confirm `1,743 LOC across 5 files` | `find src/runtime/ml/fajarquant -name "*.rs" \| xargs wc -l \| tail -1` matches audit §4.1 | 15 min |
-| C0.2 | Re-verify test count: 22 unit + 8 e2e + 8 safety = 38 | `cargo test fajarquant --lib 2>&1 \| grep "test result"` + `wc -l tests/fajarquant_*.rs` | 15 min |
-| C0.3 | Re-verify demo count: 5 in `examples/`, hierarchical missing | `ls examples/fajarquant_*.fj \| wc -l` | 5 min |
-| C0.4 | Re-verify paper data integrity: confirm `data/kv_cache/ablation_results.json:80` actually malformed | `jq . data/kv_cache/ablation_results.json 2>&1 \| head` | 10 min |
-| C0.5 | Re-verify 3-way comparison numbers in `paper/fajarquant.tex` against `data/kv_cache/comparison_results.json` (no doc drift between paper and source data) | `python3 scripts/verify_paper_tables.py` (script to be written in C0.5) | 1 h |
-| C0.6 | Snapshot HuggingFace model availability: `Mistral 7B`, `Llama 2 7B`, `Qwen 7B`, `Phi-3 mini` — confirm no license blockers | `audit/C0_model_availability.md` with HF URL + license + size | 1 h |
-| C0.7 | GPU budget snapshot: `nvidia-smi`, available VRAM, current other workloads | `audit/C0_gpu_state.json` | 15 min |
+| C0.1 | Re-verify algorithm LOC in standalone repo | `cd ~/Documents/fajarquant && find src -name "*.rs" \| xargs wc -l \| tail -1` ≈ 2,276 LOC (1,743 fajarquant + 533 turboquant) | 15 min |
+| C0.2 | Re-verify test count: 29 unit (in fajarquant repo) + 16 integ (still in fajar-lang) = 45 total | `cd ~/Documents/fajarquant && cargo test --lib 2>&1 \| grep "test result"` shows 29 + `cd ~/Documents/Fajar\ Lang && cargo test --test fajarquant_e2e_tests --test fajarquant_safety_tests 2>&1 \| grep "test result"` shows 8+8 | 15 min |
+| C0.3 | Re-verify demo count: 5 in fajarquant repo, hierarchical missing | `cd ~/Documents/fajarquant && ls examples/*.fj \| wc -l` (no `fajarquant_` prefix anymore) | 5 min |
+| C0.4 | Re-verify paper data integrity: confirm `ablation_results.json:80` actually malformed | `cd ~/Documents/fajarquant && jq . data/kv_cache/ablation_results.json 2>&1 \| head` | 10 min |
+| C0.5 | Re-verify 3-way comparison numbers in paper against source data (no drift) | `cd ~/Documents/fajarquant && python3 scripts/verify_paper_tables.py` (script to be written in C0.5) | 1 h |
+| C0.6 | Snapshot HuggingFace model availability: `Mistral 7B`, `Llama 2 7B`, `Qwen 7B`, `Phi-3 mini` — confirm no license blockers | `~/Documents/fajarquant/audit/C0_model_availability.md` with HF URL + license + size | 1 h |
+| C0.7 | GPU budget snapshot: `nvidia-smi`, available VRAM, current other workloads | `~/Documents/fajarquant/audit/C0_gpu_state.json` | 15 min |
 
 **Gate:** `docs/V26_C0_FINDINGS.md` committed with revised C1-C4 estimates. **C1 cannot start until C0 lands.** If model availability blocks any of the 3 (e.g., Llama 2 license issue), substitute via Mistral variant + document.
 
@@ -425,15 +450,15 @@ escalates to +40%.
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C1.0 | **Single-model dry run (NEW Phase A lesson):** extract Mistral 7B with **5 prompts only** (not 50), run 3-way comparison, sanity check ppl in expected range. Validates pipeline before committing 12 GPU hours. If broken: fix once, not 3× | `data/kv_cache/mistral_7b_dryrun/` exists; `comparison_results_mistral_dryrun.json` shows ppl ≥10 ≤500 (sanity floor/ceiling) | 1 h GPU |
-| C1.1 | Adapt `scripts/extract_kv_cache.py` for HuggingFace models with `transformers` | Script accepts `--model <name>` arg + `--num-prompts <n>` arg (so C1.0 dry run reuses same code) | 2 h |
-| C1.2 | Extract KV cache: **Mistral 7B** (50 prompts, 32 layers × 8 KV heads × 128 dim) | `data/kv_cache/mistral_7b/metadata.json` shows 50 prompts, 32 layers | 4 h GPU |
-| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) | `data/kv_cache/llama2_7b/metadata.json` shows 50 prompts, 32 layers | 4 h GPU |
-| C1.4 | Extract KV cache: **Qwen 7B** or **Phi-3 mini** (modern arch, sliding window) | `data/kv_cache/qwen_7b/metadata.json` shows 50 prompts | 4 h GPU |
-| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
-| **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `docs/V26_C1_GONOGO.md` exists with chosen path; `git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
-| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers in `eval_ppl_<model>.json` | 6 h GPU |
-| C1.7 | Update paper Table 1-5 with multi-model results | `git diff paper/fajarquant.tex` shows table updates; `pdflatex` produces clean PDF | 4 h |
+| C1.0 | **Single-model dry run (NEW Phase A lesson):** extract Mistral 7B with **5 prompts only** (not 50), run 3-way comparison, sanity check ppl in expected range. Validates pipeline before committing 12 GPU hours. If broken: fix once, not 3× | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --model mistralai/Mistral-7B-v0.1 --num-prompts 5 --out-dir data/kv_cache/mistral_7b_dryrun && python3 scripts/run_comparison.py --data-dir data/kv_cache/mistral_7b_dryrun` shows ppl ≥10 ≤500 (sanity floor/ceiling) | 1 h GPU |
+| C1.1 | Adapt `scripts/extract_kv_cache.py` for HuggingFace models with `transformers` | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --help` shows `--model` + `--num-prompts` args | 2 h |
+| C1.2 | Extract KV cache: **Mistral 7B** (50 prompts, 32 layers × 8 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/mistral_7b/metadata.json` returns 50, 32 | 4 h GPU |
+| C1.3 | Extract KV cache: **Llama 2 7B** (50 prompts, 32 layers × 32 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/llama2_7b/metadata.json` returns 50, 32 | 4 h GPU |
+| C1.4 | Extract KV cache: **Qwen 7B** or **Phi-3 mini** (modern arch, sliding window) | `cd ~/Documents/fajarquant && jq '.num_prompts' data/kv_cache/qwen_7b/metadata.json` returns 50 | 4 h GPU |
+| C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen_7b; do python3 scripts/run_comparison.py --data-dir data/kv_cache/$m; done` produces `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
+| **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `~/Documents/fajarquant/docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `cd ~/Documents/fajarquant && test -f docs/V26_C1_GONOGO.md && git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
+| C1.6 | Run perplexity eval on WikiText-2 for each model × bit width | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen_7b; do python3 scripts/eval_perplexity.py --data-dir data/kv_cache/$m; done` produces 3 models × 3 bit widths × 3 algorithms = 27 PPL numbers in `eval_ppl_<model>.json` | 6 h GPU |
+| C1.7 | Update paper Table 1-5 with multi-model results | `cd ~/Documents/fajarquant && git diff paper/fajarquant.tex` shows table updates; `cd paper && make` produces clean PDF | 4 h |
 
 **Gate:** FajarQuant wins ≥2/3 of models at 2-bit and 3-bit, **OR** `docs/V26_C1_GONOGO.md` documents the alternative path with reasoning.
 
@@ -454,20 +479,20 @@ escalates to +40%.
 
 | # | Task | Verification command | Est. |
 |---|------|---------------------|------|
-| C2.0.1 | Document methodology in `bench/METHODOLOGY.md`: criterion 100 samples, 10 warmup runs, report **median + 95% CI** (not mean), pin CPU governor to `performance`, disable turbo boost, single-threaded eval | File exists with all 6 parameters | 1 h |
-| C2.0.2 | Hardware provenance snapshot: `lscpu`, `nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv`, `uname -a`, kernel version, RAM size | `bench/hardware_snapshot.txt` committed | 15 min |
-| C2.0.3 | Baseline noise floor: run criterion on a no-op fn 5×, record CI width — establishes "smaller than this is statistical noise" threshold | `bench/results/noise_floor.json` with CI width | 30 min |
-| C2.0.4 | CPU pinning + frequency lock script: `bench/setup_perf.sh` sets governor, disables HT siblings on test core, locks frequency | Script runs without error; `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` returns `performance` | 1 h |
+| C2.0.1 | Document methodology in `bench/METHODOLOGY.md`: criterion 100 samples, 10 warmup runs, report **median + 95% CI** (not mean), pin CPU governor to `performance`, disable turbo boost, single-threaded eval | `cd ~/Documents/fajarquant && test -f bench/METHODOLOGY.md && grep -c 'criterion\|95% CI\|warmup\|governor' bench/METHODOLOGY.md` ≥ 6 | 1 h |
+| C2.0.2 | Hardware provenance snapshot: `lscpu`, `nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv`, `uname -a`, kernel version, RAM size | `cd ~/Documents/fajarquant && test -f bench/hardware_snapshot.txt && grep -c 'CPU\|GPU\|kernel' bench/hardware_snapshot.txt` ≥ 3 | 15 min |
+| C2.0.3 | Baseline noise floor: run criterion on a no-op fn 5×, record CI width — establishes "smaller than this is statistical noise" threshold | `cd ~/Documents/fajarquant && jq '.ci_width_ns' bench/results/noise_floor.json` returns a number | 30 min |
+| C2.0.4 | CPU pinning + frequency lock script: `bench/setup_perf.sh` sets governor, disables HT siblings on test core, locks frequency | `cd ~/Documents/fajarquant && bash bench/setup_perf.sh && cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` returns `performance` | 1 h |
 
 **Gate:** All 4 methodology artifacts committed before C2.1 starts. **Any benchmark run without C2.0 setup is invalid and must be re-run.**
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C2.1 | Latency profiling: `quantize_kv_cache()` per-layer time on RTX 4090 | Microbenchmark report in `bench/results/quant_latency.csv` | 4 h |
-| C2.2 | Throughput: tokens/sec for KV-quantized inference vs FP16 baseline | Benchmark on Llama 2 7B, batch sizes 1/4/16 | 4 h |
-| C2.3 | Memory profiling: peak RSS for each algorithm at 16K context | `bench/results/memory_profile.csv` | 3 h |
-| C2.4 | Wall-clock vs TurboQuant: head-to-head on identical hardware | Bar chart in paper | 4 h |
-| C2.5 | Add Section "Performance Evaluation" to paper with latency/throughput tables | Paper updated | 4 h |
+| C2.1 | Latency profiling: `quantize_kv_cache()` per-layer time on RTX 4090 | `cd ~/Documents/fajarquant && cargo bench --bench quant_latency` produces `bench/results/quant_latency.csv` | 4 h |
+| C2.2 | Throughput: tokens/sec for KV-quantized inference vs FP16 baseline | `cd ~/Documents/fajarquant && cargo bench --bench throughput -- --model llama2_7b` for batch sizes 1/4/16 | 4 h |
+| C2.3 | Memory profiling: peak RSS for each algorithm at 16K context | `cd ~/Documents/fajarquant && cargo bench --bench memory_profile` produces `bench/results/memory_profile.csv` | 3 h |
+| C2.4 | Wall-clock vs TurboQuant: head-to-head on identical hardware | `cd ~/Documents/fajarquant && python3 scripts/plot_wallclock_bar.py` produces `paper/figures/wallclock_bar.pdf` | 4 h |
+| C2.5 | Add Section "Performance Evaluation" to paper with latency/throughput tables | `cd ~/Documents/fajarquant && grep -c '\\section{Performance' paper/fajarquant.tex` ≥ 1 | 4 h |
 
 **Gate:** Paper has wall-clock numbers for all 3 algorithms on at least 1 model.
 
@@ -475,13 +500,13 @@ escalates to +40%.
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C3.1 | Honest split: clearly distinguish "Rust runtime FajarQuant (Gemma 4 E2B benchmark)" vs "FajarOS kernel FajarQuant (SmolLM-135M demonstration)" | Section 5.2 rewritten | 2 h |
-| C3.2 | **Choose target venue (HARD DEADLINE: 2026-04-25):** MLSys 2027 (best fit), NeurIPS 2026 ML Systems workshop, or arXiv-only. Decision required by 2026-04-25 — Phase A lesson: prose-level "decision required" gets skipped without dates | `paper/SUBMISSION.md` exists with venue + cutoff timestamp; if 2026-04-25 passes without commit, `v26-c3` branch auto-blocks via pre-commit hook | 1 h |
-| C3.3 | Format for chosen venue (column width, font, citation style) | LaTeX template applied | 2 h |
-| C3.4 | Write supplementary materials: full reproduction commands, dataset checksums, model weights provenance | `paper/supplementary.tex` | 4 h |
-| C3.5 | Add broader impact statement (quantization affects model interpretability) | New section in paper | 1 h |
-| C3.6 | Add author affiliation, ORCID, code/data DOI | Title page updated | 1 h |
-| C3.7 | Proofread (3 passes: technical, grammar, clarity) | Clean reading | 4 h |
+| C3.1 | Honest split: clearly distinguish "Rust runtime FajarQuant (Gemma 4 E2B benchmark, this repo)" vs "FajarOS kernel FajarQuant (SmolLM-135M demonstration, fajaros-x86)" | `cd ~/Documents/fajarquant && grep -c 'Rust runtime\|FajarOS kernel\|fajaros-x86' paper/fajarquant.tex` ≥ 3 | 2 h |
+| C3.2 | **Choose target venue (HARD DEADLINE: 2026-04-25):** MLSys 2027 (best fit), NeurIPS 2026 ML Systems workshop, or arXiv-only. Decision required by 2026-04-25 — Phase A lesson: prose-level "decision required" gets skipped without dates | `cd ~/Documents/fajarquant && test -f paper/SUBMISSION.md && grep -c 'venue:\|deadline:' paper/SUBMISSION.md` ≥ 2; pre-commit hook in fajarquant repo blocks `v26-c3` commits after 2026-04-25 if file missing | 1 h |
+| C3.3 | Format for chosen venue (column width, font, citation style) | `cd ~/Documents/fajarquant/paper && make` produces clean PDF in venue template | 2 h |
+| C3.4 | Write supplementary materials: full reproduction commands, dataset checksums, model weights provenance | `cd ~/Documents/fajarquant && test -f paper/supplementary.tex && wc -l paper/supplementary.tex` ≥ 50 | 4 h |
+| C3.5 | Add broader impact statement (quantization affects model interpretability) | `cd ~/Documents/fajarquant && grep -c 'Broader Impact' paper/fajarquant.tex` ≥ 1 | 1 h |
+| C3.6 | Add author affiliation, ORCID, code/data DOI | `cd ~/Documents/fajarquant && grep -c 'orcid\.org\|doi\.org' paper/fajarquant.tex` ≥ 2 | 1 h |
+| C3.7 | Proofread (3 passes: technical, grammar, clarity) | `cd ~/Documents/fajarquant && git log --oneline --grep "proofread"` shows 3 commits | 4 h |
 
 **Gate:** Paper PDF compiles, fits venue page limit, all references complete, supplementary materials linked.
 
@@ -489,15 +514,15 @@ escalates to +40%.
 
 | # | Task | Verification | Est. |
 |---|------|-------------|------|
-| C4.1 | Add download fallback: if Gemma 4 E2B unavailable, use SmolLM-135M as smoke test | Script runs without GPU access | 2 h |
-| C4.2 | Create `reproduce.sh` one-script entry point: extract → compare → eval → ablation → tables | Single command produces all paper results | 3 h |
-| C4.2.5 | **CI smoke test for `reproduce.sh` (NEW Phase A lesson):** GitHub Actions job that runs `bash paper/reproduce.sh --smoke` (5 prompts, 1 model, ~10 min) on every PR. Catches reproducibility breakage 2 weeks before submission deadline, not 2 days after. Mirrors `flake-stress` pattern from A1.4 | `.github/workflows/paper-reproduce-smoke.yml`; CI green on PR; smoke run produces ablation table delta < 5% from cached baseline | 2 h |
-| C4.3 | Add 6th demo: `examples/fajarquant_hierarchical_demo.fj` (V25 promised, never delivered) | Demo runs, exits 0 | 1 h |
-| C4.4 | Per-function rustdoc for all `pub fn` in `src/runtime/ml/fajarquant/*.rs` | `cargo doc` shows complete API docs | 4 h |
-| C4.5 | Fix `data/kv_cache/ablation_results.json:80` malformed JSON | `jq . ablation_results.json` succeeds | 30 min |
-| C4.6 | Update `Cargo.toml`: pin FajarQuant to crate version `0.1.0` for citation | Cargo workspace clean | 30 min |
+| C4.1 | Add download fallback: if Gemma 4 E2B unavailable, use SmolLM-135M as smoke test | `cd ~/Documents/fajarquant && python3 scripts/extract_kv_cache.py --model HuggingFaceTB/SmolLM-135M --num-prompts 5` succeeds without GPU | 2 h |
+| C4.2 | Create `reproduce.sh` one-script entry point: extract → compare → eval → ablation → tables | `cd ~/Documents/fajarquant && bash paper/reproduce.sh --smoke` exits 0 | 3 h |
+| C4.2.5 | **CI smoke test for `reproduce.sh` (NEW Phase A lesson):** GitHub Actions job in **fajarquant repo** runs `bash paper/reproduce.sh --smoke` (5 prompts, 1 model, ~10 min) on every PR. Catches reproducibility breakage 2 weeks before submission deadline, not 2 days after. Mirrors `flake-stress` pattern from A1.4. **Note:** initial scaffold already created during Phase A4 split (see `~/Documents/fajarquant/.github/workflows/paper-reproduce-smoke.yml`) — C4.2.5 wires the actual smoke test logic | `cd ~/Documents/fajarquant && cat .github/workflows/paper-reproduce-smoke.yml \| grep -c 'reproduce.sh'` ≥ 1; CI green on PR; smoke run produces ablation table delta < 5% from cached baseline | 2 h |
+| C4.3 | Add 6th demo: `examples/hierarchical_demo.fj` (V25 promised, never delivered) | `cd ~/Documents/fajarquant && cd ../Fajar\ Lang && cargo run -- run ../fajarquant/examples/hierarchical_demo.fj` exits 0 | 1 h |
+| C4.4 | Per-function rustdoc for all `pub fn` in `src/*.rs` | `cd ~/Documents/fajarquant && cargo doc --no-deps 2>&1 \| grep -c 'warning: missing documentation'` = 0 | 4 h |
+| C4.5 | Fix `data/kv_cache/ablation_results.json:80` malformed JSON | `cd ~/Documents/fajarquant && jq . data/kv_cache/ablation_results.json > /dev/null && echo OK` returns OK | 30 min |
+| C4.6 | Publish `fajarquant` crate to crates.io at `v0.1.0` for citation | `cargo search fajarquant` returns the published crate | 30 min |
 
-**Gate:** `bash paper/reproduce.sh` regenerates every paper number on a fresh checkout (with cached Gemma 4 E2B).
+**Gate:** `cd ~/Documents/fajarquant && bash paper/reproduce.sh` regenerates every paper number on a fresh checkout (with cached Gemma 4 E2B).
 
 ### Phase C Success Criteria
 

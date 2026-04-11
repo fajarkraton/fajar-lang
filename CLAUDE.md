@@ -74,8 +74,10 @@ detailed entries.
 ### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     7,581 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
-           ≈ 9,969 total | 0 failures, 0 flakes
+Tests:     7,552 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
+           ≈ 9,940 total | 0 failures, 0 flakes
+           (was 7,581 lib pre V26 A4; -29 = the 29 unit tests that moved
+            with FajarQuant to standalone repo `fajarkraton/fajarquant`)
            Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
 LOC:       ~446,000 lines of Rust (394 files in src/)
 Examples:  231 .fj programs in examples/ (was 228, +3 V26 const_*+gui demos)
@@ -87,7 +89,9 @@ CLI:       23 subcommands declared in src/main.rs, all production
 CI:        6 GitHub Actions workflows + new flake-stress job (V26 A1.4)
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
 Quality:   0 clippy warnings | 0 production .unwrap() (verified by scripts/audit_unwrap.py)
-           0 fmt diffs | 0 test failures (7,581/7,581) | 0 flakes (80 stress runs)
+           0 fmt diffs | 0 test failures (7,552/7,552) | 0 flakes (80 stress runs)
+FajarQuant: extracted to standalone repo `fajarkraton/fajarquant` (V26 A4)
+            wire-up via Cargo path dep + re-export shim, 16 integ tests pass
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, async streams, 3x speedup)
 Hooks:     Pre-commit rejects fmt drift (scripts/git-hooks/pre-commit, V26 A1.2)
@@ -129,6 +133,12 @@ trusts inflated counts. Audit corrections in V26:
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
 - **FajarOS Nova** (x86_64): 47,821 LOC, V26 LLM E2E (SmolLM-135M v5/v6), 14 LLM shell commands. Boot to `nova>` reliably in QEMU.
+
+### FajarQuant (separate repo since 2026-04-11)
+- **`fajarkraton/fajarquant`** (standalone) — extracted from `src/runtime/ml/fajarquant/` + `turboquant.rs` in V26 Phase A4 split. Algorithm + paper + data + reproducibility scripts now live there.
+- fajar-lang depends via Cargo path/git dep + thin re-export shim in `src/runtime/ml/{fajarquant/mod.rs, turboquant.rs}` — zero changes to `interpreter/eval/builtins.rs` call sites.
+- 29 unit tests moved with the algorithm (now in fajarquant repo). 16 integration tests stay in `tests/fajarquant_*.rs` to verify the wire-up.
+- **All Phase C work** (multi-model validation, perf benchmarks, paper polish) happens in the new repo. See `docs/V26_PRODUCTION_PLAN.md` v1.2.
 
 ---
 
@@ -617,8 +627,10 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 | When You Need... | Read This |
 |---|---|
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 (54 [x], 0 [f], 0 [s]) |
-| **Current plan (V26)** | **`docs/V26_PRODUCTION_PLAN.md`** — Phase A nearly done, B+C remaining |
+| **Current plan (V26)** | **`docs/V26_PRODUCTION_PLAN.md`** v1.2 — Phase A1+A2+A3+A4 done (FajarQuant split), B+C hardened with §10.5 |
 | **V26 audit trail** | **`docs/HONEST_AUDIT_V26.md`** — corrections to prior counts |
+| **Version history (V18-V26)** | **`CHANGELOG.md`** (root) — full Added/Changed/Fixed/Stats per version |
+| **FajarQuant standalone** | **`~/Documents/fajarquant/`** — extracted 2026-04-11. Algorithms, paper, data, scripts. fajar-lang depends via path/git Cargo dep + re-export shim |
 | **Honest codebase audit (older)** | `docs/HONEST_AUDIT_V17.md` (V17 baseline) |
 | **Coding rules** | CLAUDE.md §6 (V1_RULES.md is archived in docs/archive/) |
 | **Completed core tasks** | `docs/V05_PLAN.md` + `docs/V04_PLAN.md` + `docs/V03_TASKS.md` + `docs/V1_TASKS.md` |
