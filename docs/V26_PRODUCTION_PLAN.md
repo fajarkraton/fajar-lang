@@ -154,18 +154,25 @@ SOURCE:    docs/HONEST_AUDIT_V26.md (full evidence)
 **Gate (revised):** `python3 scripts/audit_unwrap.py --summary` → **0 production unwraps**. ✅ ACHIEVED.
 **Lint gate (A2.5):** `cargo clippy --lib -- -D clippy::unwrap_used` → exit 0 with `#[cfg_attr(not(test), ...)]` scoping.
 
-### A3: Module Wiring (Framework → Production)
+### A3: Module Wiring (Framework → Production) — ✅ ALL DONE
 
-> **Goal:** Move 3 of 5 [f] modules to [x]. Two ([demos/], [gui partial]) accepted as non-core.
+> **Goal:** Move 5 [f] modules to [x] state.
+> **Outcome:** All 5 closed. Plus 1 stub deletion + 1 stub promotion.
+> **Net:** 49 [x] → 54 [x], 5 [f] → 0 [f], 2 [s] → 0 [s].
+> **Surprise:** `demos/` and `generators_v12` modules don't exist anymore
+> (V20.5 was already wrong about them). `gui` was already production at
+> the builtin/CLI level — only doc drift.
 
-| # | Task | Verification | Est. |
-|---|------|-------------|------|
-| A3.1 | Wire `const_alloc!()` macro syntax → callable from `.fj` | `examples/const_alloc_demo.fj` runs, returns ConstAlloc map | 4 h |
-| A3.2 | Wire `const_generics` exposure: parse `const N: usize` in fn signature | `examples/const_generics_demo.fj` compiles | 6 h |
-| A3.3 | Wire `const_traits` exposure: parse `const fn` in trait body | `examples/const_traits_demo.fj` compiles | 4 h |
-| A3.4 | Reclassify `gui` as [x] (already callable, just doc fix) and `demos/` as `[r]` reference (not [f]) | HONEST_STATUS_V26.md updated | 1 h |
+| # | Task | Verification | Status | Commit |
+|---|------|-------------|--------|--------|
+| A3.1 | Wire `const_alloc` — verify existing builtin + add `const_serialize` | `examples/const_alloc_demo.fj` runs E2E (7/7 cases correct) | ✅ DONE | `4b593ae` |
+| A3.2 | Wire `const_generics` — verify basic syntax + add `const_eval_nat` | `examples/const_generics_demo.fj` runs E2E (9/9 outputs) | ✅ DONE | `ba5f95c` |
+| A3.3 | Wire `const_traits` — parser fix (`const fn` in trait body) + 3 ConstTraitRegistry builtins | `examples/const_traits_demo.fj` runs E2E (13/13 outputs) | ✅ DONE | `c01aa06` |
+| A3.4 | Reclassify `gui` (always was [x] — doc drift) + acknowledge `demos/` deleted + create `docs/HONEST_STATUS_V26.md` | Status doc with 54/0/0/0 module count | ✅ DONE | (this commit) |
 
-**Gate:** Module count: **52 [x], 0 [sim], 2 [r], 2 [s]** — zero framework modules.
+**Verification gate (revised):** Module count is **54 [x], 0 [sim], 0 [f], 0 [s]** — zero framework, zero stubs. Source of truth: `docs/HONEST_STATUS_V26.md`.
+
+**Effort actual:** A3.1 ~1h, A3.2 ~1h, A3.3 ~1.5h, A3.4 ~0.5h = **~4h total** (vs 15h estimated).
 
 ### A4: Documentation Truth
 

@@ -78,8 +78,10 @@ Every Claude Code session MUST follow this order:
 
 | Document | When to Read | Purpose |
 |----------|-------------|---------|
-| `docs/HONEST_STATUS_V20_5.md` | **EVERY SESSION** | V20.5 per-builtin status — 42 [x], 6 [sim], 5 [f], 3 [s] |
+| `docs/HONEST_STATUS_V26.md` | **EVERY SESSION** | V26 status — 54 [x], 0 [sim], 0 [f], 0 [s] (zero framework, zero stubs) |
+| `docs/HONEST_STATUS_V20_5.md` | Reference (snapshot) | V20.5 per-builtin status — superseded by V26 |
 | `docs/HONEST_AUDIT_V17.md` | Reference | V17 re-audit — 33/56 modules production, 9 bugs fixed |
+| `docs/HONEST_AUDIT_V26.md` | Reference | V26 hands-on audit + corrections to prior counts |
 | `docs/GAP_ANALYSIS_V2.md` | Reference | Module-level gap analysis, corrected by V17 |
 | `docs/V1_RULES.md` | Every session | Safety, code quality, architecture rules |
 | `docs/V12_TRANSCENDENCE_PLAN.md` | Reference | V12 plan (6 options) |
@@ -106,9 +108,11 @@ Tests:     7,581 lib pass + ~954 integ + ~148 context + 43 LLVM E2E + 1,342 nati
            + 15 CUDA + 8 safety + ~1,296 other ≈ 11,387 total | 0 failures, 0 flakes
            Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
 LOC:       ~446,000 lines of Rust (~392 files)
-Examples:  228 .fj programs in examples/ | Binary: 14 MB release | MSRV: Rust 1.87
-Modules:   42 lib.rs pub mods | 49 [x], 0 [sim], 5 [f], 2 [s] (56 logical)
-           Note: wasi_v12 reclassified [s]→[x] (actively used by wasm codegen)
+Examples:  231 .fj programs in examples/ (was 228, +3 V26 const_*+gui demos)
+           Binary: 14 MB release | MSRV: Rust 1.87
+Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
+           Source of truth: docs/HONEST_STATUS_V26.md
+           V26 Phase A3 closed all 5 framework + 2 stub modules. 0 remaining.
 CLI:       23 subcommands declared in src/main.rs, all production
 CI:        6 GitHub Actions workflows + new flake-stress job (V26 A1.4)
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
