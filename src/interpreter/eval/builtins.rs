@@ -1752,6 +1752,67 @@ impl Interpreter {
                 };
                 Ok(Value::Int(align))
             }
+            // V26 A3.2: wire src/const_generics.rs::parse_nat_expr() + eval_nat()
+            // — evaluates a Nat expression like "5+3" or "N*2-1" given an
+            // optional bindings map. Bridges the const_generics module's
+            // expression parser/evaluator to .fj. The const_generics module
+            // was previously imported but only PoC-wired (results discarded).
+            //
+            // Signature: const_eval_nat(expr: str, bindings: map) -> int | null
+            //   - expr: e.g. "5+3", "N+1", "N*M-2"
+            //   - bindings: map of name → int for free variables; pass {} if none
+            //   - returns int (i64) on success, null if expression has unbound
+            //     variables or evaluates to a value > i64::MAX
+            //
+            // Example .fj usage:
+            //   const_eval_nat("5+3", map_new())                   // → 8
+            //   const_eval_nat("N+1", map_insert(map_new(), "N", 10))  // → 11
+            "const_eval_nat" => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let expr = match &args[0] {
+                    Value::Str(s) => s.clone(),
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_eval_nat: first arg must be str".into(),
+                        )
+                        .into());
+                    }
+                };
+                let bindings_map = match &args[1] {
+                    Value::Map(m) => m,
+                    _ => {
+                        return Err(RuntimeError::TypeError(
+                            "const_eval_nat: second arg must be map<str, int>".into(),
+                        )
+                        .into());
+                    }
+                };
+                // Convert runtime Map<String, Value> → HashMap<String, u64>.
+                // Ignore non-int entries silently (matches Nat semantics).
+                let mut env: std::collections::HashMap<String, u64> =
+                    std::collections::HashMap::new();
+                for (k, v) in bindings_map {
+                    if let Value::Int(n) = v
+                        && let Ok(u) = u64::try_from(*n)
+                    {
+                        env.insert(k.clone(), u);
+                    }
+                }
+                let nat = crate::const_generics::parse_nat_expr(&expr);
+                match crate::const_generics::eval_nat(&nat, &env) {
+                    Some(u) => match i64::try_from(u) {
+                        Ok(i) => Ok(Value::Int(i)),
+                        Err(_) => Ok(Value::Null),
+                    },
+                    None => Ok(Value::Null),
+                }
+            }
             // V26 A3.1: wire src/const_alloc.rs::serialize_const() — converts a
             // runtime value into a `.rodata`-ready byte serialization. Previously
             // the serialize_const + ConstAllocation API was framework-only ([f] in

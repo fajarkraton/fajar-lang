@@ -1540,6 +1540,13 @@ impl TypeChecker {
             ("const_align_of", vec![Type::Unknown], Type::I64),
             // V26 A3.1: serialize_const() bridge — accepts any value, returns descriptor map
             ("const_serialize", vec![Type::Unknown], Type::Unknown),
+            // V26 A3.2: parse_nat_expr() + eval_nat() bridge — evaluates a Nat expression
+            // string like "5+3" or "N+1" with optional bindings map. Returns I64 or Null.
+            (
+                "const_eval_nat",
+                vec![Type::Str, Type::Unknown],
+                Type::Unknown,
+            ),
         ];
         for (name, params, ret) in layer_fns {
             self.symbols.define(Symbol {

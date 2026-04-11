@@ -1475,6 +1475,8 @@ impl Interpreter {
             "const_align_of",
             // V26 A3.1: wire serialize_const() from src/const_alloc.rs
             "const_serialize",
+            // V26 A3.2: wire parse_nat_expr() + eval_nat() from src/const_generics.rs
+            "const_eval_nat",
             // V20.5 Tier 4: New tensor/scalar ops
             "sign",
             "argmin",

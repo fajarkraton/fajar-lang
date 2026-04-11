@@ -607,6 +607,112 @@ println(len(bytes))
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 12c. const_eval_nat — V26 A3.2: wire parse_nat_expr() + eval_nat() to .fj
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v26_a3_2_const_eval_nat_literal_add() {
+    // "5+3" with empty bindings → 8
+    let out = eval_capture(
+        r#"
+println(const_eval_nat("5+3", map_new()))
+"#,
+    );
+    assert!(out.trim().contains("8"), "5+3 should be 8: {out}");
+}
+
+#[test]
+fn v26_a3_2_const_eval_nat_literal_mul_sub() {
+    // Verify * and - operators
+    let out = eval_capture(
+        r#"
+println(const_eval_nat("10*4", map_new()))
+println(const_eval_nat("100-25", map_new()))
+"#,
+    );
+    let lines: Vec<&str> = out
+        .trim()
+        .lines()
+        .filter(|l| !l.starts_with("[warn]") && !l.starts_with("[sim]"))
+        .collect();
+    assert!(lines.iter().any(|l| l.trim() == "40"), "10*4=40: {out}");
+    assert!(lines.iter().any(|l| l.trim() == "75"), "100-25=75: {out}");
+}
+
+#[test]
+fn v26_a3_2_const_eval_nat_with_bindings() {
+    // "N+1" with N=10 → 11
+    let out = eval_capture(
+        r#"
+let env = map_insert(map_new(), "N", 10)
+println(const_eval_nat("N+1", env))
+"#,
+    );
+    assert!(
+        out.trim().contains("11"),
+        "N+1 with N=10 should be 11: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_2_const_eval_nat_multi_param() {
+    // "N*M" with N=3, M=4 → 12
+    let out = eval_capture(
+        r#"
+let env = map_insert(map_insert(map_new(), "N", 3), "M", 4)
+println(const_eval_nat("N*M", env))
+"#,
+    );
+    assert!(
+        out.trim().contains("12"),
+        "N*M with N=3,M=4 should be 12: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_2_const_eval_nat_unbound_returns_null() {
+    // Unbound parameter → null (Option::None from eval_nat)
+    let out = eval_capture(
+        r#"
+let result = const_eval_nat("X+1", map_new())
+println(result)
+"#,
+    );
+    assert!(
+        out.contains("null"),
+        "X+1 with no bindings should be null: {out}"
+    );
+}
+
+#[test]
+fn v26_a3_2_const_generic_fn_definition_parses() {
+    // Smoke test that const generic fn syntax already parses + analyzes
+    // (the V26 A3.2 verification bar: "examples/const_generics_demo.fj compiles")
+    let out = eval_capture(
+        r#"
+fn const_gen<const N: usize>() -> i64 { 42 }
+println(const_gen())
+"#,
+    );
+    assert!(out.contains("42"), "const generic fn should run: {out}");
+}
+
+#[test]
+fn v26_a3_2_const_generic_struct_parses() {
+    let out = eval_capture(
+        r#"
+struct Buffer<const SIZE: usize> { capacity: i64 }
+let b = Buffer { capacity: 256 }
+println(b.capacity)
+"#,
+    );
+    assert!(
+        out.contains("256"),
+        "const generic struct should compile + access field: {out}"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 13. const_size_of + const_align_of (task 1.4.13)
 // ════════════════════════════════════════════════════════════════════════
 

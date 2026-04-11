@@ -1,0 +1,63 @@
+// V26 A3.2: const_generics demo
+//
+// Demonstrates the const_generics module's two production surfaces:
+//
+// 1. SYNTAX (parser + analyzer): const generic parameters in fn and struct
+//    signatures already parse and typecheck. Multi-param works. The const
+//    generic param does NOT yet flow into the function body as a value or
+//    into array type sizes — those require monomorphization-at-compile-time
+//    work that's deferred to a future task. The basic syntax bar is met.
+//
+// 2. RUNTIME (builtin): `const_eval_nat(expr, bindings)` evaluates a Nat
+//    expression like "5+3" or "N*2-1" against an optional bindings map.
+//    Bridges parse_nat_expr + eval_nat from src/const_generics.rs into .fj.
+
+// === 1. Const generic FUNCTION definition ===
+// `const N: usize` is a comptime parameter — analyzer classifies it as a
+// Nat-kinded const generic. Body cannot reference N as a value yet
+// (analyzer doesn't add it to the local scope), but the signature parses
+// and typechecks cleanly.
+fn const_gen_fn<const N: usize>() -> i64 {
+    42
+}
+
+// === 2. Multi-param const generic ===
+// Mix of type and const params. T is a free type, N is a usize const.
+fn pair_with_n<T, const N: usize>(x: T) -> T {
+    x
+}
+
+// === 3. Const generic STRUCT definition ===
+// Same syntax works on structs.
+struct Buffer<const SIZE: usize> {
+    capacity_hint: i64,
+}
+
+fn main() {
+    println("=== const generic syntax (compile-time only) ===")
+    println(const_gen_fn())
+    println(pair_with_n(99))
+
+    let buf = Buffer { capacity_hint: 256 }
+    println(buf.capacity_hint)
+
+    println("")
+    println("=== const_eval_nat: evaluate Nat expressions at runtime ===")
+
+    // Pure literal expressions need no bindings
+    let empty = map_new()
+    println("5+3 = " + to_string(const_eval_nat("5+3", empty)))
+    println("10*4 = " + to_string(const_eval_nat("10*4", empty)))
+    println("100-25 = " + to_string(const_eval_nat("100-25", empty)))
+
+    // Expressions with bound parameters
+    let env1 = map_insert(map_new(), "N", 10)
+    println("N+1 with N=10 = " + to_string(const_eval_nat("N+1", env1)))
+
+    let env2 = map_insert(map_insert(map_new(), "N", 3), "M", 4)
+    println("N*M with N=3, M=4 = " + to_string(const_eval_nat("N*M", env2)))
+
+    // Unbound variables → null
+    let unbound = const_eval_nat("X+1", empty)
+    println("X+1 with no bindings = " + to_string(unbound))
+}
