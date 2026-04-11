@@ -21,6 +21,12 @@ if [ -z "$RUST_FILES" ]; then
     exit 0
 fi
 
+# Extract edition from Cargo.toml so rustfmt --check uses the same rules
+# as cargo fmt. Without this, rustfmt defaults to edition 2015 which has
+# different import-sort and comment-alignment rules than edition 2024.
+EDITION=$(grep -E '^edition\s*=' Cargo.toml 2>/dev/null | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
+EDITION=${EDITION:-2021}
+
 LOG=/tmp/fajar-fmt-check.log
 FAIL=0
 
@@ -30,11 +36,12 @@ if ! cargo fmt --check > "$LOG" 2>&1; then
 fi
 
 # Check 2: rustfmt --check on each staged .rs file (catches orphan files)
+# Pass --edition explicitly so rules match cargo fmt.
 ORPHAN_DRIFT=""
 while IFS= read -r f; do
     [ -z "$f" ] && continue
     [ -f "$f" ] || continue  # skip deleted files
-    if ! rustfmt --check --quiet "$f" 2>/dev/null; then
+    if ! rustfmt --check --quiet --edition "$EDITION" "$f" 2>/dev/null; then
         ORPHAN_DRIFT="$ORPHAN_DRIFT  $f"$'\n'
         FAIL=1
     fi
