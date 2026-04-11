@@ -1655,7 +1655,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                self.compile_avx2_elementwise_i64(&compiled, "vpaddq").map(Some)
+                self.compile_avx2_elementwise_i64(&compiled, "vpaddq")
+                    .map(Some)
             }
 
             // avx2_mul_i64(dst_ptr, a_ptr, b_ptr, len) -> i64
@@ -1672,7 +1673,8 @@ impl<'ctx> LlvmCompiler<'ctx> {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                self.compile_avx2_elementwise_i64(&compiled, "vpmuludq").map(Some)
+                self.compile_avx2_elementwise_i64(&compiled, "vpmuludq")
+                    .map(Some)
             }
 
             // AES-NI builtins — 128-bit block operations via XMM registers
@@ -8239,17 +8241,17 @@ impl<'ctx> LlvmCompiler<'ctx> {
         let asm_fn_ty = i64_ty.fn_type(&[i64_ty.into(), i64_ty.into(), i64_ty.into()], false);
 
         let template = concat!(
-            "vpxor %ymm0, %ymm0, %ymm0\n\t",   // acc = 0 (4 x i64)
-            "movq $0, %rax\n\t",                 // a_ptr
-            "movq $1, %rbx\n\t",                 // b_ptr
-            "movq $2, %rcx\n\t",                 // len (count of i64 elements)
-            "shrq $$2, %rcx\n\t",                // len/4 (4 i64s per YMM)
+            "vpxor %ymm0, %ymm0, %ymm0\n\t", // acc = 0 (4 x i64)
+            "movq $0, %rax\n\t",             // a_ptr
+            "movq $1, %rbx\n\t",             // b_ptr
+            "movq $2, %rcx\n\t",             // len (count of i64 elements)
+            "shrq $$2, %rcx\n\t",            // len/4 (4 i64s per YMM)
             "testq %rcx, %rcx\n\t",
             "jz 2f\n",
             "1:\n\t",
-            "vmovdqu (%rax), %ymm1\n\t",         // load 4 i64s from a
-            "vmovdqu (%rbx), %ymm2\n\t",         // load 4 i64s from b
-            "vpmuludq %ymm1, %ymm2, %ymm3\n\t",  // multiply low 32 bits → 64-bit results
+            "vmovdqu (%rax), %ymm1\n\t",        // load 4 i64s from a
+            "vmovdqu (%rbx), %ymm2\n\t",        // load 4 i64s from b
+            "vpmuludq %ymm1, %ymm2, %ymm3\n\t", // multiply low 32 bits → 64-bit results
             "vpaddq %ymm3, %ymm0, %ymm0\n\t",   // acc += products
             "addq $$32, %rax\n\t",
             "addq $$32, %rbx\n\t",
@@ -8288,9 +8290,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
         match call.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(v) => Ok(v),
-            inkwell::values::ValueKind::Instruction(_) => {
-                Err(CodegenError::Internal("avx2_dot_i64 produced no value".into()))
-            }
+            inkwell::values::ValueKind::Instruction(_) => Err(CodegenError::Internal(
+                "avx2_dot_i64 produced no value".into(),
+            )),
         }
     }
 
@@ -8350,9 +8352,9 @@ impl<'ctx> LlvmCompiler<'ctx> {
 
         match call.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(v) => Ok(v),
-            inkwell::values::ValueKind::Instruction(_) => {
-                Err(CodegenError::Internal("avx2 i64 elementwise no value".into()))
-            }
+            inkwell::values::ValueKind::Instruction(_) => Err(CodegenError::Internal(
+                "avx2 i64 elementwise no value".into(),
+            )),
         }
     }
 
