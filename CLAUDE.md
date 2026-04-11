@@ -38,17 +38,23 @@ Every Claude Code session MUST follow this order:
 7. **VERIFY** → `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check`
 8. **UPDATE** → Mark task `[x]` ONLY if feature works end-to-end. Use `[f]` for framework-only.
 
-### Completion Status (Honest Assessment — V17 Re-Audit, 2026-04-03)
+### Completion Status (Honest Assessment — V26, 2026-04-11)
 
-> **Source of truth:** `docs/HONEST_AUDIT_V17.md` — full re-audit of every module and CLI command.
-> Previous claims (V13-V15 "100% production") were **inflated by 40-55%**. Corrected below.
+> **Source of truth:** `docs/HONEST_STATUS_V26.md` — current per-module status
+> after V26 Phase A1+A2+A3 closed all framework and stub modules.
+> Reference: `docs/HONEST_AUDIT_V26.md` for the audit trail of corrections.
+>
+> Historical V13-V15 claims of "100% production" were inflated 40-55% per
+> the V17 re-audit. V20.5 corrected to 49 [x], 5 [f], 2 [s]. V26 closed
+> the remaining 5 [f] + 2 [s].
 
-**Codebase Reality (56 modules):**
-- **33 modules PRODUCTION [x]** — 368K LOC (77%) — user can `fj <command>` and it works
-- **1 module PARTIAL [p]** — analyzer: type checking works, @kernel/@device enforcement broken
-- **18 modules FRAMEWORK [f]** — 56K LOC (12%) — code exists, not wired to CLI
-- **3 modules STUB [s]** — near-empty, superseded or placeholder
-- **25/35 CLI commands** production, 8 partial, 2 stub
+**Codebase Reality (V26, 54 logical modules — was 56 in V20.5):**
+- **54 modules PRODUCTION [x]** — every public mod has a callable surface from `.fj` or `fj` CLI
+- **0 modules PARTIAL [p]** — analyzer @kernel/@device transitive heap taint FIXED in V26 (commit `849943d`)
+- **0 modules FRAMEWORK [f]** — V26 Phase A3 closed all 5
+- **0 modules STUB [s]** — V24 promoted `wasi_v12`, V20.8 deleted `generators_v12`
+- **23 CLI subcommands** in `src/main.rs`, all production (V25 v5.0 verified)
+- **Module deletions since V20.5:** `demos/` and `generators_v12` (both gone)
 
 **Core Compiler (V1-V05): PRODUCTION — verified by code audit.**
 - v1.0: 506 tasks — lexer, parser, analyzer, Cranelift, ML runtime ✅
@@ -104,10 +110,10 @@ Every Claude Code session MUST follow this order:
 ### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     7,581 lib pass + ~954 integ + ~148 context + 43 LLVM E2E + 1,342 native
-           + 15 CUDA + 8 safety + ~1,296 other ≈ 11,387 total | 0 failures, 0 flakes
+Tests:     7,581 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
+           ≈ 9,969 total | 0 failures, 0 flakes
            Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
-LOC:       ~446,000 lines of Rust (~392 files)
+LOC:       ~446,000 lines of Rust (394 files in src/)
 Examples:  231 .fj programs in examples/ (was 228, +3 V26 const_*+gui demos)
            Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
@@ -128,9 +134,13 @@ Labeling: [x] = production (tested, works E2E)
           [s] = stub (near-empty placeholder)
 
 Numbers verified by runnable commands as of 2026-04-11. CLAUDE.md no longer
-trusts inflated counts: prior 11,395 was 7,581+integ rounded up, 285 examples
-was incorrect (real: 228), 0 unwraps was aspirational (real before V26: 3,
-real after V26 A2.3: 0).
+trusts inflated counts. Audit corrections in V26:
+  - prior 11,395 tests was inflated; real is 7,581 lib + 2,374 integ + 14 doc
+  - prior 285 examples was inflated; real is 231
+  - prior "0 unwraps" was aspirational; real before V26 was 3 (now 0)
+  - prior "5 [f] modules" was outdated; A3 closed all (now 0)
+  - prior "2 [s] modules" was outdated; V24+V20.8 closed all (now 0)
+  - prior "8 const_* modules" was inflated; real is 3
 ```
 
 ### V24 "Quantum" (2026-04-07) — CUDA RTX 4090 + FajarQuant + AVX2/AES-NI
@@ -551,17 +561,17 @@ These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated cla
 ```
 Format: [PREFIX][NUMBER]
 
-LE = Lex Error        (LE001-LE008)  -- 8 tokenization problems
-PE = Parse Error      (PE001-PE010)  -- 10 syntax problems
-SE = Semantic Error   (SE001-SE012)  -- 12 type/scope problems
-KE = Kernel Error     (KE001-KE004)  -- 4 @kernel context violations
-DE = Device Error     (DE001-DE003)  -- 3 @device context violations
-TE = Tensor Error     (TE001-TE008)  -- 8 shape/type problems
-RE = Runtime Error    (RE001-RE008)  -- 8 execution problems
-ME = Memory Error     (ME001-ME008)  -- 8 ownership/borrow problems
-CE = Codegen Error    (CE001-CE010)  -- 10 native compilation problems (v1.0)
+LE = Lex Error        (LE001-LE008)     --  8 tokenization problems
+PE = Parse Error      (PE001-PE010)     -- 10 syntax problems
+SE = Semantic Error   (SE001-SE016)     -- 16 type/scope problems
+KE = Kernel Error     (KE001-KE004)     --  4 @kernel context violations
+DE = Device Error     (DE001-DE003)     --  3 @device context violations
+TE = Tensor Error     (TE001-TE009)     --  9 shape/type problems
+RE = Runtime Error    (RE001-RE008)     --  8 execution problems
+ME = Memory Error     (ME001-ME010)     -- 10 ownership/borrow problems
+CE = Codegen Error    (CE001-CE010)     -- 10 native compilation problems
 
-Total: 71 error codes across 9 categories
+Total: 78 error codes across 9 categories (verified by grep on docs/ERROR_CODES.md)
 ```
 
 Key errors:
@@ -601,7 +611,11 @@ Key errors:
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: 8,317 tests (8,280 lib + 24 integ + 13 doc)
+### 9.1 Test Suite: ~9,969 tests (7,581 lib + 2,374 integ in 46 files + 14 doc)
+
+> Numbers verified 2026-04-11 via `cargo test --lib`, `ls tests/*.rs | wc -l`,
+> `grep -h '^#\[test\]' tests/*.rs | wc -l`, `cargo test --doc`. Stress test
+> (V26 A1.4) runs `cargo test --lib -- --test-threads=64 × 5` per push.
 
 ### 9.2 Test Naming Convention
 
@@ -775,7 +789,7 @@ cargo run -- check examples/hello.fj  # type-check only (no execution)
 
 # Testing & Quality
 cargo test                            # run default tests (non-native)
-cargo test --features native          # run all 2,650 tests (including native codegen)
+cargo test --features native          # run lib + 1,342 native codegen tests (CLAUDE.md V24)
 cargo test --test eval_tests          # run integration tests
 cargo test -- s1_1_                   # run sprint-specific tests
 cargo clippy -- -D warnings           # linting (MUST pass before commit)
@@ -809,7 +823,7 @@ cargo build --features gui                      # GUI windowing (winit)
 
 ```
 src/
-  main.rs (CLI, 5.4K LOC) | lib.rs (module decls)
+  main.rs (CLI, 6.5K LOC) | lib.rs (module decls)
   lexer/ (tokenize) | parser/ (parse, ast, pratt) | analyzer/ (type_check, scope, effects)
   interpreter/ (eval, env, value) | vm/ (bytecode compiler+engine)
   codegen/ (cranelift/, llvm/, types, abi, linker, analysis)
@@ -818,8 +832,11 @@ src/
   dependent/ (nat, arrays, tensor_shapes, patterns) | verify/ (smt, pipeline, properties)
   lsp/ (server, completion, advanced) | package/ (registry, server, signing, sbom)
   distributed/ | wasi_p2/ | ffi_v2/ | formatter/ | selfhost/
-docs/ (44 documents) | tests/ | examples/ (216+ .fj) | fuzz/ (8 targets)
-editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
+  const_alloc/ | const_generics/ | const_traits/ | gui/ (winit+wgpu, gated)
+docs/ (157 documents) | tests/ (46 files, 2,374 fns) | examples/ (231 .fj)
+fuzz/ (8 targets) | editors/vscode/ | book/ | benches/ | website/
+.github/workflows/ (6 workflows: ci, embedded, docs, nightly, nova, release)
+audit/ (V26 unwrap inventory) | scripts/ (audit_unwrap.py, git-hooks/, etc.)
 ```
 
 ---
@@ -828,9 +845,11 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 | When You Need... | Read This |
 |---|---|
-| **Honest codebase audit** | **`docs/GAP_ANALYSIS_V2.md`** — Tier 1/2/3 breakdown, per-module status |
-| **Current plan (V8)** | **`docs/NEXT_IMPLEMENTATION_PLAN_V8.md`** — 810 tasks, Option 0 (Gap Closure) first |
-| **Coding rules** | **`docs/V1_RULES.md`** — safety, quality, architecture (still applies) |
+| **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 (54 [x], 0 [f], 0 [s]) |
+| **Current plan (V26)** | **`docs/V26_PRODUCTION_PLAN.md`** — Phase A nearly done, B+C remaining |
+| **V26 audit trail** | **`docs/HONEST_AUDIT_V26.md`** — corrections to prior counts |
+| **Honest codebase audit (older)** | `docs/HONEST_AUDIT_V17.md` (V17 baseline) |
+| **Coding rules** | CLAUDE.md §6 (V1_RULES.md is archived in docs/archive/) |
 | **Completed core tasks** | `docs/V05_PLAN.md` + `docs/V04_PLAN.md` + `docs/V03_TASKS.md` + `docs/V1_TASKS.md` |
 | **Implementation plans** | `docs/NEXT_IMPLEMENTATION_PLAN_V{2-8}.md` — all with detailed task tables |
 | Language syntax, keywords, types | `docs/FAJAR_LANG_SPEC.md` |
@@ -862,5 +881,5 @@ editors/vscode/ | book/ | benches/ | website/ | .github/workflows/ (6 workflows)
 
 ---
 
-*CLAUDE.md Version: 23.0 | V26 "Final" partial — 7,581 lib tests + 0 flakes (80/80 stress), 228 examples, 0 production .unwrap(), 0 fmt diffs | Phase A1+A2 done, A2.5+A3+A4 pending*
+*CLAUDE.md Version: 24.0 | V26 "Final" partial — 7,581 lib + 2,374 integ + 14 doc tests, 0 flakes (80/80 stress), 231 examples, 0 production .unwrap(), 0 fmt diffs, 0 [f]/[s] modules | Phase A1+A2+A3 done, A4 in progress*
 *Last Updated: 2026-04-11*
