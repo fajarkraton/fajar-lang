@@ -2,6 +2,12 @@
 // TODO: remove each allow when the lint stabilizes and code is updated.
 // - collapsible_if: Edition 2024 expanded scope (nightly 2025-03+)
 #![allow(clippy::collapsible_if)]
+// V26 A2.5: machine-enforce CLAUDE.md §6.3 "NEVER use .unwrap() in src/".
+// Scoped via cfg_attr(not(test)) so the lint only applies to production
+// builds — test code (#[cfg(test)] modules and #[test] functions) can
+// still use .unwrap() freely. Verified zero production unwraps in V26
+// A2.3 (commit 968beaa); this lint locks in that state for future code.
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 //! # Fajar Lang
 //!
