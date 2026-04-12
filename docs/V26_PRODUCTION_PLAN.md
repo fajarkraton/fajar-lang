@@ -476,14 +476,27 @@ escalates to +40%.
 | C1.4 | Extract KV cache: **`Qwen/Qwen2-7B`** (pinned in C1.0.1 — actual 7B params, Apache-2.0, 32 layers × 4 KV heads × 128 dim) | `cd ~/Documents/fajarquant && jq '.num_prompts, .num_layers' data/kv_cache/qwen2_7b/metadata.json` returns 50, 32 | 4 h GPU |
 | C1.5 | Run 3-way comparison (FajarQuant vs KIVI vs TurboQuant) on each model at 2/3/4-bit | `cd ~/Documents/fajarquant && for m in mistral_7b llama2_7b qwen2_7b; do python3 scripts/run_comparison.py --data-dir data/kv_cache/$m; done` produces `comparison_results_<model>.json` for each, 9 numbers per file | 8 h |
 | **C1.5.5** | **Go/No-Go gate (NEW Phase A lesson):** after Mistral 7B (first model) finishes, before extracting Llama+Qwen2 — if FajarQuant does NOT win at ≥1 bit-width on Mistral, **PAUSE**. Open `~/Documents/fajarquant/docs/V26_C1_GONOGO.md` with options: (a) re-scope as "structured low-rank specialist" + skip Llama/Qwen2, (b) investigate root cause + patch FajarQuant, (c) abort multi-model section + use Gemma-only data. C1.6+ blocked until decision committed | `cd ~/Documents/fajarquant && test -f docs/V26_C1_GONOGO.md && git log --oneline --grep "v26-c1"` shows no C1.6+ commits before this file | 1 h decision |
-| C1.6.0 | **Methodology decision (NEW post-C1.4 finding):** pick between (a) keep existing last-token scoring asymmetry or (b) fix `scripts/eval_perplexity.py` → symmetric full-sequence scoring via prefix+target split. Decision committed as `fajarquant/docs/V26_C1_6_METHODOLOGY.md` (Rule 6 mechanical gate). Option (b) chosen 2026-04-12 → requires Gemma PPL re-run to keep apples-to-apples with Mistral/Qwen2-7B | `cd ~/Documents/fajarquant && test -f docs/V26_C1_6_METHODOLOGY.md && grep -q 'Decision: (b)' docs/V26_C1_6_METHODOLOGY.md` | 0.3 h |
-| C1.6.1 | Patch `scripts/eval_perplexity.py` → symmetric scoring. Each sliding window split into prefix + target (50/50); forward prefix → past_kv; quantize past_kv (all methods + FP16 baseline identical protocol); forward target with past_kv; score target positions 1..target_len-1 via shift_logits cross-entropy. No more last-token-only re-forward. Dropped `--num-prompts` mis-alias; explicit `--model`, `--output` args | `cd ~/Documents/fajarquant && python3 scripts/eval_perplexity.py --help \| grep -c -- '--model\|--output\|--max-samples'` ≥ 3 | 0.8 h |
-| C1.6.2 | Re-run Gemma 4 E2B with new methodology (overwrites `data/kv_cache/perplexity_results.json`) — apples-to-apples baseline for C1.6.3-4 | `cd ~/Documents/fajarquant && python3 scripts/eval_perplexity.py --model google/gemma-4-E2B --output data/kv_cache/perplexity_results.json && jq '.fp16.tokens, .fajarquant_2bit.tokens' data/kv_cache/perplexity_results.json` both ≥ 5000 (not 30) | 0.5 h GPU |
-| C1.6.3 | Run perplexity eval on **Mistral 7B** with new methodology | `cd ~/Documents/fajarquant && python3 scripts/eval_perplexity.py --model mistralai/Mistral-7B-v0.1 --output data/kv_cache/perplexity_mistral_7b.json && jq '.fajarquant_2bit.ppl, .turboquant_2bit.ppl, .kivi_2bit.ppl' data/kv_cache/perplexity_mistral_7b.json` returns 3 finite numbers | 1 h GPU |
-| C1.6.4 | Run perplexity eval on **Qwen2-7B** with new methodology | `cd ~/Documents/fajarquant && python3 scripts/eval_perplexity.py --model Qwen/Qwen2-7B --output data/kv_cache/perplexity_qwen2_7b.json && jq '.fajarquant_2bit.ppl, .turboquant_2bit.ppl, .kivi_2bit.ppl' data/kv_cache/perplexity_qwen2_7b.json` returns 3 finite numbers | 1 h GPU |
-| C1.6.5 | Update paper: (a) `tab:ppl` → cross-model PPL table, OR new `tab:ppl_crossmodel` alongside existing; (b) abstract line 40 + Table `tab:e2e` PPL rows updated to new Gemma numbers; (c) §Perplexity Evaluation "Key finding" text revised if 2-3 bit winner flipped; (d) `verify_paper_tables.py` 4 existing PPL claims updated + 6-12 new cross-model claims added | `cd ~/Documents/fajarquant && python3 scripts/verify_paper_tables.py --strict` exit 0; `cd paper && make` produces clean PDF | 1 h |
+| ~~C1.6.0~~ | ~~Methodology decision option (b) prefix+target~~ | **SUPERSEDED** by R-α.1 amendment in `fajarquant/docs/V26_C1_6_METHODOLOGY.md`, then by Path B plan | n/a |
+| ~~C1.6.1~~ | ~~Patch `scripts/eval_perplexity.py` → symmetric scoring~~ | **SUPERSEDED**: prefix+target patch (commit `c9b2ff5`) replaced by R-α.1 model surgery (commit `3015545`), which itself was found insufficient via canonical-protocol smoke test (FQ +77.34 vs TQ +13.71 on Gemma 4 E2B 2-bit). All C1.6 work pivoted to Path B | n/a |
+| ~~C1.6.2~~ | ~~Re-run Gemma 4 E2B with prefix+target~~ | **SUPERSEDED** — Path B Phase B1 does the canonical-protocol re-run | n/a |
+| ~~C1.6.3~~ | ~~Run Mistral 7B PPL with prefix+target~~ | **SUPERSEDED** — Path B Phase B1.3 does the canonical-protocol Mistral run | n/a |
+| ~~C1.6.4~~ | ~~Run Qwen2-7B PPL with prefix+target~~ | **SUPERSEDED** — Path B Phase B1.4 does the canonical-protocol Qwen2 run | n/a |
+| ~~C1.6.5~~ | ~~Update paper with prefix+target results~~ | **SUPERSEDED** — Path B Phase B6 does the v1→v2 paper rewrite | n/a |
 
-> **Note:** C1.6 was estimated 6h for 3 models with buggy script. Revised scope (2 models + methodology fix + re-run Gemma) is ~4.6h because Llama 2 (C1.3) is still gated on Meta HF access. If Llama 2 access lands during C1.6, add a `C1.6.3.5` row for symmetry.
+> **🚨 C1.6 PIVOTED TO PATH B (2026-04-12).** The C1.6 sub-rows above are
+> superseded by `docs/V26_C1_6_PATH_B_PLAN.md`. Reason: canonical R-α.1
+> protocol smoke test revealed FajarQuant v1 loses to TurboQuant by 5.6×
+> on Gemma 4 E2B 2-bit, contradicting paper claim "FQ wins 2-3 bit".
+> Path B is a 7-phase research project (B1-B7, 3-5 weeks) that:
+> (1) collects canonical-protocol baseline data on all 3 models with
+> fair TurboQuant outlier handling, (2) diagnoses root cause via per-model
+> analysis, (3) implements FajarQuant v2.12 informed by literature sweep
+> of 13 KV-quant papers (KVTC, SpinQuant, FlatQuant, etc.), (4) validates
+> v2 against canonical protocol, (5) optionally extends Fajar Lang language
+> support for embedded story, (6) rewrites paper with v1→v2 narrative,
+> (7) releases. Created CLAUDE.md §6.9 Research Integrity Rules (R1-R7)
+> as durable prevention. See `docs/V26_C1_6_PATH_B_PLAN.md` for full
+> task tables, gates, and surprise budget.
 | C1.7 | Update paper Table 1-5 with multi-model results — rename "Qwen 7B" → "Qwen2 7B" with footnote citing released 2024-06 version | `cd ~/Documents/fajarquant && git diff paper/fajarquant.tex` shows table updates; `cd paper && make` produces clean PDF | 4 h |
 
 **Gate:** FajarQuant wins ≥2/3 of models at 2-bit and 3-bit, **OR** `docs/V26_C1_GONOGO.md` documents the alternative path with reasoning.
