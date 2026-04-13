@@ -172,6 +172,15 @@ pub enum Type {
         /// Shape dimensions. `None` = dynamic, `Some(n)` = known size.
         dims: Vec<Option<u64>>,
     },
+    /// A quantized tensor type: `Quantized<T, BITS>`.
+    /// Stays quantized until explicitly dequantized. Using a Quantized
+    /// value where a Tensor is expected is SE017.
+    Quantized {
+        /// Element type (e.g., F32, F64).
+        element: Box<Type>,
+        /// Bit width (2, 3, 4, or 8).
+        bits: u8,
+    },
     /// A future type: `Future<T>` — produced by `async fn`.
     Future {
         /// The output type when the future resolves.
@@ -264,8 +273,8 @@ impl Type {
             Type::Ref(inner, _) => inner.is_send(),
             // Mutable references: NOT Send — sharing &mut across threads is a data race
             Type::RefMut(..) => false,
-            // Tensors: Send
-            Type::Tensor { .. } => true,
+            // Tensors/Quantized: Send
+            Type::Tensor { .. } | Type::Quantized { .. } => true,
             // Futures: Send if inner is Send
             Type::Future { inner } => inner.is_send(),
             // Trait objects: Send (concrete type was Send)
@@ -456,6 +465,9 @@ impl Type {
                     element.display_name(),
                     dim_strs.join(", ")
                 )
+            }
+            Type::Quantized { element, bits } => {
+                format!("Quantized<{}, {}>", element.display_name(), bits)
             }
             Type::Future { inner } => format!("Future<{}>", inner.display_name()),
             Type::Unknown => "<unknown>".into(),
@@ -1021,6 +1033,19 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// SE023: Quantized tensor used where Tensor expected — must dequantize first.
+    #[error(
+        "SE023: cannot use Quantized<{element}, {bits}> where Tensor is expected — call dequantize() first"
+    )]
+    QuantizedNotDequantized {
+        /// The element type of the quantized tensor.
+        element: String,
+        /// The bit width.
+        bits: u8,
+        /// Source location.
+        span: Span,
+    },
+
     /// ME009: Lifetime conflict — two lifetimes in the same scope are incompatible.
     #[error("ME009: lifetime '{name}' conflicts with another lifetime in scope")]
     LifetimeConflict {
@@ -1170,7 +1195,8 @@ impl SemanticError {
             | SemanticError::ResumeOutsideHandler { span, .. }
             | SemanticError::DuplicateEffectDecl { span, .. }
             | SemanticError::MessageTooLarge { span, .. }
-            | SemanticError::IpcTypeMismatch { span, .. } => *span,
+            | SemanticError::IpcTypeMismatch { span, .. }
+            | SemanticError::QuantizedNotDequantized { span, .. } => *span,
         }
     }
 

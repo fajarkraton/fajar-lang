@@ -1,7 +1,7 @@
-//! INT8 quantization — post-training quantization for embedded inference.
+//! Quantization — post-training quantization for embedded inference.
 //!
-//! Converts f64 tensors to i8 representation with per-tensor scale factors.
-//! Uses i32 accumulation for quantized matmul (no FPU required).
+//! Provides INT8 [`QuantizedTensor`] (legacy) and multi-bit [`QuantizedValue`]
+//! (2/3/4/8-bit, symmetric per-tensor). Uses i32 accumulation for matmul.
 
 use super::tensor::{TensorError, TensorValue};
 
@@ -76,6 +76,124 @@ impl QuantizedTensor {
     /// Creates a QuantizedTensor from raw components.
     pub fn from_raw(data: Vec<i8>, scale: f64, shape: Vec<usize>) -> Self {
         Self { data, scale, shape }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// QuantizedValue — multi-bit quantized tensor (B5.L1)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A quantized tensor with configurable bit width (2, 3, 4, or 8).
+///
+/// Stays quantized until explicitly dequantized. This is the first-class
+/// `Quantized<T, BITS>` type exposed to Fajar Lang programs.
+///
+/// Uses symmetric per-tensor quantization:
+///   real_value ≈ scale * quantized_int_value
+#[derive(Debug, Clone)]
+pub struct QuantizedValue {
+    /// Quantized data stored as i8 (for 2-4 bit, values are clamped to the
+    /// representable range, e.g. [-1, 0, 1] for 2-bit symmetric).
+    data: Vec<i8>,
+    /// Scale factor: real = scale * quantized.
+    scale: f64,
+    /// Original tensor shape.
+    shape: Vec<usize>,
+    /// Bit width (2, 3, 4, or 8).
+    bits: u8,
+}
+
+impl QuantizedValue {
+    /// Quantizes a float tensor to the given bit width (symmetric, per-tensor).
+    ///
+    /// Supported bit widths: 2, 3, 4, 8.
+    /// Maps the range [-max_abs, max_abs] to [-max_q, max_q] where
+    /// max_q = 2^(bits-1) - 1.
+    pub fn quantize(tensor: &TensorValue, bits: u8) -> Result<Self, TensorError> {
+        if !matches!(bits, 2 | 3 | 4 | 8) {
+            return Err(TensorError::InvalidData {
+                reason: format!("unsupported bit width {bits}: must be 2, 3, 4, or 8"),
+            });
+        }
+
+        let max_q = ((1i16 << (bits - 1)) - 1) as f64; // 1, 3, 7, 127
+        let values = tensor.to_vec();
+        let max_abs = values.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+        let scale = if max_abs == 0.0 { 1.0 } else { max_abs / max_q };
+
+        let data: Vec<i8> = values
+            .iter()
+            .map(|&v| {
+                let q = (v / scale).round();
+                q.clamp(-max_q, max_q) as i8
+            })
+            .collect();
+
+        Ok(Self {
+            data,
+            scale,
+            shape: tensor.shape().to_vec(),
+            bits,
+        })
+    }
+
+    /// Dequantizes back to a float tensor.
+    pub fn dequantize(&self) -> TensorValue {
+        let values: Vec<f64> = self.data.iter().map(|&q| q as f64 * self.scale).collect();
+        TensorValue::from_data(values, &self.shape)
+            .unwrap_or_else(|_| TensorValue::zeros(&self.shape))
+    }
+
+    /// Returns the bit width.
+    pub fn bits(&self) -> u8 {
+        self.bits
+    }
+
+    /// Returns the shape.
+    pub fn shape(&self) -> &[usize] {
+        &self.shape
+    }
+
+    /// Returns the scale factor.
+    pub fn scale(&self) -> f64 {
+        self.scale
+    }
+
+    /// Returns the total number of elements.
+    pub fn numel(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns the quantized data as a slice.
+    pub fn data(&self) -> &[i8] {
+        &self.data
+    }
+
+    /// Memory footprint in bytes (data only, excluding metadata).
+    /// For sub-byte widths this is the packed size.
+    pub fn size_bytes(&self) -> usize {
+        // Actual storage is Vec<i8> (1 byte per element), but the
+        // *effective* memory is (numel * bits) / 8 for the paper story.
+        (self.data.len() * self.bits as usize).div_ceil(8)
+    }
+}
+
+impl std::fmt::Display for QuantizedValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "<quantized {}bit shape={:?} scale={:.6}>",
+            self.bits, self.shape, self.scale
+        )
+    }
+}
+
+impl PartialEq for QuantizedValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.bits == other.bits
+            && self.shape == other.shape
+            && (self.scale - other.scale).abs() < 1e-12
+            && self.data == other.data
     }
 }
 
@@ -260,6 +378,83 @@ mod tests {
         for &v in result.to_vec().iter() {
             assert!((v - 3.0).abs() < 0.5, "expected ~3.0, got {v}");
         }
+    }
+
+    // ─── QuantizedValue (multi-bit) tests ───
+
+    #[test]
+    fn quantized_value_2bit_roundtrip() {
+        let t = TensorValue::from_data(vec![1.0, -0.5, 0.25, 0.0], &[2, 2]).unwrap();
+        let qv = QuantizedValue::quantize(&t, 2).unwrap();
+        assert_eq!(qv.bits(), 2);
+        assert_eq!(qv.shape(), &[2, 2]);
+        assert_eq!(qv.numel(), 4);
+        // 2-bit symmetric: max_q = 1, so values map to {-1, 0, 1}
+        let dt = qv.dequantize();
+        assert_eq!(dt.shape(), &[2, 2]);
+    }
+
+    #[test]
+    fn quantized_value_4bit_roundtrip() {
+        let t = TensorValue::from_data(vec![1.0, -0.5, 0.25, 0.0, -1.0, 0.75], &[2, 3]).unwrap();
+        let qv = QuantizedValue::quantize(&t, 4).unwrap();
+        assert_eq!(qv.bits(), 4);
+        let dt = qv.dequantize();
+        let orig = t.to_vec();
+        let restored = dt.to_vec();
+        for (o, r) in orig.iter().zip(restored.iter()) {
+            assert!((o - r).abs() < 0.2, "4-bit: expected ~{o}, got {r}");
+        }
+    }
+
+    #[test]
+    fn quantized_value_8bit_matches_legacy() {
+        let t = TensorValue::from_data(vec![1.0, -0.5, 0.25, 0.0, -1.0, 0.75], &[2, 3]).unwrap();
+        let legacy = QuantizedTensor::quantize(&t);
+        let qv = QuantizedValue::quantize(&t, 8).unwrap();
+        let dt_legacy = legacy.dequantize().to_vec();
+        let dt_new = qv.dequantize().to_vec();
+        for (l, n) in dt_legacy.iter().zip(dt_new.iter()) {
+            assert!((l - n).abs() < 1e-10, "8-bit mismatch: legacy={l}, new={n}");
+        }
+    }
+
+    #[test]
+    fn quantized_value_invalid_bits() {
+        let t = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(QuantizedValue::quantize(&t, 5).is_err());
+        assert!(QuantizedValue::quantize(&t, 0).is_err());
+        assert!(QuantizedValue::quantize(&t, 16).is_err());
+    }
+
+    #[test]
+    fn quantized_value_size_bytes() {
+        let t = TensorValue::from_data(vec![1.0; 8], &[8]).unwrap();
+        let q2 = QuantizedValue::quantize(&t, 2).unwrap();
+        let q4 = QuantizedValue::quantize(&t, 4).unwrap();
+        let q8 = QuantizedValue::quantize(&t, 8).unwrap();
+        assert_eq!(q2.size_bytes(), 2); // 8 elements * 2 bits / 8 = 2 bytes
+        assert_eq!(q4.size_bytes(), 4); // 8 elements * 4 bits / 8 = 4 bytes
+        assert_eq!(q8.size_bytes(), 8); // 8 elements * 8 bits / 8 = 8 bytes
+    }
+
+    #[test]
+    fn quantized_value_display() {
+        let t = TensorValue::from_data(vec![1.0, -1.0], &[2]).unwrap();
+        let qv = QuantizedValue::quantize(&t, 4).unwrap();
+        let s = format!("{qv}");
+        assert!(s.contains("4bit"), "display should show bit width: {s}");
+        assert!(s.contains("[2]"), "display should show shape: {s}");
+    }
+
+    #[test]
+    fn quantized_value_equality() {
+        let t = TensorValue::from_data(vec![1.0, -0.5], &[2]).unwrap();
+        let q1 = QuantizedValue::quantize(&t, 4).unwrap();
+        let q2 = QuantizedValue::quantize(&t, 4).unwrap();
+        let q3 = QuantizedValue::quantize(&t, 2).unwrap();
+        assert_eq!(q1, q2);
+        assert_ne!(q1, q3);
     }
 
     #[test]

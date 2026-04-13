@@ -1075,6 +1075,7 @@ fn format_value(v: &Value) -> String {
         Value::BuiltinFn(name) => format!("<builtin {name}>"),
         Value::Pointer(p) => format!("0x{p:016x}"),
         Value::Tensor(_) => "<tensor>".to_string(),
+        Value::Quantized(q) => format!("{q}"),
         Value::Optimizer(_) => "<optimizer>".to_string(),
         Value::Layer(_) => "<layer>".to_string(),
         Value::Map(m) => {

@@ -361,6 +361,7 @@ impl FjDiagnostic {
             SemanticError::MessageTooLarge { .. } => "IPC001",
             SemanticError::IpcTypeMismatch { .. } => "IPC002",
             SemanticError::IndexOutOfBounds { .. } => "SE022",
+            SemanticError::QuantizedNotDequantized { .. } => "SE023",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

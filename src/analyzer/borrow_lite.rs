@@ -546,6 +546,7 @@ pub fn is_copy_type_strict(ty: &Type) -> bool {
         | Type::Struct { .. }
         | Type::Enum { .. }
         | Type::Tensor { .. }
+        | Type::Quantized { .. }
         | Type::Function { .. }
         | Type::RefMut(..)
         | Type::Future { .. }

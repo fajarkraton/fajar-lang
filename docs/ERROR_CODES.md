@@ -96,6 +96,26 @@ error[LE002]: unterminated string literal
 | SE019 | UnusedImport | Import yang tidak digunakan (warning) |
 | SE020 | UnreachablePattern | Match arm unreachable setelah wildcard (warning) |
 | SE021 | LifetimeMismatch | Lifetime annotation conflict |
+| SE022 | IndexOutOfBounds | Compile-time array index out of bounds |
+| SE023 | QuantizedNotDequantized | `Quantized<T, B>` dipakai dimana `Tensor<T>` diharapkan — panggil `dequantize()` dulu |
+
+#### SE023 — QuantizedNotDequantized
+
+Tipe `Quantized` tidak boleh langsung dipakai sebagai `Tensor`. Data masih dalam
+format packed (2/3/4/8-bit integer) dan akan menghasilkan garbage jika diinterpretasi
+sebagai float. Gunakan `dequantize(q)` untuk konversi eksplisit.
+
+```fajar
+let t = from_data([1.0, -0.5], [2])
+let q = quantize(t, 4)
+
+// ERROR SE023: cannot use Quantized<f64, 4> where Tensor is expected
+// matmul(q, q)
+
+// OK: dequantize first
+let d = dequantize(q)
+matmul(d, d)
+```
 
 ---
 

@@ -1410,6 +1410,13 @@ impl Interpreter {
             "cross_entropy",
             "accuracy",
             "quantize_int8",
+            "quantize",
+            "dequantize",
+            "quantized_bits",
+            "quantized_shape",
+            "quantized_scale",
+            "quantized_numel",
+            "quantized_size_bytes",
             // Autograd
             "tensor_backward",
             "backward",

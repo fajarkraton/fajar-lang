@@ -1,0 +1,43 @@
+// quantized_tensor.fj — FajarQuant v2 native quantized tensor demo
+//
+// Demonstrates the first-class Quantized type in Fajar Lang:
+// - quantize(tensor, bits) -> Quantized
+// - dequantize(quantized) -> Tensor
+// - introspection: quantized_bits, quantized_shape, quantized_scale, etc.
+
+// Create a sample tensor (simulating a KV cache slice)
+let kv_cache = from_data([1.0, -0.5, 0.25, 0.0, -1.0, 0.75, 0.3, -0.8], [2, 4])
+println("Original tensor:")
+println(kv_cache)
+
+// Quantize to different bit widths
+let q2 = quantize(kv_cache, 2)
+let q4 = quantize(kv_cache, 4)
+let q8 = quantize(kv_cache, 8)
+
+println("\n--- Quantized representations ---")
+println(q2)
+println(q4)
+println(q8)
+
+// Introspection
+println("\n--- 4-bit introspection ---")
+println("Bits: " + to_string(quantized_bits(q4)))
+println("Shape: " + to_string(quantized_shape(q4)))
+println("Scale: " + to_string(quantized_scale(q4)))
+println("Elements: " + to_string(quantized_numel(q4)))
+println("Size (bytes): " + to_string(quantized_size_bytes(q4)))
+
+// Dequantize and compare
+println("\n--- Dequantized (4-bit) ---")
+let restored = dequantize(q4)
+println(restored)
+
+// Memory savings
+let fp64_bytes = 8 * 8  // 8 elements * 8 bytes
+let q2_bytes = quantized_size_bytes(q2)
+let q4_bytes = quantized_size_bytes(q4)
+println("\n--- Memory footprint ---")
+println("FP64: " + to_string(fp64_bytes) + " bytes")
+println("2-bit: " + to_string(q2_bytes) + " bytes (" + to_string(fp64_bytes / q2_bytes) + "x compression)")
+println("4-bit: " + to_string(q4_bytes) + " bytes (" + to_string(fp64_bytes / q4_bytes) + "x compression)")

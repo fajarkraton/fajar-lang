@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::parser::ast::{Expr, Param};
 use crate::runtime::ml::TensorValue;
+use crate::runtime::ml::quantize::QuantizedValue;
 
 /// A lazy iterator value for the iterator protocol.
 ///
@@ -219,6 +220,8 @@ pub enum Value {
     Pointer(u64),
     /// A tensor value (ML runtime).
     Tensor(TensorValue),
+    /// A quantized tensor value (ML runtime, multi-bit).
+    Quantized(QuantizedValue),
     /// An optimizer handle (ML runtime).
     Optimizer(OptimizerValue),
     /// A layer handle (ML runtime, boxed for size).
@@ -308,6 +311,7 @@ impl PartialEq for Value {
             (Value::BuiltinFn(a), Value::BuiltinFn(b)) => a == b,
             (Value::Pointer(a), Value::Pointer(b)) => a == b,
             (Value::Tensor(a), Value::Tensor(b)) => a == b,
+            (Value::Quantized(a), Value::Quantized(b)) => a == b,
             // Iterators are never equal (stateful)
             (Value::Iterator(_), Value::Iterator(_)) => false,
             // TraitObjects: compare by concrete value
@@ -401,6 +405,7 @@ impl fmt::Display for Value {
             }
             Value::Pointer(addr) => write!(f, "0x{addr:08x}"),
             Value::Tensor(t) => write!(f, "{t}"),
+            Value::Quantized(q) => write!(f, "{q}"),
             Value::Optimizer(o) => match o {
                 OptimizerValue::Sgd(_) => write!(f, "<optimizer SGD>"),
                 OptimizerValue::Adam(_) => write!(f, "<optimizer Adam>"),
@@ -463,6 +468,7 @@ impl Value {
             Value::BuiltinFn(_) => "builtin",
             Value::Pointer(_) => "pointer",
             Value::Tensor(_) => "tensor",
+            Value::Quantized(_) => "quantized",
             Value::Optimizer(_) => "optimizer",
             Value::Layer(_) => "layer",
             Value::Iterator(_) => "iterator",

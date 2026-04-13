@@ -1479,6 +1479,40 @@ impl TypeChecker {
             span: Span::new(0, 0),
             used: false,
         });
+        // B5.L1: Multi-bit quantization builtins
+        let quantized_t = Type::Quantized {
+            element: Box::new(Type::F64),
+            bits: 0, // 0 = any bit width (polymorphic)
+        };
+        let quant_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
+            (
+                "quantize",
+                vec![dyn_t.clone(), Type::I64],
+                quantized_t.clone(),
+            ),
+            ("dequantize", vec![quantized_t.clone()], dyn_t.clone()),
+            ("quantized_bits", vec![quantized_t.clone()], Type::I64),
+            (
+                "quantized_shape",
+                vec![quantized_t.clone()],
+                Type::Array(Box::new(Type::I64)),
+            ),
+            ("quantized_scale", vec![quantized_t.clone()], Type::F64),
+            ("quantized_numel", vec![quantized_t.clone()], Type::I64),
+            ("quantized_size_bytes", vec![quantized_t], Type::I64),
+        ];
+        for (name, params, ret) in quant_builtins {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
 
         // Layer builtins
         let layer_fns: Vec<(&str, Vec<Type>, Type)> = vec![

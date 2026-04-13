@@ -593,14 +593,29 @@ impl TypeChecker {
                 if let Some(ty_expr) = ty {
                     let declared = self.resolve_type(ty_expr);
                     if !declared.is_compatible(&val_type) {
-                        let hint =
-                            type_mismatch_hint(&declared.display_name(), &val_type.display_name());
-                        self.errors.push(SemanticError::TypeMismatch {
-                            expected: declared.display_name(),
-                            found: val_type.display_name(),
-                            span: *span,
-                            hint,
-                        });
+                        // SE023: Quantized used where Tensor expected
+                        if matches!(val_type, Type::Quantized { .. })
+                            && matches!(declared, Type::Tensor { .. })
+                        {
+                            if let Type::Quantized { element, bits } = &val_type {
+                                self.errors.push(SemanticError::QuantizedNotDequantized {
+                                    element: element.display_name(),
+                                    bits: *bits,
+                                    span: *span,
+                                });
+                            }
+                        } else {
+                            let hint = type_mismatch_hint(
+                                &declared.display_name(),
+                                &val_type.display_name(),
+                            );
+                            self.errors.push(SemanticError::TypeMismatch {
+                                expected: declared.display_name(),
+                                found: val_type.display_name(),
+                                span: *span,
+                                hint,
+                            });
+                        }
                     }
                     self.symbols.define(Symbol {
                         name: name.clone(),
@@ -1717,12 +1732,26 @@ impl TypeChecker {
                                 }
                             }
                             if !expected.is_compatible(found) {
-                                self.errors.push(SemanticError::TypeMismatch {
-                                    expected: expected.display_name(),
-                                    found: found.display_name(),
-                                    span: args.get(i).map_or(span, |a| a.span),
-                                    hint: None,
-                                });
+                                let arg_span = args.get(i).map_or(span, |a| a.span);
+                                // SE023: Quantized used where Tensor expected
+                                if matches!(found, Type::Quantized { .. })
+                                    && matches!(expected, Type::Tensor { .. })
+                                {
+                                    if let Type::Quantized { element, bits } = found {
+                                        self.errors.push(SemanticError::QuantizedNotDequantized {
+                                            element: element.display_name(),
+                                            bits: *bits,
+                                            span: arg_span,
+                                        });
+                                    }
+                                } else {
+                                    self.errors.push(SemanticError::TypeMismatch {
+                                        expected: expected.display_name(),
+                                        found: found.display_name(),
+                                        span: arg_span,
+                                        hint: None,
+                                    });
+                                }
                             }
                         }
                     }

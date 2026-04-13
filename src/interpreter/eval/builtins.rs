@@ -517,6 +517,13 @@ impl Interpreter {
             "tensor_l1_loss" => self.builtin_tensor_loss(args, "l1"),
             // Quantization
             "quantize_int8" => self.builtin_quantize_int8(args),
+            "quantize" => self.builtin_quantize(args),
+            "dequantize" => self.builtin_dequantize(args),
+            "quantized_bits" => self.builtin_quantized_bits(args),
+            "quantized_shape" => self.builtin_quantized_shape(args),
+            "quantized_scale" => self.builtin_quantized_scale(args),
+            "quantized_numel" => self.builtin_quantized_numel(args),
+            "quantized_size_bytes" => self.builtin_quantized_size_bytes(args),
             // ── Autograd builtins ──
             "tensor_backward" | "backward" => {
                 if args.len() != 1 {
@@ -7236,6 +7243,138 @@ impl Interpreter {
             _ => Err(
                 RuntimeError::TypeError("quantize_int8: expected a Tensor argument".into()).into(),
             ),
+        }
+    }
+
+    /// `quantize(tensor, bits) -> Quantized` — Quantize a tensor to the given bit width.
+    fn builtin_quantize(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Int(bits)) => {
+                let bits = *bits as u8;
+                crate::runtime::ml::quantize::QuantizedValue::quantize(t, bits)
+                    .map(Value::Quantized)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "quantize(tensor, bits): expected (Tensor, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `dequantize(quantized) -> Tensor` — Dequantize back to a float tensor.
+    fn builtin_dequantize(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Tensor(q.dequantize())),
+            _ => Err(
+                RuntimeError::TypeError("dequantize: expected a Quantized argument".into()).into(),
+            ),
+        }
+    }
+
+    /// `quantized_bits(quantized) -> Int` — Returns the bit width.
+    fn builtin_quantized_bits(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Int(q.bits() as i64)),
+            _ => Err(RuntimeError::TypeError(
+                "quantized_bits: expected a Quantized argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantized_shape(quantized) -> Array` — Returns the shape as an array.
+    fn builtin_quantized_shape(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Array(
+                q.shape().iter().map(|&d| Value::Int(d as i64)).collect(),
+            )),
+            _ => Err(RuntimeError::TypeError(
+                "quantized_shape: expected a Quantized argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantized_scale(quantized) -> Float` — Returns the scale factor.
+    fn builtin_quantized_scale(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Float(q.scale())),
+            _ => Err(RuntimeError::TypeError(
+                "quantized_scale: expected a Quantized argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantized_numel(quantized) -> Int` — Returns the number of elements.
+    fn builtin_quantized_numel(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Int(q.numel() as i64)),
+            _ => Err(RuntimeError::TypeError(
+                "quantized_numel: expected a Quantized argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantized_size_bytes(quantized) -> Int` — Returns effective memory footprint.
+    fn builtin_quantized_size_bytes(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Quantized(q) => Ok(Value::Int(q.size_bytes() as i64)),
+            _ => Err(RuntimeError::TypeError(
+                "quantized_size_bytes: expected a Quantized argument".into(),
+            )
+            .into()),
         }
     }
 
