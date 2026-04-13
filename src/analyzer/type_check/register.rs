@@ -1552,6 +1552,69 @@ impl TypeChecker {
         }
 
         // B5.L7: KV cache builtins
+        // v3 Phase A: per-axis stats + quant modes
+        let v3_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
+            ("var_axis", vec![dyn_t.clone(), Type::I64], dyn_t.clone()),
+            ("std_axis", vec![dyn_t.clone(), Type::I64], dyn_t.clone()),
+            (
+                "kurtosis_axis",
+                vec![dyn_t.clone(), Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "skewness_axis",
+                vec![dyn_t.clone(), Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "abs_max_axis",
+                vec![dyn_t.clone(), Type::I64],
+                dyn_t.clone(),
+            ),
+            ("channel_cv", vec![dyn_t.clone(), Type::I64], Type::F64),
+            ("svd_ratio", vec![dyn_t.clone()], Type::F64),
+            (
+                "select_dim",
+                vec![dyn_t.clone(), Type::I64, Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "topk_indices",
+                vec![dyn_t.clone(), Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "quantize_per_channel",
+                vec![dyn_t.clone(), Type::I64, Type::I64],
+                Type::Quantized {
+                    element: Box::new(Type::F64),
+                    bits: 0,
+                },
+            ),
+            (
+                "quantize_residual",
+                vec![dyn_t.clone(), Type::I64, Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "quantize_asymmetric",
+                vec![dyn_t.clone(), Type::I64, Type::I64],
+                dyn_t.clone(),
+            ),
+        ];
+        for (name, params, ret) in v3_builtins {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
         let kv_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
             (
                 "kv_cache_create",

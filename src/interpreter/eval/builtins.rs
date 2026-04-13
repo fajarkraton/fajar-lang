@@ -536,6 +536,19 @@ impl Interpreter {
             "kv_cache_get_values" => self.builtin_kv_cache_get_values(args),
             "kv_cache_len" => self.builtin_kv_cache_len(args),
             "kv_cache_size_bytes" => self.builtin_kv_cache_size_bytes(args),
+            // v3 Phase A: per-axis stats + quantization modes
+            "tensor_var_axis" | "var_axis" => self.builtin_tensor_axis_op(args, "var"),
+            "tensor_std_axis" | "std_axis" => self.builtin_tensor_axis_op(args, "std"),
+            "tensor_kurtosis" | "kurtosis_axis" => self.builtin_tensor_axis_op(args, "kurtosis"),
+            "tensor_skewness" | "skewness_axis" => self.builtin_tensor_axis_op(args, "skewness"),
+            "tensor_abs_max" | "abs_max_axis" => self.builtin_tensor_axis_op(args, "abs_max"),
+            "tensor_channel_cv" | "channel_cv" => self.builtin_channel_cv(args),
+            "tensor_svd_ratio" | "svd_ratio" => self.builtin_svd_ratio(args),
+            "tensor_select" | "select_dim" => self.builtin_tensor_select(args),
+            "tensor_topk" | "topk_indices" => self.builtin_topk_indices(args),
+            "quantize_per_channel" => self.builtin_quantize_per_channel(args),
+            "quantize_residual" => self.builtin_quantize_residual(args),
+            "quantize_asymmetric" => self.builtin_quantize_asymmetric(args),
             // Calibration data (B5.L3)
             "load_calibration" => self.builtin_load_calibration(args),
             "save_calibration" => self.builtin_save_calibration(args),
@@ -7767,6 +7780,189 @@ impl Interpreter {
             }
             _ => Err(RuntimeError::TypeError(
                 "kv_cache_size_bytes(cache: QuantizedKVCache)".into(),
+            )
+            .into()),
+        }
+    }
+
+    // ── v3 Phase A: per-axis stats + quantization modes ──────────────
+
+    /// Generic per-axis tensor stat: var, std, kurtosis, skewness, abs_max.
+    fn builtin_tensor_axis_op(&self, args: Vec<Value>, op: &str) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Int(axis)) => {
+                let axis = *axis as usize;
+                let result = match op {
+                    "var" => crate::runtime::ml::ops::var_axis(t, axis),
+                    "std" => crate::runtime::ml::ops::std_axis(t, axis),
+                    "kurtosis" => crate::runtime::ml::ops::kurtosis_axis(t, axis),
+                    "skewness" => crate::runtime::ml::ops::skewness_axis(t, axis),
+                    "abs_max" => crate::runtime::ml::ops::abs_max_axis(t, axis),
+                    _ => unreachable!(),
+                };
+                result
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(format!(
+                "{op}_axis(tensor, axis): expected (Tensor, Int)"
+            ))
+            .into()),
+        }
+    }
+
+    /// `channel_cv(tensor, axis) -> Float`
+    fn builtin_channel_cv(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Int(axis)) => {
+                crate::runtime::ml::ops::channel_cv(t, *axis as usize)
+                    .map(Value::Float)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "channel_cv(tensor, axis): expected (Tensor, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `svd_ratio(tensor) -> Float`
+    fn builtin_svd_ratio(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => crate::runtime::ml::ops::svd_ratio(t)
+                .map(Value::Float)
+                .map_err(|e| RuntimeError::TypeError(e.to_string()).into()),
+            _ => Err(RuntimeError::TypeError("svd_ratio(tensor): expected Tensor".into()).into()),
+        }
+    }
+
+    /// `select_dim(tensor, dim, index) -> Tensor`
+    fn builtin_tensor_select(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Tensor(t), Value::Int(dim), Value::Int(idx)) => {
+                crate::runtime::ml::ops::select(t, *dim as usize, *idx as usize)
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "select_dim(tensor, dim, index): expected (Tensor, Int, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `topk_indices(tensor, k) -> Tensor`
+    fn builtin_topk_indices(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Int(k)) => {
+                crate::runtime::ml::ops::topk_indices(t, *k as usize)
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "topk_indices(tensor, k): expected (Tensor, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantize_per_channel(tensor, bits, axis) -> Quantized`
+    fn builtin_quantize_per_channel(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Tensor(t), Value::Int(bits), Value::Int(axis)) => {
+                crate::runtime::ml::quantize::quantize_per_channel(t, *bits as u8, *axis as usize)
+                    .map(Value::Quantized)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "quantize_per_channel(tensor, bits, axis): expected (Tensor, Int, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantize_residual(tensor, bits_base, bits_residual) -> Tensor`
+    fn builtin_quantize_residual(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Tensor(t), Value::Int(base), Value::Int(res)) => {
+                crate::runtime::ml::quantize::quantize_residual(t, *base as u8, *res as u8)
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "quantize_residual(tensor, bits_base, bits_res): expected (Tensor, Int, Int)"
+                    .into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `quantize_asymmetric(tensor, bits, axis) -> Tensor`
+    fn builtin_quantize_asymmetric(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Tensor(t), Value::Int(bits), Value::Int(axis)) => {
+                crate::runtime::ml::quantize::quantize_asymmetric(t, *bits as u8, *axis as usize)
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "quantize_asymmetric(tensor, bits, axis): expected (Tensor, Int, Int)".into(),
             )
             .into()),
         }

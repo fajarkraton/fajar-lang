@@ -1,0 +1,60 @@
+// tensor_stats_demo.fj — v3 Phase A tensor operations demo
+//
+// Demonstrates all 12 new ops needed for FajarQuant v3 profiler.
+
+let data = from_data([
+    1.0, 100.0, 0.5, 0.1,
+    2.0, 0.01, 0.3, 50.0
+], [2, 4])
+println("Input tensor [2, 4]:")
+println(data)
+
+// A1: Per-axis variance
+let v = var_axis(data, 0)
+println("\nvar_axis(data, 0): " + to_string(v))
+
+// A2: Per-axis std
+let s = std_axis(data, 0)
+println("std_axis(data, 0): " + to_string(s))
+
+// A3: Kurtosis
+let k = kurtosis_axis(data, 0)
+println("kurtosis_axis(data, 0): " + to_string(k))
+
+// A9.5a: Skewness
+let sk = skewness_axis(data, 0)
+println("skewness_axis(data, 0): " + to_string(sk))
+
+// A8: Abs max per axis
+let am = abs_max_axis(data, 0)
+println("abs_max_axis(data, 0): " + to_string(am))
+
+// A9.5b: Channel CV
+let cv = channel_cv(data, 0)
+println("channel_cv(data, 0): " + to_string(cv))
+
+// A4: SVD ratio
+let sr = svd_ratio(data)
+println("\nsvd_ratio(data): " + to_string(sr))
+
+// A5: Select
+let row0 = select_dim(data, 0, 0)
+println("select_dim(data, 0, 0): " + to_string(row0))
+
+// A9: Top-K indices
+let tk = topk_indices(data, 2)
+println("topk_indices(data, 2): " + to_string(tk))
+
+// A6: Per-channel quantization
+let qpc = quantize_per_channel(data, 4, 1)
+println("\nquantize_per_channel(data, 4, 1): " + to_string(qpc))
+
+// A7: Residual quantization
+let qr = quantize_residual(data, 2, 2)
+println("quantize_residual(data, 2, 2) shape: " + to_string(shape(qr)))
+
+// A7.5: Asymmetric quantization
+let qa = quantize_asymmetric(data, 4, 1)
+println("quantize_asymmetric(data, 4, 1) shape: " + to_string(shape(qa)))
+
+println("\nAll 12 v3 Phase A ops verified.")
