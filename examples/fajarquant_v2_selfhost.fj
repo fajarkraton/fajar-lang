@@ -1,0 +1,111 @@
+// fajarquant_v2_selfhost.fj — Complete FajarQuant v2 self-hosted in Fajar Lang
+//
+// B5.G gate: exercises ALL B5.L1-L7 builtins in a single pipeline.
+// Pipeline: input → Hadamard rotate → quantize → dequantize → inverse rotate → output
+
+// ═══════════════════════════════════════════════════════════════════════
+// Configuration
+// ═══════════════════════════════════════════════════════════════════════
+let BITS = 4
+let HEAD_DIM = 64
+let SEQ_LEN = 8
+
+// ═══════════════════════════════════════════════════════════════════════
+// @device functions — FajarQuant v2 core (L4)
+// ═══════════════════════════════════════════════════════════════════════
+
+@device
+fn fq_v2_encode(kv_row: Tensor, bits: i64) -> Quantized {
+    hadamard_quantize(kv_row, bits)
+}
+
+@device
+fn fq_v2_decode(q: Quantized) -> Tensor {
+    let deq = dequantize(q)
+    hadamard_inverse(deq)
+}
+
+@device
+fn fq_v2_attention_score(query: Tensor, kv_quantized: Quantized) -> Tensor {
+    matmul_quantized(query, kv_quantized)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Generate test data
+// ═══════════════════════════════════════════════════════════════════════
+
+fn make_test_kv(seq_len: i64, head_dim: i64) -> Tensor {
+    let total = seq_len * head_dim
+    let mut data = []
+    let mut i = 0
+    while i < total {
+        let row = i / head_dim
+        let col = i % head_dim
+        let val = if col == 0 {
+            10.0
+        } else {
+            to_float(col) * 0.01
+        }
+        data = data + [val]
+        i = i + 1
+    }
+    from_data(data, [seq_len, head_dim])
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Run the full pipeline
+// ═══════════════════════════════════════════════════════════════════════
+
+println("FajarQuant v2 Self-Host Benchmark")
+println("Config: " + to_string(SEQ_LEN) + " tokens x " + to_string(HEAD_DIM) + " dims, " + to_string(BITS) + "-bit")
+
+// L1: quantize/dequantize
+let kv = make_test_kv(SEQ_LEN, HEAD_DIM)
+println("\nInput KV shape: " + to_string(shape(kv)))
+
+// L5: fused hadamard_quantize
+let encoded = fq_v2_encode(kv, BITS)
+println("Encoded: " + to_string(encoded))
+let compressed = quantized_size_bytes(encoded)
+let original = SEQ_LEN * HEAD_DIM * 8
+println("Compressed: " + to_string(compressed) + " bytes (from " + to_string(original) + " bytes, " + to_string(original / compressed) + "x)")
+
+// L2: hadamard_inverse for decode
+let decoded = fq_v2_decode(encoded)
+println("Decoded shape: " + to_string(shape(decoded)))
+
+// L6: matmul_quantized for attention
+let mut query_data = []
+let mut qi = 0
+while qi < HEAD_DIM {
+    query_data = query_data + [if qi == 0 { 1.0 } else { 0.0 }]
+    qi = qi + 1
+}
+let query = from_data(query_data, [1, HEAD_DIM])
+let attn = fq_v2_attention_score(query, encoded)
+println("Attention shape: " + to_string(shape(attn)))
+
+// L3: save/load calibration + verify orthogonal
+let rotation = eye(4)
+save_calibration(rotation, "/tmp/fj_b5g_rotation.bin")
+let loaded = load_calibration("/tmp/fj_b5g_rotation.bin", 4, 4)
+let ortho = verify_orthogonal(loaded, 1e-10)
+println("Calibration roundtrip orthogonal: " + to_string(ortho))
+
+// L7: KV cache
+let mut cache = kv_cache_create(64, 2, BITS)
+let mut t = 0
+while t < SEQ_LEN {
+    let k = quantize(from_data([1.0, 0.0, 0.0, 0.0], [1, 4]), BITS)
+    let v = quantize(from_data([0.0, 1.0, 0.0, 0.0], [1, 4]), BITS)
+    cache = kv_cache_update(cache, 0, k, v)
+    t = t + 1
+}
+println("KV cache: " + to_string(kv_cache_len(cache)) + " entries, " + to_string(kv_cache_size_bytes(cache)) + " bytes")
+
+// L1: type_of checks
+assert_eq(type_of(encoded), "quantized")
+assert_eq(type_of(decoded), "tensor")
+assert_eq(type_of(attn), "tensor")
+
+println("\nGATE PASS: All B5 L1-L7 builtins exercised successfully.")
