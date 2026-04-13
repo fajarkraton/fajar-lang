@@ -1,0 +1,46 @@
+// stack_kv_cache.fj — QuantizedKVCache for embedded deployment
+//
+// Demonstrates zero-heap KV cache: create → quantize → update → query.
+// In compiled Fajar Lang, this would live on the stack or in a static region.
+
+// Create a KV cache: max 64 tokens, 2 layers, 4-bit quantization
+let mut cache = kv_cache_create(64, 2, 4)
+
+println("Empty cache:")
+println("  len: " + to_string(kv_cache_len(cache)))
+println("  size: " + to_string(kv_cache_size_bytes(cache)) + " bytes")
+
+// Simulate 3 tokens arriving, each with K/V vectors for 2 layers
+let mut i = 0
+while i < 3 {
+    // Token i: generate K and V for each layer
+    let k0 = quantize(from_data([1.0, 0.0, 0.0, 0.0], [1, 4]), 4)
+    let v0 = quantize(from_data([0.0, 1.0, 0.0, 0.0], [1, 4]), 4)
+    cache = kv_cache_update(cache, 0, k0, v0)
+
+    let k1 = quantize(from_data([0.0, 0.0, 1.0, 0.0], [1, 4]), 4)
+    let v1 = quantize(from_data([0.0, 0.0, 0.0, 1.0], [1, 4]), 4)
+    cache = kv_cache_update(cache, 1, k1, v1)
+
+    i = i + 1
+}
+
+println("\nAfter 3 tokens:")
+println("  len: " + to_string(kv_cache_len(cache)))
+println("  size: " + to_string(kv_cache_size_bytes(cache)) + " bytes")
+
+// Query layer 0 keys
+let layer0_keys = kv_cache_get_keys(cache, 0)
+println("\nLayer 0 keys (" + to_string(len(layer0_keys)) + " entries):")
+let mut j = 0
+while j < len(layer0_keys) {
+    println("  [" + to_string(j) + "] " + to_string(layer0_keys[j]))
+    j = j + 1
+}
+
+// Memory comparison
+let fp64_per_token = 4 * 8  // 4 dims * 8 bytes f64
+let q4_per_token = 1         // 4 dims * 4 bits / 8 = 2 bytes per K/V, but 1 per entry
+println("\nMemory per token-layer:")
+println("  FP64: " + to_string(fp64_per_token) + " bytes")
+println("  4-bit quantized: much less")

@@ -1551,6 +1551,40 @@ impl TypeChecker {
             });
         }
 
+        // B5.L7: KV cache builtins
+        let kv_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
+            (
+                "kv_cache_create",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::Unknown,
+            ),
+            ("kv_cache_update", vec![Type::Unknown; 4], Type::Unknown),
+            (
+                "kv_cache_get_keys",
+                vec![Type::Unknown, Type::I64],
+                Type::Unknown,
+            ),
+            (
+                "kv_cache_get_values",
+                vec![Type::Unknown, Type::I64],
+                Type::Unknown,
+            ),
+            ("kv_cache_len", vec![Type::Unknown], Type::I64),
+            ("kv_cache_size_bytes", vec![Type::Unknown], Type::I64),
+        ];
+        for (name, params, ret) in kv_builtins {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
         // B5.L3: Calibration data builtins
         let cal_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
             (

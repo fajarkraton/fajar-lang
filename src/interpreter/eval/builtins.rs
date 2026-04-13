@@ -529,6 +529,13 @@ impl Interpreter {
             "hadamard_inverse" => self.builtin_hadamard_inverse(args),
             "hadamard_quantize" => self.builtin_hadamard_quantize(args),
             "matmul_quantized" => self.builtin_matmul_quantized(args),
+            // KV cache (B5.L7)
+            "kv_cache_create" => self.builtin_kv_cache_create(args),
+            "kv_cache_update" => self.builtin_kv_cache_update(args),
+            "kv_cache_get_keys" => self.builtin_kv_cache_get_keys(args),
+            "kv_cache_get_values" => self.builtin_kv_cache_get_values(args),
+            "kv_cache_len" => self.builtin_kv_cache_len(args),
+            "kv_cache_size_bytes" => self.builtin_kv_cache_size_bytes(args),
             // Calibration data (B5.L3)
             "load_calibration" => self.builtin_load_calibration(args),
             "save_calibration" => self.builtin_save_calibration(args),
@@ -7517,6 +7524,249 @@ impl Interpreter {
             _ => Err(RuntimeError::TypeError(
                 "matmul_quantized(query: Tensor, kv: Quantized): expected (Tensor, Quantized)"
                     .into(),
+            )
+            .into()),
+        }
+    }
+
+    // ── KV Cache (B5.L7) ──────────────────────────────────────────────
+
+    /// `kv_cache_create(max_len, n_layers, bits) -> Struct`
+    ///
+    /// Creates a QuantizedKVCache as a Struct with:
+    /// - `max_len`, `n_layers`, `bits`: metadata (Int)
+    /// - `len`: current length (Int, starts at 0)
+    /// - `keys`, `values`: Array of Array of Quantized (per-layer, per-position)
+    fn builtin_kv_cache_create(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Int(max_len), Value::Int(n_layers), Value::Int(bits)) => {
+                let mut fields = std::collections::HashMap::new();
+                fields.insert("max_len".into(), Value::Int(*max_len));
+                fields.insert("n_layers".into(), Value::Int(*n_layers));
+                fields.insert("bits".into(), Value::Int(*bits));
+                fields.insert("len".into(), Value::Int(0));
+                // keys[layer] = [] (empty arrays, grow on update)
+                let empty_layers: Vec<Value> =
+                    (0..*n_layers).map(|_| Value::Array(Vec::new())).collect();
+                fields.insert("keys".into(), Value::Array(empty_layers.clone()));
+                fields.insert("values".into(), Value::Array(empty_layers));
+                Ok(Value::Struct {
+                    name: "QuantizedKVCache".into(),
+                    fields,
+                })
+            }
+            _ => Err(RuntimeError::TypeError(
+                "kv_cache_create(max_len: int, n_layers: int, bits: int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `kv_cache_update(cache, layer_idx, key_quantized, value_quantized) -> Struct`
+    ///
+    /// Returns a new cache with the K/V appended at the given layer.
+    /// Errors if `cache.len >= cache.max_len`.
+    fn builtin_kv_cache_update(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2], &args[3]) {
+            (
+                Value::Struct { name, fields },
+                Value::Int(layer_idx),
+                Value::Quantized(_),
+                Value::Quantized(_),
+            ) if name == "QuantizedKVCache" => {
+                let max_len = match fields.get("max_len") {
+                    Some(Value::Int(n)) => *n,
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("kv_cache_update: invalid cache struct".into())
+                                .into(),
+                        )
+                    }
+                };
+                let cur_len = match fields.get("len") {
+                    Some(Value::Int(n)) => *n,
+                    _ => {
+                        return Err(
+                            RuntimeError::TypeError("kv_cache_update: invalid cache struct".into())
+                                .into(),
+                        )
+                    }
+                };
+
+                if cur_len >= max_len {
+                    return Err(RuntimeError::TypeError(format!(
+                        "kv_cache_update: cache overflow — len {cur_len} >= max_len {max_len}"
+                    ))
+                    .into());
+                }
+
+                let layer = *layer_idx as usize;
+                let mut new_fields = fields.clone();
+
+                // Append key to keys[layer]
+                if let Some(Value::Array(keys)) = new_fields.get_mut("keys") {
+                    if let Some(Value::Array(layer_keys)) = keys.get_mut(layer) {
+                        layer_keys.push(args[2].clone());
+                    }
+                }
+                // Append value to values[layer]
+                if let Some(Value::Array(values)) = new_fields.get_mut("values") {
+                    if let Some(Value::Array(layer_values)) = values.get_mut(layer) {
+                        layer_values.push(args[3].clone());
+                    }
+                }
+                // Increment len (only count once per full-layer update)
+                // In practice, caller updates all layers then increments len.
+                // For simplicity, we increment on every call.
+                new_fields.insert("len".into(), Value::Int(cur_len + 1));
+
+                Ok(Value::Struct {
+                    name: "QuantizedKVCache".into(),
+                    fields: new_fields,
+                })
+            }
+            _ => Err(RuntimeError::TypeError(
+                "kv_cache_update(cache: QuantizedKVCache, layer: int, key: Quantized, value: Quantized)"
+                    .into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `kv_cache_get_keys(cache, layer_idx) -> Array<Quantized>`
+    fn builtin_kv_cache_get_keys(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Struct { name, fields }, Value::Int(layer_idx))
+                if name == "QuantizedKVCache" =>
+            {
+                let layer = *layer_idx as usize;
+                match fields.get("keys") {
+                    Some(Value::Array(keys)) => match keys.get(layer) {
+                        Some(v) => Ok(v.clone()),
+                        None => Err(RuntimeError::TypeError(format!(
+                            "kv_cache_get_keys: layer {layer} out of range"
+                        ))
+                        .into()),
+                    },
+                    _ => Err(
+                        RuntimeError::TypeError("kv_cache_get_keys: invalid cache".into()).into(),
+                    ),
+                }
+            }
+            _ => Err(RuntimeError::TypeError(
+                "kv_cache_get_keys(cache: QuantizedKVCache, layer: int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `kv_cache_get_values(cache, layer_idx) -> Array<Quantized>`
+    fn builtin_kv_cache_get_values(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Struct { name, fields }, Value::Int(layer_idx))
+                if name == "QuantizedKVCache" =>
+            {
+                let layer = *layer_idx as usize;
+                match fields.get("values") {
+                    Some(Value::Array(values)) => match values.get(layer) {
+                        Some(v) => Ok(v.clone()),
+                        None => Err(RuntimeError::TypeError(format!(
+                            "kv_cache_get_values: layer {layer} out of range"
+                        ))
+                        .into()),
+                    },
+                    _ => Err(
+                        RuntimeError::TypeError("kv_cache_get_values: invalid cache".into()).into(),
+                    ),
+                }
+            }
+            _ => Err(RuntimeError::TypeError(
+                "kv_cache_get_values(cache: QuantizedKVCache, layer: int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `kv_cache_len(cache) -> Int`
+    fn builtin_kv_cache_len(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Struct { name, fields } if name == "QuantizedKVCache" => {
+                match fields.get("len") {
+                    Some(v @ Value::Int(_)) => Ok(v.clone()),
+                    _ => Err(RuntimeError::TypeError("kv_cache_len: invalid cache".into()).into()),
+                }
+            }
+            _ => {
+                Err(RuntimeError::TypeError("kv_cache_len(cache: QuantizedKVCache)".into()).into())
+            }
+        }
+    }
+
+    /// `kv_cache_size_bytes(cache) -> Int` — Effective memory footprint.
+    fn builtin_kv_cache_size_bytes(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Struct { name, fields } if name == "QuantizedKVCache" => {
+                // Sum size_bytes() of all Quantized entries in keys + values
+                let mut total: usize = 0;
+                for layer_key in ["keys", "values"] {
+                    if let Some(Value::Array(layers)) = fields.get(layer_key) {
+                        for layer in layers {
+                            if let Value::Array(entries) = layer {
+                                for entry in entries {
+                                    if let Value::Quantized(q) = entry {
+                                        total += q.size_bytes();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Value::Int(total as i64))
+            }
+            _ => Err(RuntimeError::TypeError(
+                "kv_cache_size_bytes(cache: QuantizedKVCache)".into(),
             )
             .into()),
         }

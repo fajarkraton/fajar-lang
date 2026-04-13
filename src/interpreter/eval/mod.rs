@@ -1422,6 +1422,12 @@ impl Interpreter {
             "hadamard_inverse",
             "hadamard_quantize",
             "matmul_quantized",
+            "kv_cache_create",
+            "kv_cache_update",
+            "kv_cache_get_keys",
+            "kv_cache_get_values",
+            "kv_cache_len",
+            "kv_cache_size_bytes",
             // Calibration (B5.L3)
             "load_calibration",
             "save_calibration",
