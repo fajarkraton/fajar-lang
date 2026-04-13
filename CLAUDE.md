@@ -74,12 +74,11 @@ detailed entries.
 ### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     7,611 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
-           ≈ 10,000 total | 0 failures, 0 flakes
-           (was 7,581 pre V26 A10; +30 = v3 tensor ops added in Phase A6-A10)
+Tests:     7,611 lib + 2,553 integ (in 52 test files) + 14 doc + 1 ignored
+           ≈ 10,179 total | 0 failures, 0 flakes
            Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
-LOC:       ~446,000 lines of Rust (394 files in src/)
-Examples:  238 .fj programs in examples/ (was 231, +7 v3 tensor op demos)
+LOC:       ~448,000 lines of Rust (394 files in src/)
+Examples:  238 .fj programs in examples/
            Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
            Source of truth: docs/HONEST_STATUS_V26.md
@@ -100,7 +99,7 @@ Labeling: [x] = production (tested, works E2E)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 
-Numbers verified by runnable commands as of 2026-04-14. CLAUDE.md no longer
+Numbers verified by runnable commands as of 2026-04-14 (V27 sync). CLAUDE.md no longer
 trusts inflated counts. Audit corrections in V26:
   - prior 11,395 tests was inflated; real is 7,581 lib + 2,374 integ + 14 doc
   - prior 285 examples was inflated; real is 231
@@ -118,6 +117,7 @@ trusts inflated counts. Audit corrections in V26:
 
 | Version | Date | Highlight |
 |---|---|---|
+| **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError, version sync 27.0.0, FajarOS OOM hardening |
 | **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
 | V25 "Production" | 2026-04-07 | Hands-on re-audit, K8s deploy, FajarQuant Phase C real Gemma 4 E2B, @kernel transitive fix |
 | V24 "Quantum" | 2026-04-07 | CUDA RTX 4090 (9 PTX kernels, ~3x matmul), AVX2 + AES-NI inline asm, FajarQuant Phase 5-7 |
@@ -776,5 +776,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 25.1 | V26 "Final" Phase A done + FajarQuant v3.1 released — 7,611 lib + 2,374 integ + 14 doc tests, 0 flakes, 238 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8+§6.9 Rules*
+*CLAUDE.md Version: 27.0 | V27 "Hardened" — 7,611 lib + 2,553 integ + 14 doc tests, 0 flakes, 0 doc warnings, 238 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8+§6.9 Rules*
 *Last Updated: 2026-04-14*
