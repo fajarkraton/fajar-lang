@@ -1241,6 +1241,297 @@ pub fn gamma(x: f64) -> f64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Per-Axis Statistical Reductions (FajarQuant v3 Phase A)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Variance along an axis (Bessel-corrected, ddof=1).
+pub fn var_axis(a: &TensorValue, axis: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("var_axis: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let result = data.var_axis(ndarray::Axis(axis), 1.0);
+    Ok(TensorValue::from_ndarray(result))
+}
+
+/// Standard deviation along an axis (Bessel-corrected, ddof=1).
+pub fn std_axis(a: &TensorValue, axis: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("std_axis: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let result = data.std_axis(ndarray::Axis(axis), 1.0);
+    Ok(TensorValue::from_ndarray(result))
+}
+
+/// Excess kurtosis along an axis: E[(x-μ)⁴]/σ⁴ - 3.
+///
+/// Normal distribution has kurtosis 0. High kurtosis indicates heavy tails
+/// (outlier-dominated), which is the signal for Path C in FajarQuant v3.
+pub fn kurtosis_axis(a: &TensorValue, axis: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("kurtosis_axis: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let mean = data
+        .mean_axis(ndarray::Axis(axis))
+        .ok_or_else(|| TensorError::InvalidData {
+            reason: "kurtosis_axis: mean computation failed".into(),
+        })?;
+    let var = data.var_axis(ndarray::Axis(axis), 0.0); // ddof=0 for kurtosis
+    // E[(x - mean)^4] along axis
+    let mut m4 = ndarray::ArrayD::zeros(mean.shape());
+    for sub in data.axis_iter(ndarray::Axis(axis)) {
+        let diff = &sub - &mean;
+        let d4 = diff.mapv(|x| x * x * x * x);
+        m4 = m4 + d4;
+    }
+    let n = data.shape()[axis] as f64;
+    m4 /= n;
+    // kurtosis = m4 / var^2 - 3
+    let result = m4 / var.mapv(|v| if v == 0.0 { 1.0 } else { v * v }) - 3.0;
+    Ok(TensorValue::from_ndarray(result))
+}
+
+/// σ1/σ2 ratio — top-2 singular value ratio for a 2D tensor.
+///
+/// High ratio indicates strong low-rank structure, signaling Path B
+/// (PCA rotation) in FajarQuant v3. Computed via eigenvalues of AᵀA
+/// using power iteration (no LAPACK dependency).
+pub fn svd_ratio(a: &TensorValue) -> Result<f64, TensorError> {
+    let shape = a.shape();
+    if shape.len() != 2 {
+        return Err(TensorError::InvalidData {
+            reason: format!("svd_ratio: expected 2D tensor, got shape {:?}", shape),
+        });
+    }
+    let data = a.to_vec();
+    let (m, n) = (shape[0], shape[1]);
+    let k = m.min(n);
+    if k < 2 {
+        return Ok(1.0);
+    }
+
+    // Compute AᵀA (n×n) if m >= n, else AAᵀ (m×m)
+    let (dim, mat_fn): (usize, Box<dyn Fn(usize, usize) -> f64>) = if m >= n {
+        (
+            n,
+            Box::new(move |i: usize, j: usize| -> f64 {
+                (0..m).map(|r| data[r * n + i] * data[r * n + j]).sum()
+            }),
+        )
+    } else {
+        (
+            m,
+            Box::new(move |i: usize, j: usize| -> f64 {
+                (0..n).map(|c| data[i * n + c] * data[j * n + c]).sum()
+            }),
+        )
+    };
+
+    // Power iteration for top eigenvalue
+    let mut v = vec![1.0 / (dim as f64).sqrt(); dim];
+    for _ in 0..100 {
+        let mut w = vec![0.0; dim];
+        for (wi, i) in w.iter_mut().zip(0..dim) {
+            *wi = (0..dim).map(|j| mat_fn(i, j) * v[j]).sum();
+        }
+        let norm: f64 = w.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if norm == 0.0 {
+            return Ok(1.0);
+        }
+        v = w.iter().map(|x| x / norm).collect();
+    }
+    let lambda1: f64 = (0..dim)
+        .map(|i| {
+            let av: f64 = (0..dim).map(|j| mat_fn(i, j) * v[j]).sum();
+            av * v[i]
+        })
+        .sum();
+
+    // Deflation: subtract rank-1 component, power iterate for second eigenvalue
+    let mut v2 = vec![0.0; dim];
+    v2[if dim > 1 { 1 } else { 0 }] = 1.0; // orthogonal start
+    // Gram-Schmidt against v
+    let dot: f64 = v2.iter().zip(v.iter()).map(|(a, b)| a * b).sum();
+    for (v2i, vi) in v2.iter_mut().zip(v.iter()) {
+        *v2i -= dot * vi;
+    }
+    let n2: f64 = v2.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if n2 < 1e-12 {
+        return Ok(f64::INFINITY);
+    }
+    for x in &mut v2 {
+        *x /= n2;
+    }
+
+    for _ in 0..100 {
+        let mut w = vec![0.0; dim];
+        for (wi, i) in w.iter_mut().zip(0..dim) {
+            *wi = (0..dim).map(|j| mat_fn(i, j) * v2[j]).sum();
+        }
+        // Orthogonalize against v
+        let dot: f64 = w.iter().zip(v.iter()).map(|(a, b)| a * b).sum();
+        for (wi, vi) in w.iter_mut().zip(v.iter()) {
+            *wi -= dot * vi;
+        }
+        let norm: f64 = w.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if norm < 1e-15 {
+            return Ok(f64::INFINITY);
+        }
+        v2 = w.iter().map(|x| x / norm).collect();
+    }
+    let lambda2: f64 = (0..dim)
+        .map(|i| {
+            let av: f64 = (0..dim).map(|j| mat_fn(i, j) * v2[j]).sum();
+            av * v2[i]
+        })
+        .sum();
+
+    let sigma1 = lambda1.abs().sqrt();
+    let sigma2 = lambda2.abs().sqrt();
+    if sigma2 < 1e-15 {
+        Ok(f64::INFINITY)
+    } else {
+        Ok(sigma1 / sigma2)
+    }
+}
+
+/// Select a single slice along a dimension, removing that dimension.
+///
+/// `select(tensor[3, 4, 5], dim=1, index=2)` → `tensor[3, 5]`
+pub fn select(a: &TensorValue, dim: usize, index: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if dim >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("select: dim {dim} >= ndim {}", data.ndim()),
+        });
+    }
+    if index >= data.shape()[dim] {
+        return Err(TensorError::InvalidData {
+            reason: format!("select: index {index} >= dim size {}", data.shape()[dim]),
+        });
+    }
+    let sliced = data.index_axis(ndarray::Axis(dim), index).to_owned();
+    Ok(TensorValue::from_ndarray(sliced))
+}
+
+/// Per-channel absolute maximum along an axis.
+pub fn abs_max_axis(a: &TensorValue, axis: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("abs_max_axis: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let result =
+        data.mapv(f64::abs)
+            .fold_axis(ndarray::Axis(axis), f64::NEG_INFINITY, |&acc, &x| {
+                acc.max(x)
+            });
+    Ok(TensorValue::from_ndarray(result))
+}
+
+/// Top-K indices along the last dimension (by absolute value, descending).
+///
+/// Returns a tensor of shape [..., k] with indices of the largest elements.
+pub fn topk_indices(a: &TensorValue, k: usize) -> Result<TensorValue, TensorError> {
+    let data = a.to_vec();
+    let shape = a.shape();
+    if shape.is_empty() {
+        return Err(TensorError::InvalidData {
+            reason: "topk_indices: scalar input not supported".into(),
+        });
+    }
+    let d = *shape.last().unwrap_or(&1);
+    if k > d {
+        return Err(TensorError::InvalidData {
+            reason: format!("topk_indices: k={k} > last dim={d}"),
+        });
+    }
+    let n_rows = data.len() / d;
+    let mut out = Vec::with_capacity(n_rows * k);
+    for row in 0..n_rows {
+        let base = row * d;
+        let mut indices: Vec<usize> = (0..d).collect();
+        indices.sort_by(|&i, &j| {
+            data[base + j]
+                .abs()
+                .partial_cmp(&data[base + i].abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for &idx in indices.iter().take(k) {
+            out.push(idx as f64);
+        }
+    }
+    let mut new_shape = shape.to_vec();
+    if let Some(last) = new_shape.last_mut() {
+        *last = k;
+    }
+    TensorValue::from_data(out, &new_shape)
+}
+
+/// Skewness along an axis: E[(x-μ)³] / σ³.
+///
+/// Measures distribution asymmetry. High |skewness| signals Path E
+/// (asymmetric quantization) in FajarQuant v3.
+pub fn skewness_axis(a: &TensorValue, axis: usize) -> Result<TensorValue, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("skewness_axis: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let mean = data
+        .mean_axis(ndarray::Axis(axis))
+        .ok_or_else(|| TensorError::InvalidData {
+            reason: "skewness_axis: mean computation failed".into(),
+        })?;
+    let std = data.std_axis(ndarray::Axis(axis), 0.0);
+    let mut m3 = ndarray::ArrayD::zeros(mean.shape());
+    for sub in data.axis_iter(ndarray::Axis(axis)) {
+        let diff = &sub - &mean;
+        m3 = m3 + diff.mapv(|x| x * x * x);
+    }
+    let n = data.shape()[axis] as f64;
+    m3 /= n;
+    let result = m3 / std.mapv(|s| if s == 0.0 { 1.0 } else { s * s * s });
+    Ok(TensorValue::from_ndarray(result))
+}
+
+/// Coefficient of variation of per-channel variances along an axis.
+///
+/// CV = std(var_per_channel) / mean(var_per_channel). High CV indicates
+/// channels have very different variances — KIVI-style per-channel quant
+/// (Path A) works well here.
+pub fn channel_cv(a: &TensorValue, axis: usize) -> Result<f64, TensorError> {
+    let data = a.data();
+    if axis >= data.ndim() {
+        return Err(TensorError::InvalidData {
+            reason: format!("channel_cv: axis {axis} >= ndim {}", data.ndim()),
+        });
+    }
+    let var = data.var_axis(ndarray::Axis(axis), 1.0);
+    let var_vec: Vec<f64> = var.iter().copied().collect();
+    if var_vec.is_empty() {
+        return Ok(0.0);
+    }
+    let mean_var = var_vec.iter().sum::<f64>() / var_vec.len() as f64;
+    if mean_var < 1e-15 {
+        return Ok(0.0);
+    }
+    let std_var =
+        (var_vec.iter().map(|v| (v - mean_var).powi(2)).sum::<f64>() / var_vec.len() as f64).sqrt();
+    Ok(std_var / mean_var)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Hadamard Transform (B5.L2)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -2607,5 +2898,228 @@ mod tests {
     fn hadamard_quantize_invalid_bits_fails() {
         let x = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0], &[4]).unwrap();
         assert!(hadamard_quantize(&x, 5).is_err());
+    }
+
+    // ── Per-Axis Statistical Reductions (v3 Phase A) ──
+
+    #[test]
+    fn var_axis_basic() {
+        // [[1, 2, 3], [4, 5, 6]] → var along axis 0 = [4.5, 4.5, 4.5]
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let v = var_axis(&a, 0).unwrap();
+        assert_eq!(v.shape(), &[3]);
+        for &val in v.to_vec().iter() {
+            assert!((val - 4.5).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn var_axis_along_columns() {
+        // var along axis 1: var([1,2,3])=1, var([4,5,6])=1
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let v = var_axis(&a, 1).unwrap();
+        assert_eq!(v.shape(), &[2]);
+        for &val in v.to_vec().iter() {
+            assert!((val - 1.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn var_axis_invalid() {
+        let a = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(var_axis(&a, 5).is_err());
+    }
+
+    #[test]
+    fn std_axis_basic() {
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let s = std_axis(&a, 1).unwrap();
+        assert_eq!(s.shape(), &[2]);
+        for &val in s.to_vec().iter() {
+            assert!((val - 1.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn std_axis_invalid() {
+        let a = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(std_axis(&a, 3).is_err());
+    }
+
+    #[test]
+    fn kurtosis_axis_normal() {
+        // Uniform-ish: [1,2,3,4,5] has kurtosis ~ -1.3 (platykurtic)
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0], &[5, 1]).unwrap();
+        let k = kurtosis_axis(&a, 0).unwrap();
+        assert_eq!(k.shape(), &[1]);
+        // Excess kurtosis of uniform is negative
+        assert!(k.to_vec()[0] < 0.0);
+    }
+
+    #[test]
+    fn kurtosis_axis_heavy_tail() {
+        // Spike distribution: mostly 0 with one extreme → high kurtosis
+        let mut data = vec![0.0; 100];
+        data[50] = 100.0;
+        let a = TensorValue::from_data(data, &[100, 1]).unwrap();
+        let k = kurtosis_axis(&a, 0).unwrap();
+        assert!(k.to_vec()[0] > 50.0, "spike should have high kurtosis");
+    }
+
+    #[test]
+    fn kurtosis_axis_invalid() {
+        let a = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(kurtosis_axis(&a, 5).is_err());
+    }
+
+    #[test]
+    fn svd_ratio_identity() {
+        let eye = TensorValue::from_data(vec![1.0, 0.0, 0.0, 1.0], &[2, 2]).unwrap();
+        let r = svd_ratio(&eye).unwrap();
+        assert!((r - 1.0).abs() < 0.1, "identity σ1/σ2 ≈ 1, got {r}");
+    }
+
+    #[test]
+    fn svd_ratio_rank1() {
+        // Rank-1 matrix: [[1,2],[1,2]] → σ2 ≈ 0 → ratio very large
+        let a = TensorValue::from_data(vec![1.0, 2.0, 1.0, 2.0], &[2, 2]).unwrap();
+        let r = svd_ratio(&a).unwrap();
+        assert!(r > 100.0, "rank-1 should have very high ratio, got {r}");
+    }
+
+    #[test]
+    fn svd_ratio_non_2d_fails() {
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0], &[3]).unwrap();
+        assert!(svd_ratio(&a).is_err());
+    }
+
+    #[test]
+    fn select_basic() {
+        // [[1,2,3],[4,5,6]] select dim=0 index=1 → [4,5,6]
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let s = select(&a, 0, 1).unwrap();
+        assert_eq!(s.shape(), &[3]);
+        assert_eq!(s.to_vec(), vec![4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn select_second_dim() {
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let s = select(&a, 1, 0).unwrap();
+        assert_eq!(s.shape(), &[2]);
+        assert_eq!(s.to_vec(), vec![1.0, 4.0]);
+    }
+
+    #[test]
+    fn select_out_of_bounds() {
+        let a = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(select(&a, 0, 5).is_err());
+    }
+
+    #[test]
+    fn abs_max_axis_basic() {
+        let a = TensorValue::from_data(vec![1.0, -5.0, 3.0, -2.0, 4.0, -1.0], &[2, 3]).unwrap();
+        let m = abs_max_axis(&a, 0).unwrap();
+        assert_eq!(m.shape(), &[3]);
+        assert_eq!(m.to_vec(), vec![2.0, 5.0, 3.0]);
+    }
+
+    #[test]
+    fn abs_max_axis_invalid() {
+        let a = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(abs_max_axis(&a, 3).is_err());
+    }
+
+    #[test]
+    fn topk_indices_basic() {
+        // [1, 5, 2, 8, 3] → top-2 by abs: indices [3, 1] (8, 5)
+        let a = TensorValue::from_data(vec![1.0, 5.0, 2.0, 8.0, 3.0], &[5]).unwrap();
+        let t = topk_indices(&a, 2).unwrap();
+        assert_eq!(t.shape(), &[2]);
+        assert_eq!(t.to_vec()[0], 3.0); // index of 8
+        assert_eq!(t.to_vec()[1], 1.0); // index of 5
+    }
+
+    #[test]
+    fn topk_indices_2d() {
+        let a = TensorValue::from_data(vec![1.0, 9.0, 3.0, 7.0, 2.0, 5.0], &[2, 3]).unwrap();
+        let t = topk_indices(&a, 1).unwrap();
+        assert_eq!(t.shape(), &[2, 1]);
+        assert_eq!(t.to_vec()[0], 1.0); // row 0: index of 9
+        assert_eq!(t.to_vec()[1], 0.0); // row 1: index of 7
+    }
+
+    #[test]
+    fn topk_indices_k_too_large() {
+        let a = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(topk_indices(&a, 5).is_err());
+    }
+
+    #[test]
+    fn skewness_axis_symmetric() {
+        // Symmetric distribution: skewness ≈ 0
+        let a = TensorValue::from_data(vec![-2.0, -1.0, 0.0, 1.0, 2.0], &[5, 1]).unwrap();
+        let s = skewness_axis(&a, 0).unwrap();
+        assert!(
+            s.to_vec()[0].abs() < 0.1,
+            "symmetric should have ~0 skewness"
+        );
+    }
+
+    #[test]
+    fn skewness_axis_right_skewed() {
+        // Right-skewed: mostly small with one large
+        let a = TensorValue::from_data(vec![1.0, 1.0, 1.0, 1.0, 100.0], &[5, 1]).unwrap();
+        let s = skewness_axis(&a, 0).unwrap();
+        assert!(
+            s.to_vec()[0] > 1.0,
+            "right-skewed should have positive skewness"
+        );
+    }
+
+    #[test]
+    fn skewness_axis_invalid() {
+        let a = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(skewness_axis(&a, 5).is_err());
+    }
+
+    #[test]
+    fn channel_cv_uniform() {
+        // All channels same variance → CV ≈ 0
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).unwrap();
+        let cv = channel_cv(&a, 0).unwrap();
+        assert!(
+            (cv - 0.0).abs() < 1e-10,
+            "uniform variance → CV=0, got {cv}"
+        );
+    }
+
+    #[test]
+    fn channel_cv_mixed() {
+        // Channel 0: [1,1] (var=0), Channel 1: [0,10] (var=50) → high CV
+        let a = TensorValue::from_data(vec![1.0, 0.0, 1.0, 10.0], &[2, 2]).unwrap();
+        let cv = channel_cv(&a, 0).unwrap();
+        assert!(cv >= 1.0, "mixed variances should have high CV, got {cv}");
+    }
+
+    #[test]
+    fn channel_cv_invalid() {
+        let a = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(channel_cv(&a, 5).is_err());
+    }
+
+    // ── Prevention meta-test: all axis ops reject invalid axis ──
+
+    #[test]
+    fn all_axis_ops_reject_invalid_axis() {
+        let a = TensorValue::from_data(vec![1.0, 2.0, 3.0], &[3]).unwrap();
+        let bad_axis = 99;
+        assert!(var_axis(&a, bad_axis).is_err());
+        assert!(std_axis(&a, bad_axis).is_err());
+        assert!(kurtosis_axis(&a, bad_axis).is_err());
+        assert!(abs_max_axis(&a, bad_axis).is_err());
+        assert!(skewness_axis(&a, bad_axis).is_err());
+        assert!(channel_cv(&a, bad_axis).is_err());
+        assert!(select(&a, bad_axis, 0).is_err());
     }
 }
