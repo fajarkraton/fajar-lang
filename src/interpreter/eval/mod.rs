@@ -1421,6 +1421,7 @@ impl Interpreter {
             "hadamard",
             "hadamard_inverse",
             "hadamard_quantize",
+            "matmul_quantized",
             // Calibration (B5.L3)
             "load_calibration",
             "save_calibration",

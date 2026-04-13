@@ -528,6 +528,7 @@ impl Interpreter {
             "hadamard" => self.builtin_hadamard(args),
             "hadamard_inverse" => self.builtin_hadamard_inverse(args),
             "hadamard_quantize" => self.builtin_hadamard_quantize(args),
+            "matmul_quantized" => self.builtin_matmul_quantized(args),
             // Calibration data (B5.L3)
             "load_calibration" => self.builtin_load_calibration(args),
             "save_calibration" => self.builtin_save_calibration(args),
@@ -7440,6 +7441,82 @@ impl Interpreter {
             }
             _ => Err(RuntimeError::TypeError(
                 "hadamard_quantize(tensor, bits): expected (Tensor, Int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `matmul_quantized(query, quantized_kv) -> Tensor` — Dequantize + matmul with shape check.
+    ///
+    /// query: [M, K], quantized_kv: Quantized with original shape [*, K] or [K, N].
+    /// Result: [M, N] = query × dequantize(kv)^T.
+    /// Validates that inner dimensions match before computation.
+    fn builtin_matmul_quantized(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(query), Value::Quantized(kv_quant)) => {
+                let q_shape = query.shape();
+                let kv_shape = kv_quant.shape();
+
+                // Shape validation
+                if q_shape.len() != 2 {
+                    return Err(RuntimeError::TypeError(format!(
+                        "matmul_quantized: query must be 2D [M, K], got shape {:?}",
+                        q_shape
+                    ))
+                    .into());
+                }
+                if kv_shape.len() != 2 {
+                    return Err(RuntimeError::TypeError(format!(
+                        "matmul_quantized: quantized KV must be 2D [N, K] or [K, N], got shape {:?}",
+                        kv_shape
+                    ))
+                    .into());
+                }
+
+                let query_k = q_shape[1];
+                let kv_rows = kv_shape[0];
+                let kv_cols = kv_shape[1];
+
+                // Try KV as [N, K] (matmul query × KV^T): inner dim = K
+                if query_k == kv_cols {
+                    let kv_tensor = kv_quant.dequantize();
+                    let transposed =
+                        crate::runtime::ml::ops::transpose(&kv_tensor).map_err(|e| {
+                            RuntimeError::TypeError(format!("matmul_quantized transpose: {e}"))
+                        })?;
+                    crate::runtime::ml::ops::matmul(query, &transposed)
+                        .map(Value::Tensor)
+                        .map_err(|e| {
+                            RuntimeError::TypeError(format!("matmul_quantized: {e}")).into()
+                        })
+                }
+                // Try KV as [K, N] (matmul query × KV): inner dim = K
+                else if query_k == kv_rows {
+                    let kv_tensor = kv_quant.dequantize();
+                    crate::runtime::ml::ops::matmul(query, &kv_tensor)
+                        .map(Value::Tensor)
+                        .map_err(|e| {
+                            RuntimeError::TypeError(format!("matmul_quantized: {e}")).into()
+                        })
+                } else {
+                    Err(RuntimeError::TypeError(format!(
+                        "matmul_quantized: shape mismatch — query [{}, {}] cannot multiply with \
+                         quantized KV [{}, {}] (inner dimensions {} and {}/{} don't match)",
+                        q_shape[0], query_k, kv_rows, kv_cols, query_k, kv_rows, kv_cols
+                    ))
+                    .into())
+                }
+            }
+            _ => Err(RuntimeError::TypeError(
+                "matmul_quantized(query: Tensor, kv: Quantized): expected (Tensor, Quantized)"
+                    .into(),
             )
             .into()),
         }

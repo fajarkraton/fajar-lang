@@ -1526,6 +1526,17 @@ impl TypeChecker {
                     bits: 0,
                 },
             ),
+            (
+                "matmul_quantized",
+                vec![
+                    dyn_t.clone(),
+                    Type::Quantized {
+                        element: Box::new(Type::F64),
+                        bits: 0,
+                    },
+                ],
+                dyn_t.clone(),
+            ),
         ];
         for (name, params, ret) in hadamard_builtins {
             self.symbols.define(Symbol {
