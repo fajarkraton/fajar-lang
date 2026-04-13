@@ -279,6 +279,53 @@ fn object_compiler_produces_bytes() {
 }
 
 #[test]
+fn aot_interrupt_wrapper_emitted() {
+    // V27.5 P1.3a: @interrupt fn must produce assembly wrapper in
+    // global_asm_sections after compile_program completes.
+    let src = r#"
+        @interrupt
+        fn timer_irq() -> i64 { 0 }
+        fn main() -> i64 { 0 }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = ObjectCompiler::new("irq_test").expect("compiler init failed");
+    compiler
+        .compile_program(&program)
+        .expect("compilation failed");
+    // Verify interrupt function was collected
+    assert_eq!(compiler.interrupt_functions().len(), 1);
+    assert_eq!(compiler.interrupt_functions()[0], "timer_irq");
+    // Verify wrapper was emitted to global_asm_sections
+    assert_eq!(compiler.global_asm_sections().len(), 1);
+    let wrapper = &compiler.global_asm_sections()[0];
+    assert!(
+        wrapper.contains("timer_irq"),
+        "wrapper should reference handler name"
+    );
+}
+
+#[test]
+fn aot_multiple_interrupt_wrappers() {
+    // Two @interrupt fns produce two separate wrappers
+    let src = r#"
+        @interrupt
+        fn timer_irq() -> i64 { 0 }
+        @interrupt
+        fn keyboard_irq() -> i64 { 0 }
+        fn main() -> i64 { 0 }
+    "#;
+    let tokens = tokenize(src).expect("lex failed");
+    let program = parse(tokens).expect("parse failed");
+    let mut compiler = ObjectCompiler::new("irq_multi_test").expect("compiler init failed");
+    compiler
+        .compile_program(&program)
+        .expect("compilation failed");
+    assert_eq!(compiler.interrupt_functions().len(), 2);
+    assert_eq!(compiler.global_asm_sections().len(), 2);
+}
+
+#[test]
 fn object_compiler_fibonacci() {
     let src = r#"
         fn fib(n: i64) -> i64 {

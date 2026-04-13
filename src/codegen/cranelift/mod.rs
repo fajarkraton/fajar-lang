@@ -12593,6 +12593,15 @@ impl ObjectCompiler {
             }
         }
 
+        // V27.5 P1.3a: Generate ISR wrappers for @interrupt-annotated functions.
+        // Each wrapper saves all GP registers, calls the handler, restores
+        // registers, and uses the architecture-specific return instruction
+        // (eret on ARM64, iretq on x86_64).
+        for irq_fn in &self.interrupt_fns.clone() {
+            let wrapper = super::linker::generate_interrupt_wrapper(irq_fn);
+            self.global_asm_sections.push(wrapper);
+        }
+
         Ok(())
     }
 
@@ -13372,6 +13381,17 @@ impl ObjectCompiler {
     /// Returns the data section annotations collected during compilation.
     pub fn data_sections(&self) -> &HashMap<String, String> {
         &self.data_sections
+    }
+
+    /// Returns the collected global assembly sections (V27.5 P1.3a).
+    /// ISR wrappers for @interrupt functions are emitted here.
+    pub fn global_asm_sections(&self) -> &[String] {
+        &self.global_asm_sections
+    }
+
+    /// Returns the names of `@interrupt`-annotated functions (V27.5 P1.3a).
+    pub fn interrupt_functions(&self) -> &[String] {
+        &self.interrupt_fns
     }
 }
 
