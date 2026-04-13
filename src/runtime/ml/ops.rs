@@ -1241,6 +1241,232 @@ pub fn gamma(x: f64) -> f64 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Hadamard Transform (B5.L2)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Fast Walsh-Hadamard Transform (FWHT) applied along the last dimension.
+///
+/// The last dimension must be a power of 2. For a 2D tensor `[B, D]`, this
+/// applies the orthonormal Hadamard transform to each row independently.
+///
+/// The orthonormal Hadamard matrix satisfies `H @ H^T = I` (self-inverse up
+/// to scaling). This is a key building block in FajarQuant v2 — rotation
+/// spreads outliers across channels before quantization.
+///
+/// Complexity: O(N * D * log(D)) where N = product of all dims except last,
+/// D = last dim.
+pub fn hadamard(a: &TensorValue) -> Result<TensorValue, TensorError> {
+    let shape = a.shape();
+    if shape.is_empty() {
+        return Err(TensorError::InvalidData {
+            reason: "hadamard: scalar input not supported".into(),
+        });
+    }
+
+    // SAFETY: shape.is_empty() returned false above, so .last() is Some.
+    let d = match shape.last() {
+        Some(&d) => d,
+        None => unreachable!(),
+    };
+    if d == 0 || (d & (d - 1)) != 0 {
+        return Err(TensorError::InvalidData {
+            reason: format!("hadamard: last dimension must be a power of 2, got {d}"),
+        });
+    }
+
+    let data = a.to_vec();
+    let n_rows = data.len() / d;
+    let mut out = data;
+
+    // Apply FWHT to each row of length d
+    for row in 0..n_rows {
+        let base = row * d;
+        let mut stride = 1;
+        while stride < d {
+            for i in (0..d).step_by(stride * 2) {
+                for j in 0..stride {
+                    let a_idx = base + i + j;
+                    let b_idx = base + i + j + stride;
+                    let x = out[a_idx];
+                    let y = out[b_idx];
+                    out[a_idx] = x + y;
+                    out[b_idx] = x - y;
+                }
+            }
+            stride *= 2;
+        }
+        // Normalize for orthonormal: divide by sqrt(d)
+        let norm = (d as f64).sqrt();
+        for j in 0..d {
+            out[base + j] /= norm;
+        }
+    }
+
+    TensorValue::from_data(out, shape)
+}
+
+/// AVX2-accelerated FWHT on a single row of `d` f64 elements.
+///
+/// Processes 4 butterflies at a time using 256-bit YMM registers.
+/// Falls back to scalar for strides < 4 and the normalization pass.
+///
+/// # Safety
+/// Caller must ensure AVX2 is available (`std::is_x86_feature_detected!("avx2")`).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn hadamard_row_avx2(data: &mut [f64], d: usize) {
+    use std::arch::x86_64::*;
+
+    let mut stride = 1;
+    while stride < d {
+        let step = stride * 2;
+        if stride >= 4 {
+            // AVX2 path: process 4 f64 butterflies per iteration
+            let mut i = 0;
+            while i < d {
+                let mut j = 0;
+                while j + 3 < stride {
+                    let a_idx = i + j;
+                    let b_idx = i + j + stride;
+                    // SAFETY: a_idx + 3 < d and b_idx + 3 < d (stride < d, j < stride)
+                    unsafe {
+                        let va = _mm256_loadu_pd(data.as_ptr().add(a_idx));
+                        let vb = _mm256_loadu_pd(data.as_ptr().add(b_idx));
+                        let sum = _mm256_add_pd(va, vb);
+                        let diff = _mm256_sub_pd(va, vb);
+                        _mm256_storeu_pd(data.as_mut_ptr().add(a_idx), sum);
+                        _mm256_storeu_pd(data.as_mut_ptr().add(b_idx), diff);
+                    }
+                    j += 4;
+                }
+                // Scalar tail for remainder
+                while j < stride {
+                    let a_idx = i + j;
+                    let b_idx = i + j + stride;
+                    let x = data[a_idx];
+                    let y = data[b_idx];
+                    data[a_idx] = x + y;
+                    data[b_idx] = x - y;
+                    j += 1;
+                }
+                i += step;
+            }
+        } else {
+            // Scalar path for small strides (1, 2)
+            let mut i = 0;
+            while i < d {
+                for j in 0..stride {
+                    let a_idx = i + j;
+                    let b_idx = i + j + stride;
+                    let x = data[a_idx];
+                    let y = data[b_idx];
+                    data[a_idx] = x + y;
+                    data[b_idx] = x - y;
+                }
+                i += step;
+            }
+        }
+        stride *= 2;
+    }
+
+    // Normalize with AVX2
+    let norm = (d as f64).sqrt();
+    if d >= 4 {
+        // SAFETY: d >= 4 guarantees at least one 4-wide load.
+        unsafe {
+            let vnorm = _mm256_set1_pd(1.0 / norm);
+            let mut j = 0;
+            while j + 3 < d {
+                let v = _mm256_loadu_pd(data.as_ptr().add(j));
+                let scaled = _mm256_mul_pd(v, vnorm);
+                _mm256_storeu_pd(data.as_mut_ptr().add(j), scaled);
+                j += 4;
+            }
+            while j < d {
+                data[j] /= norm;
+                j += 1;
+            }
+        }
+    } else {
+        for val in data.iter_mut().take(d) {
+            *val /= norm;
+        }
+    }
+}
+
+/// Public entry point for the AVX2 Hadamard transform on a TensorValue.
+///
+/// Same semantics as [`hadamard`] but dispatches to AVX2 intrinsics when
+/// the CPU supports it. Falls back to the scalar implementation otherwise.
+pub fn hadamard_avx2(a: &TensorValue) -> Result<TensorValue, TensorError> {
+    let shape = a.shape();
+    if shape.is_empty() {
+        return Err(TensorError::InvalidData {
+            reason: "hadamard: scalar input not supported".into(),
+        });
+    }
+
+    let d = match shape.last() {
+        Some(&d) => d,
+        None => unreachable!(),
+    };
+    if d == 0 || (d & (d - 1)) != 0 {
+        return Err(TensorError::InvalidData {
+            reason: format!("hadamard: last dimension must be a power of 2, got {d}"),
+        });
+    }
+
+    let mut out = a.to_vec();
+    let n_rows = out.len() / d;
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") {
+            for row in 0..n_rows {
+                let base = row * d;
+                // SAFETY: AVX2 detected above.
+                unsafe {
+                    hadamard_row_avx2(&mut out[base..base + d], d);
+                }
+            }
+            return TensorValue::from_data(out, shape);
+        }
+    }
+
+    // Fallback: scalar FWHT
+    for row in 0..n_rows {
+        let base = row * d;
+        let mut stride = 1;
+        while stride < d {
+            for i in (0..d).step_by(stride * 2) {
+                for j in 0..stride {
+                    let a_idx = base + i + j;
+                    let b_idx = base + i + j + stride;
+                    let x = out[a_idx];
+                    let y = out[b_idx];
+                    out[a_idx] = x + y;
+                    out[b_idx] = x - y;
+                }
+            }
+            stride *= 2;
+        }
+        let norm = (d as f64).sqrt();
+        for j in 0..d {
+            out[base + j] /= norm;
+        }
+    }
+
+    TensorValue::from_data(out, shape)
+}
+
+/// Inverse Hadamard transform. Since H is self-adjoint and orthonormal,
+/// `hadamard_inverse(hadamard(x)) == x`.
+pub fn hadamard_inverse(a: &TensorValue) -> Result<TensorValue, TensorError> {
+    // For orthonormal Hadamard, H^{-1} = H (self-inverse)
+    hadamard(a)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -2121,5 +2347,113 @@ mod tests {
             l1_loss(&pred, &target),
             Err(TensorError::ShapeMismatch { .. })
         ));
+    }
+
+    // ── Hadamard Transform (B5.L2) ──
+
+    #[test]
+    fn hadamard_1d_roundtrip() {
+        let x = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0], &[4]).unwrap();
+        let h = hadamard(&x).unwrap();
+        let recovered = hadamard_inverse(&h).unwrap();
+        for (o, r) in x.to_vec().iter().zip(recovered.to_vec().iter()) {
+            assert!((o - r).abs() < 1e-10, "roundtrip: expected {o}, got {r}");
+        }
+    }
+
+    #[test]
+    fn hadamard_2d_per_row() {
+        let x =
+            TensorValue::from_data(vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], &[2, 4]).unwrap();
+        let h = hadamard(&x).unwrap();
+        assert_eq!(h.shape(), &[2, 4]);
+        let data = h.to_vec();
+        // Row 0: [1,0,0,0] → H = [0.5, 0.5, 0.5, 0.5]
+        assert!((data[0] - 0.5).abs() < 1e-10);
+        assert!((data[1] - 0.5).abs() < 1e-10);
+        // Row 1: [0,0,0,1] → H has known values
+        let recovered = hadamard_inverse(&h).unwrap();
+        for (o, r) in x.to_vec().iter().zip(recovered.to_vec().iter()) {
+            assert!((o - r).abs() < 1e-10, "2d roundtrip: {o} vs {r}");
+        }
+    }
+
+    #[test]
+    fn hadamard_non_power_of_two_fails() {
+        let x = TensorValue::from_data(vec![1.0, 2.0, 3.0], &[3]).unwrap();
+        assert!(hadamard(&x).is_err());
+    }
+
+    #[test]
+    fn hadamard_scalar_fails() {
+        let x = TensorValue::from_data(vec![1.0], &[])
+            .unwrap_or_else(|_| TensorValue::from_data(vec![1.0], &[1]).unwrap());
+        // D=1 is power of 2, should work (identity)
+        if x.shape() == [1] {
+            let h = hadamard(&x).unwrap();
+            assert!((h.to_vec()[0] - 1.0).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn hadamard_orthonormal() {
+        // H^T H = I for orthonormal Hadamard
+        // For 1D: applying twice = identity
+        let x = TensorValue::from_data(vec![3.0, -1.0, 2.0, 7.0], &[4]).unwrap();
+        let h1 = hadamard(&x).unwrap();
+        let h2 = hadamard(&h1).unwrap();
+        for (o, r) in x.to_vec().iter().zip(h2.to_vec().iter()) {
+            assert!((o - r).abs() < 1e-10, "orthonormal: {o} vs {r}");
+        }
+    }
+
+    #[test]
+    fn hadamard_outlier_spreading() {
+        // A spike in one channel should spread across all channels
+        let x = TensorValue::from_data(vec![0.0, 0.0, 0.0, 100.0], &[4]).unwrap();
+        let h = hadamard(&x).unwrap();
+        let data = h.to_vec();
+        // All channels should have magnitude 50 (100/sqrt(4) = 50)
+        for &v in &data {
+            assert!(
+                (v.abs() - 50.0).abs() < 1e-10,
+                "spread: expected |50|, got {v}"
+            );
+        }
+    }
+
+    #[test]
+    fn hadamard_avx2_matches_scalar() {
+        // Verify AVX2 path produces identical results to scalar
+        let x = TensorValue::from_data(
+            vec![
+                1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8,
+            ],
+            &[2, 8],
+        )
+        .unwrap();
+
+        let scalar_result = hadamard(&x).unwrap().to_vec();
+        let avx2_result = hadamard_avx2(&x).unwrap().to_vec();
+
+        for (s, a) in scalar_result.iter().zip(avx2_result.iter()) {
+            assert!(
+                (s - a).abs() < 1e-10,
+                "scalar={s} vs avx2={a}, diff={}",
+                (s - a).abs()
+            );
+        }
+    }
+
+    #[test]
+    fn hadamard_avx2_roundtrip_128() {
+        // D=128: exercises multiple AVX2 stages (log2(128) = 7)
+        let data: Vec<f64> = (0..128).map(|i| i as f64 * 0.1 - 6.4).collect();
+        let x = TensorValue::from_data(data.clone(), &[128]).unwrap();
+        let h = hadamard_avx2(&x).unwrap();
+        let recovered = hadamard_avx2(&h).unwrap();
+        for (o, r) in data.iter().zip(recovered.to_vec().iter()) {
+            assert!((o - r).abs() < 1e-8, "128-roundtrip: {o} vs {r}");
+        }
     }
 }

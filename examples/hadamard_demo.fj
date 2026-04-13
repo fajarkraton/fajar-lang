@@ -1,0 +1,32 @@
+// hadamard_demo.fj — Walsh-Hadamard Transform for FajarQuant v2
+//
+// The Hadamard transform rotates data into a domain where outliers
+// are spread across channels — critical for KV cache quantization.
+
+// Simple 4-element vector (D must be power of 2)
+let x = from_data([1.0, 2.0, 3.0, 4.0], [4])
+println("Original:")
+println(x)
+
+// Apply Hadamard transform
+let h = hadamard(x)
+println("\nHadamard transformed:")
+println(h)
+
+// Inverse recovers original (H is self-inverse for orthonormal)
+let recovered = hadamard_inverse(h)
+println("\nRecovered (inverse):")
+println(recovered)
+
+// 2D case: apply per-row (simulating batch of KV vectors)
+let kv = from_data([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0], [2, 4])
+println("\nKV cache slice (2 rows x 4 dims):")
+println(kv)
+
+let kv_rotated = hadamard(kv)
+println("\nAfter Hadamard (outliers spread):")
+println(kv_rotated)
+
+let kv_back = hadamard_inverse(kv_rotated)
+println("\nRoundtrip recovered:")
+println(kv_back)

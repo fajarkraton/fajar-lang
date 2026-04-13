@@ -1514,6 +1514,24 @@ impl TypeChecker {
             });
         }
 
+        // B5.L2: Hadamard transform builtins
+        let hadamard_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
+            ("hadamard", vec![dyn_t.clone()], dyn_t.clone()),
+            ("hadamard_inverse", vec![dyn_t.clone()], dyn_t.clone()),
+        ];
+        for (name, params, ret) in hadamard_builtins {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
         // Layer builtins
         let layer_fns: Vec<(&str, Vec<Type>, Type)> = vec![
             ("layer_dense", vec![Type::I64, Type::I64], Type::Unknown),

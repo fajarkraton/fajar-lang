@@ -524,6 +524,9 @@ impl Interpreter {
             "quantized_scale" => self.builtin_quantized_scale(args),
             "quantized_numel" => self.builtin_quantized_numel(args),
             "quantized_size_bytes" => self.builtin_quantized_size_bytes(args),
+            // Hadamard transform
+            "hadamard" => self.builtin_hadamard(args),
+            "hadamard_inverse" => self.builtin_hadamard_inverse(args),
             // ── Autograd builtins ──
             "tensor_backward" | "backward" => {
                 if args.len() != 1 {
@@ -7373,6 +7376,43 @@ impl Interpreter {
             Value::Quantized(q) => Ok(Value::Int(q.size_bytes() as i64)),
             _ => Err(RuntimeError::TypeError(
                 "quantized_size_bytes: expected a Quantized argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `hadamard(tensor) -> Tensor` — Fast Walsh-Hadamard Transform on last dim.
+    fn builtin_hadamard(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => crate::runtime::ml::ops::hadamard(t)
+                .map(Value::Tensor)
+                .map_err(|e| RuntimeError::TypeError(e.to_string()).into()),
+            _ => Err(RuntimeError::TypeError("hadamard: expected a Tensor argument".into()).into()),
+        }
+    }
+
+    /// `hadamard_inverse(tensor) -> Tensor` — Inverse Hadamard (self-inverse).
+    fn builtin_hadamard_inverse(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        match &args[0] {
+            Value::Tensor(t) => crate::runtime::ml::ops::hadamard_inverse(t)
+                .map(Value::Tensor)
+                .map_err(|e| RuntimeError::TypeError(e.to_string()).into()),
+            _ => Err(RuntimeError::TypeError(
+                "hadamard_inverse: expected a Tensor argument".into(),
             )
             .into()),
         }

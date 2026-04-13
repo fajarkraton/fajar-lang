@@ -137,6 +137,10 @@ required-features = ["native"]
 name = "arm64_bench"
 harness = false
 
+[[bench]]
+name = "hadamard_simd"
+harness = false
+
 [patch.crates-io]
 cranelift-object = { path = "patches/cranelift-object" }
 

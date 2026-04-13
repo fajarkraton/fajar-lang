@@ -1417,6 +1417,9 @@ impl Interpreter {
             "quantized_scale",
             "quantized_numel",
             "quantized_size_bytes",
+            // Hadamard
+            "hadamard",
+            "hadamard_inverse",
             // Autograd
             "tensor_backward",
             "backward",
