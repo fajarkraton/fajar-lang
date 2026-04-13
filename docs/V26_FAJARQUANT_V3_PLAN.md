@@ -1,6 +1,6 @@
 # FajarQuant v3 "Adaptive Per-Head Method Selection" — Production Plan
 
-> **Version:** 1.1 (enhanced) | **Created:** 2026-04-13 | **Author:** Fajar + Claude Opus 4.6
+> **Version:** 1.2 (B-fix) | **Created:** 2026-04-13 | **Updated:** 2026-04-13 | **Author:** Fajar + Claude Opus 4.6
 > **Predecessor:** V26 C1.6 Path B (complete, 2026-04-13)
 > **Rule compliance:** CLAUDE.md §6.8 (8 Plan Hygiene Rules) + §6.9 (7 Research Integrity Rules)
 > **Surprise budget:** +25% standard, +30% for Phase B (algorithm, high uncertainty)
@@ -271,11 +271,106 @@ Initial thresholds (refined by B2.T auto-tuning):
 
 ---
 
+## Phase B-fix: Repair Selector + Tuner + Verifier Pipeline
+
+> **Goal:** Fix the 5 defects found by C4 Gemma audit so v3 is genuinely
+> adaptive, not a hardcoded lookup table.
+> **Triggered by:** C4 Gemma results (v3 = TQ exactly, selector = lookup table)
+> **Findings:** `docs/V26_C1_6_V3_BFIX_FINDINGS.md` (5 defects, commit `ce9eca1`+)
+> **Effort:** 20h (16h + 25% surprise) = ~2.5 working days
+> **Repo:** `~/Documents/fajarquant/`
+> **Rule:** §6.8 Rule 3 — every fix must spawn a prevention mechanism
+
+### B-fix.0: Pre-flight — Verify Calibration Data Availability
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.0.1 | Verify `.npz` calibration files contain real KV cache data per head | `python3 -c "import numpy as np; d=np.load('data/calibration/fq_v2_gemma_4_e2b.npz'); print(list(d.keys())[:10])"` shows layer_*_k/v arrays | 15 min |
+| B-fix.0.2 | Check all 3 models have `.npz` with per-head KV cache chunks | Same command for mistral + qwen2 `.npz` | 15 min |
+
+### B-fix.1: Remove Architecture Gates from Strategy Selector (D1 fix)
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.1.1 | Remove `is_mqa`/`is_wide_gqa` gates from `strategy_selector.py`. Use ONLY the threshold-based decision tree for ALL architectures. Keep `n_kv_heads` as a profile stat but do not use it to override path selection. | `python3 -c "from strategy_selector import select_strategy; print(select_strategy({'channel_var_cv': 3.0, 'svd_ratio': 1.0, 'kurtosis': 0.5, 'skewness': 0.1}, 2, n_kv_heads=1))"` → prints `A` (not `C`) | 1h |
+| B-fix.1.2 | Re-run selector on all 3 model profiles × 3 bits with pure threshold tree | `strategy_*bit.json` files updated, Gemma now shows diverse paths (not 100% C) | 0.5h |
+| B-fix.1.3 | Add regression test: `assert select_strategy(high_cv_stats, 2, n_kv_heads=1) == "A"` — MQA does NOT force Path C | `python3 -m pytest tests/test_strategy_selector.py -k mqa_not_forced` PASS | 0.5h |
+
+**Prevention (Rule 3):** Regression test B-fix.1.3 ensures architecture
+gates cannot be re-introduced without test failure.
+
+### B-fix.2: Replace Scoring Function with Real MSE (D2 fix)
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.2.1 | Rewrite `tune_thresholds.py` scoring: load KV cache from `.npz`, for each threshold combo, assign strategies, compute reconstruction MSE per head, sum total MSE. Lower MSE = better score. | `python3 scripts/tune_thresholds.py --profile data/calibration/profile_gemma_4_e2b.json --calibration data/calibration/fq_v2_gemma_4_e2b.npz --bits 2 --output data/calibration/thresholds_gemma_2bit.json` produces different thresholds than before | 3h |
+| B-fix.2.2 | Add 80/20 cross-validation: split calibration chunks into train/test, tune on train, evaluate on test, report both scores. | Output JSON has `train_mse` and `test_mse` fields | 2h |
+| B-fix.2.3 | Run tuner for all 9 cells (3 models × 3 bits) | 9 `thresholds_*.json` files with real MSE scores | 1.5h |
+
+**Key change:** Scoring function takes `calibration_npz` as input,
+loads real KV cache data, applies each path's quantize→dequantize
+roundtrip, measures MSE. No heuristic, no architecture assumption.
+
+### B-fix.3: Replace Synthetic Data with Real KV Cache in Verifier (D3 fix)
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.3.1 | Rewrite `strategy_verifier.py`: load real KV cache chunks from `.npz` instead of `torch.randn`. Test all 5 paths (including B) per head. | `python3 scripts/strategy_verifier.py --profile ... --strategy ... --calibration ... --output ...` produces ≥1 swap for at least 1 model | 3h |
+| B-fix.3.2 | Re-run verifier on all 9 cells with real data | `strategy_*_verified.json` files updated, some with non-zero swaps | 0.5h |
+
+**Key change:** `_apply_path` uses real head data from `.npz[layer_i_k]`
+slice instead of `torch.randn(1,1,64,head_dim)*mean_abs`. Path B is
+re-enabled.
+
+### B-fix.4: Investigate PPL < FP16 Anomaly (D5 investigation)
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.4.1 | Write standalone `scripts/eval_fp16_baseline.py` — loads model, evaluates WikiText-2 WITHOUT any patch/unpatch or quantization import | PPL value within 0.5 of 28.13 → anomaly is NOT from patching | 1h |
+| B-fix.4.2 | If anomaly persists: test with different cache implementation (`StaticCache`, manual tensor list) to rule out DynamicCache | Document finding in `docs/V26_C1_6_V3_BFIX_FINDINGS.md` §Defect 5 addendum | 1h |
+| B-fix.4.3 | If anomaly confirmed as model property (small model regularization): document as known limitation, no fix needed | Add note to findings doc | 0.5h |
+
+### B-fix.5: Re-run C4 Gemma with Fixed Pipeline
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.5.1 | Re-generate strategies for Gemma (all 3 bits) with fixed selector + tuner + verifier | New `strategy_gemma_4_e2b_*bit.json` files show different distribution than before | 0.5h |
+| B-fix.5.2 | Re-run C4 Gemma v3 eval | `data/kv_cache/perplexity_v3_gemma.json` updated with new results | 1.5h GPU |
+| B-fix.5.3 | Compare: does v3 now differ from TQ at 2-bit? Does v3 beat v2 at 3-bit? | Honest assessment in commit message | 0.5h |
+
+### B-fix.G: Execute B.G Gate (D4 fix)
+
+| # | Task | Verification | Est |
+|---|------|-------------|-----|
+| B-fix.G.1 | Smoke test: v3 PPL vs v2-best PPL for Gemma (compare to v2a results) | Document comparison | 0.5h |
+| B-fix.G.2 | Verify ≥2 paths used for ≥2 models | `jq '.n_unique_paths' data/calibration/strategy_*_2bit.json` all ≥ 2 | 5 min |
+| B-fix.G.3 | Commit `docs/V26_C1_6_V3_DESIGN.md` — honest Gemma C4 results (before and after fix), architecture analysis, decision rationale | File exists and committed | 1h |
+
+### B-fix Gate
+
+All B-fix tasks MUST pass before proceeding to C5/C6:
+```
+[ ] Architecture gates removed from strategy_selector.py?        (B-fix.1)
+[ ] Tuner uses real MSE with cross-validation?                   (B-fix.2)
+[ ] Verifier uses real KV cache data?                            (B-fix.3)
+[ ] PPL < FP16 investigated and documented?                      (B-fix.4)
+[ ] Gemma re-eval shows different results than pre-fix?           (B-fix.5)
+[ ] B.G gate executed and design doc committed?                  (B-fix.G)
+```
+Six YES = proceed to C5. Any NO = block.
+
+---
+
 ## Phase C: Validation (3 models × 3 bits)
 
-> **Goal:** Full canonical evaluation — prove v3 ≥ 7/9 cells.
+> **Goal:** Full canonical evaluation — prove v3 adds genuine value.
 > **Effort:** 24h (19h + 25% surprise) = ~3 working days
 > **Repo:** `~/Documents/fajarquant/`
+> **Prerequisite:** Phase B-fix complete (all 6 gates pass)
+>
+> **NOTE (v1.2):** C4 Gemma was run once pre-fix (results:
+> `perplexity_v3_gemma.json`). B-fix.5 re-runs Gemma with fixed pipeline.
+> C4 below refers to the POST-fix Gemma result from B-fix.5.
 
 ### C0: Pre-flight
 
@@ -283,20 +378,21 @@ Initial thresholds (refined by B2.T auto-tuning):
 |---|------|-------------|-----|
 | C0.1 | GPU clear, models cached | `nvidia-smi` free ≥ 14 GB | 5 min |
 | C0.2 | v2 baseline reproducible | Re-run 1 random cell, compare to JSON | 0.5h |
+| C0.3 | B-fix gate confirmed | All 6 checkboxes in B-fix Gate = YES | 5 min |
 
-### C1-C3: Calibrate + Profile All Models
+### C1-C3: Re-calibrate All Models with Fixed Pipeline
 
 | # | Task | Verification | Est |
 |---|------|-------------|-----|
-| C1 | Gemma calibrate + profile | `data/calibration/fq_v3_gemma*.npz` + `profile_gemma.json` | 2h GPU |
-| C2 | Mistral calibrate + profile | Same pattern | 2h GPU |
-| C3 | Qwen2 calibrate + profile | Same pattern | 2h GPU |
+| C1 | Gemma: already done in B-fix.5.1 | Verify `strategy_gemma_4_e2b_*bit.json` updated | 5 min |
+| C2 | Mistral: re-run selector + tuner + verifier with fixed scripts | New `strategy_mistral_*bit.json` with real-MSE-based thresholds | 1.5h GPU |
+| C3 | Qwen2: re-run selector + tuner + verifier with fixed scripts | New `strategy_qwen2_*bit.json` | 1.5h GPU |
 
 ### C4-C6: Full Perplexity Eval
 
 | # | Task | Verification | Est |
 |---|------|-------------|-----|
-| C4 | Gemma v3 eval (2/3/4-bit) | `data/kv_cache/perplexity_v3_gemma.json` | 1.5h GPU |
+| C4 | Gemma v3 eval — already done in B-fix.5.2 | `data/kv_cache/perplexity_v3_gemma.json` is post-fix | 0 min |
 | C5 | Mistral v3 eval | `data/kv_cache/perplexity_v3_mistral.json` | 3h GPU |
 | C6 | Qwen2 v3 eval | `data/kv_cache/perplexity_v3_qwen2.json` | 3h GPU |
 
@@ -304,29 +400,38 @@ Initial thresholds (refined by B2.T auto-tuning):
 
 | # | Task | Verification | Est |
 |---|------|-------------|-----|
-| C7 | Delta analysis: v3 vs v2 vs KIVI vs TQ per cell | `docs/V26_C1_6_V3_RESULTS.md` with 3-model × 6-method table | 2h |
-| C8 | Strategy ablation: for each model, log per-head strategy assignments + PPL contribution | `docs/V26_C1_6_V3_ABLATION.md` — shows which heads use which path | 2h |
+| C7 | Delta analysis: v3 vs v2-best vs KIVI vs TQ per cell | `docs/V26_C1_6_V3_RESULTS.md` with 3-model × 6-method table, includes pre-fix vs post-fix Gemma | 2h |
+| C8 | Strategy ablation: per-head assignments + PPL contribution per model | `docs/V26_C1_6_V3_ABLATION.md` — shows which heads use which path | 2h |
 | C8.5 | Path contribution analysis: disable each path → measure PPL degradation | Ablation table in results doc | 2h |
 | C9 | Go/No-Go gate | `docs/V26_C1_6_V3_GONOGO.md` with "Decision: GO" or "NO-GO" | 1h |
 
-### Go/No-Go Criteria
+### Go/No-Go Criteria (v1.2 — revised for honesty)
 
 | Model | Bit | Target PPL | Comparison |
 |-------|-----|-----------|------------|
-| Gemma | 2 | ≤ 40.0 | Beat TQ outlier (39.73) or match within 2% |
+| Gemma | 2 | < 39.73 | **Must beat** TQ outlier (not just match) |
 | Gemma | 3 | ≤ 22.5 | Match KIVI (21.90) within 3% |
+| Gemma | 4 | < 26.51 | Must beat v2a (26.51) — previous best |
 | Mistral | 2 | ≤ 25.0 | Match KIVI (23.96) within 5% |
 | Mistral | 3 | ≤ 6.5 | Match KIVI (5.99) within 10% |
 | Mistral | 4 | ≤ 5.85 | Match KIVI (5.73) within 2% |
 | Qwen2 | 2 | ≤ 47.0 | Beat KIVI (46.70) or match |
 | Qwen2 | 3 | ≤ 8.1 | Match KIVI (8.01) within 1% |
-| **Overall** | | **≥ 8/9 cells won** | v3 best or within 2% of best |
+| **Overall** | | **≥ 7/9 cells won** | v3 best or within 2% of best |
+
+**v1.2 changes from v1.1:**
+- Gemma 2-bit: tightened from "match within 2%" to "must beat" (v1.1 target
+  was met trivially by equaling TQ)
+- Gemma 4-bit: added v2a comparison (26.51) as new bar to clear
+- Overall: relaxed from 8/9 to 7/9 — honest after discovering that
+  "adaptive" on MQA (1 KV head) has limited headroom
 
 ### Fallback if gate fails
-If ≥8/9 not achieved on first pass:
-1. Re-run B2.T auto-tuning with expanded threshold grid
-2. Re-run B2.V verifier with larger mini-batch (10 chunks instead of 5)
-3. Budget: 2 iteration cycles before declaring final result
+If ≥7/9 not achieved on first pass:
+1. Re-run B-fix.2 auto-tuning with expanded threshold grid (10 values per dim = 10,000 combos)
+2. Re-run B-fix.3 verifier with larger mini-batch (10 chunks instead of 5)
+3. Consider per-bit-width thresholds (not shared across 2/3/4-bit)
+4. Budget: 2 iteration cycles before declaring final result
 
 ---
 
@@ -363,68 +468,87 @@ If ≥8/9 not achieved on first pass:
 
 ---
 
-## Risk Register
+## Risk Register (v1.2 — updated with B-fix lessons)
 
-| Risk | P | Impact | Mitigation |
-|------|---|--------|------------|
-| Per-head dispatch too slow in Python | Med | Med | B7.2 same-strategy batching; pre-compute strategy map |
-| Thresholds overfit to calibration set | **High** | **High** | B2.T auto-tuning with 80/20 cross-val; B2.V mini-batch verifier |
-| Residual quant doesn't help at 2-bit | Med | Med | Drop Path D; strengthen Paths A-C-E |
-| Asymmetric quant adds complexity without benefit | Med | Low | Path E is optional — selector only routes there when skewness justifies it |
-| Gemma 1-head has no per-head diversity | High | Low | v3 degenerates to best-of-5 paths for single head — still picks optimal |
-| All Mistral heads want KIVI | Med | Low | This IS the target — v3 matching KIVI on Mistral is the win condition |
-| SVD computation needs new Rust dependency | Low | High | Use power iteration on AᵀA (no new dep); fajarquant adaptive.rs already does eigendecomp |
-| Online profiling mode is inaccurate with few tokens | Med | Med | Minimum 256 warmup tokens; flag as "approximate" in output |
-| Strategy verifier changes too many assignments | Low | Med | Cap swap rate at 20% of heads; log all swaps for audit |
+| Risk | P | Impact | Mitigation | Status |
+|------|---|--------|------------|--------|
+| Per-head dispatch too slow in Python | Med | Med | B7.2 same-strategy batching; pre-compute strategy map | Open |
+| Thresholds overfit to calibration set | **High** | **High** | ~~B2.T auto-tuning with 80/20 cross-val~~ → B-fix.2 real MSE + cross-val | **MATERIALIZED** (D2) — B2.T had no real data |
+| Residual quant doesn't help at 2-bit | Med | Med | Drop Path D; strengthen Paths A-C-E | Open |
+| Asymmetric quant adds complexity without benefit | Med | Low | Path E is optional — selector only routes there when skewness justifies it | Open |
+| **Selector degenerates to lookup table** | **High** | **Critical** | ~~v3 degenerates to best-of-5~~ → B-fix.1 removes gates | **MATERIALIZED** (D1) — architecture gates hardcoded |
+| All Mistral heads want KIVI | Med | Low | v3 matching KIVI on Mistral is the win condition | Open |
+| **Verifier cannot detect wrong assignments** | **High** | **High** | ~~Cap swap rate~~ → B-fix.3 real KV cache data | **MATERIALIZED** (D3) — synthetic data useless |
+| **Gate skipped under pressure** | **High** | **Med** | B-fix.G mechanical gate execution | **MATERIALIZED** (D4) |
+| **PPL < FP16 baseline anomaly** | **Med** | **Low** | B-fix.4 standalone baseline investigation | **MATERIALIZED** (D5) — pre-existing |
+| SVD computation needs new Rust dependency | Low | High | Use power iteration on AᵀA (no new dep) | Open |
+| Online profiling mode is inaccurate with few tokens | Med | Med | Minimum 256 warmup tokens | Open |
+
+**B-fix post-mortem:** 5/9 original risks materialized. Root cause: B2.T and
+B2.V implementations took shortcuts (heuristic scoring, synthetic data) that
+the plan explicitly prohibited. The B.G gate that should have caught this was
+skipped. Lesson: plans need **integration tests** for their own gates — a
+"did B.G produce a file" check in the pipeline, not just prose.
 
 ---
 
-## Timeline Summary
+## Timeline Summary (v1.2 — with B-fix)
 
 | Phase | Days | Cumulative | Gate |
 |-------|------|-----------|------|
-| **A** Fajar Lang enhancements (12 ops) | 5 | Day 5 | `cargo test` +40 tests |
-| **B** Python v3 algorithm (5 paths + verifier + auto-tune) | 6 | Day 11 | Smoke test 1 model, ≥2 paths used |
-| **C** Validation (3 models × 3 bits) | 3.5 | Day 14.5 | ≥ 8/9 cells |
-| **D** Native builtins | 2.5 | Day 17 | E2E `.fj` runs |
-| **E** Paper + release | 1.5 | **Day 18.5** | `verify_paper_tables.py` PASS |
+| **A** Fajar Lang enhancements (12 ops) | 5 | Day 5 | `cargo test` +40 tests | DONE |
+| **B** Python v3 algorithm (5 paths + verifier + auto-tune) | 6 | Day 11 | Smoke test 1 model | DONE |
+| **B-fix** Repair selector + tuner + verifier | 2.5 | Day 13.5 | 6-point gate, Gemma re-eval |
+| **C** Validation (3 models × 3 bits) | 3.5 | Day 17 | ≥ 7/9 cells |
+| **D** Native builtins | 2.5 | Day 19.5 | E2E `.fj` runs |
+| **E** Paper + release | 1.5 | **Day 21** | `verify_paper_tables.py` PASS |
 
-**Total: ~18.5 working days (~4 weeks)**
+**Total: ~21 working days (~4.5 weeks)** (+2.5 days from v1.1 due to B-fix)
 
-### Effort Breakdown
+### Effort Breakdown (v1.2)
 
-| Phase | Raw hours | Surprise | Total |
-|-------|----------|---------|-------|
-| A | 30h | +25% = 38h | 5 days |
-| B | 40h | +30% = 52h | 6 days |
-| C | 22h | +25% = 27.5h | 3.5 days |
-| D | 17h | +25% = 21h | 2.5 days |
-| E | 10h | +25% = 12.5h | 1.5 days |
-| **Total** | **119h** | **151h** | **18.5 days** |
+| Phase | Raw hours | Surprise | Total | Status |
+|-------|----------|---------|-------|--------|
+| A | 30h | +25% = 38h | 5 days | DONE |
+| B | 40h | +30% = 52h | 6 days | DONE (with defects) |
+| **B-fix** | **16h** | **+25% = 20h** | **2.5 days** | **NEXT** |
+| C | 22h | +25% = 27.5h | 3.5 days | blocked on B-fix |
+| D | 17h | +25% = 21h | 2.5 days | |
+| E | 10h | +25% = 12.5h | 1.5 days | |
+| **Total** | **135h** | **171h** | **21 days** |
 
 ---
 
-## Plan Hygiene Self-Check (§6.8)
+## Plan Hygiene Self-Check (§6.8) — v1.2 re-audit
 
 ```
-[x] Pre-flight audit exists per phase (A0/B0/C0)?              (Rule 1)
+[x] Pre-flight audit exists per phase (A0/B0/C0/B-fix.0)?      (Rule 1)
 [x] Every task has runnable verification command?              (Rule 2)
-[x] Prevention mechanisms per phase (meta-test, verify script)? (Rule 3)
+[x] Prevention mechanisms per phase (B-fix.1.3 regression test)? (Rule 3)
 [x] Agent numbers will be cross-checked with Bash?             (Rule 4)
 [x] Effort variance tagged in commit messages?                 (Rule 5)
-[x] Decisions committed as files (design, strategy, go/no-go)? (Rule 6)
+[!] Decisions committed as files — B.G.3 was SKIPPED (D4)     (Rule 6) → FIXED in B-fix.G.3
 [x] Public artifacts synced in Phase E?                        (Rule 7)
 [x] Multi-repo state check in A0 + E7?                        (Rule 8)
 ```
 
-## Research Integrity Self-Check (§6.9)
+**v1.2 note:** Rule 6 failure was the root cause of D4. B-fix.G.3 is the
+mechanical fix. Additionally, B-fix.G gate now checks for file existence
+before allowing C5/C6.
+
+## Research Integrity Self-Check (§6.9) — v1.2 re-audit
 
 ```
 [x] Canonical R-α.1 protocol from KIVI + KVQuant?             (R1)
-[x] Literature review ≥ 8 papers in B0.2?                     (R2)
+[x] Literature review ≥ 8 papers in B0.2 (14 done)?           (R2)
 [x] All baselines with full features (KIVI/TQ outlier)?        (R3)
-[x] Calibration once, reuse (not per-chunk)?                   (R4)
+[!] Calibration once, reuse — BUT tuner/verifier didn't use it (R4) → FIXED in B-fix.2/3
 [x] Outlier handling in Path C + Path D?                       (R5)
 [x] Validation (Phase C) before paper claims (Phase E)?        (R6)
 [x] verify_paper_tables.py --strict gate in E4?                (R7)
 ```
+
+**v1.2 note:** R4 technically passed (calibration data existed) but the
+tuner and verifier failed to USE the calibration data — they substituted
+heuristic scoring and synthetic random data. B-fix.2 and B-fix.3 enforce
+that calibration `.npz` is a required input.
