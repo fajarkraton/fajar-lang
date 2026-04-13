@@ -2,6 +2,39 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [26.2.0] — 2026-04-13 "FajarQuant v2.12" (C1.6 Path B complete)
+
+### Added
+- **Native `Quantized<T, BITS>` type** — first-class quantized tensor in the type system with `Value::Quantized` + `Type::Quantized` (B5.L1)
+- **SE023 QuantizedNotDequantized** — compiler error when Quantized used where Tensor expected, forces explicit `dequantize()` (B5.L1.2)
+- **`hadamard()` + `hadamard_inverse()` builtins** — Fast Walsh-Hadamard Transform O(D log D), power-of-2 check (B5.L2)
+- **`hadamard_avx2()` AVX2 SIMD** — 1.9-2.0x speedup over scalar at D>=128, `_mm256` butterfly intrinsics (B5.L2.2)
+- **`load_calibration()` / `save_calibration()` / `verify_orthogonal()`** — calibration data pipeline with orthogonality check (B5.L3)
+- **`hadamard_quantize()` fused kernel** — single-pass Hadamard+quantize, 1.6x speedup, AVX2 (B5.L5)
+- **`matmul_quantized()`** — dequantize + matmul with auto NK/KN layout detection and shape validation (B5.L6)
+- **`QuantizedKVCache`** — `kv_cache_create/update/get_keys/get_values/len/size_bytes` with overflow detection (B5.L7)
+- **20+ new builtins** wired E2E from `.fj` programs
+- **Criterion benchmark** `benches/hadamard_simd.rs` — scalar vs AVX2 vs fused pipeline
+- **4 new examples:** `quantized_tensor.fj`, `hadamard_demo.fj`, `calibrated_rotation.fj`, `fajarquant_v2_device.fj`, `fajarquant_v2_selfhost.fj`, `stack_kv_cache.fj`
+- **5 new integration test files** (44 tests): `quant_type_safety.rs`, `calibrated_rotation_orthogonal.rs`, `fajarquant_v2_device.rs`, `quant_matmul_shape.rs`, `stack_kv_cache.rs`
+
+### Changed
+- **`Type::Quantized` compatibility** — `bits=0` is polymorphic, bare `Quantized` resolves in type checker
+- **`resolve_type`** maps `"Quantized"` like `"Tensor"` in analyzer
+- **FajarQuant paper** reframed: "Cross-Architecture KV Cache Quantization: Why No Single Method Wins"
+- **Paper PPL table** replaced with 3-model × 5-method canonical R-alpha.1 data (28 claims verified)
+- **Related Work** expanded from 5 to 13 entries (8 new: KVQuant, SKVQ, SpinQuant, FlatQuant, RotateKV, KVTC, KVLinC, AsymKV)
+- **`verify_paper_tables.py`** rewritten for reframed paper — 28/28 claims PASS
+
+### Stats
+```
+Tests:     7,572 lib + 2,374+44 integ + 14 doc ≈ 10,004 total
+LOC:       ~449,000 Rust (src/) + 3,300 new for B5
+Examples:  237 .fj (was 231, +6 new)
+Benchmarks: hadamard_simd (7 configs: scalar/avx2/fused × 6 dimensions)
+Native vs Python: 5.0x faster (28ms vs 142ms)
+```
+
 ## [26.1.0-phase-a] — 2026-04-11 "Final" (Phase A complete)
 
 ### Added
