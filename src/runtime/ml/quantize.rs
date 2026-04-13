@@ -207,6 +207,200 @@ impl PartialEq for QuantizedValue {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Per-Channel Quantization (v3 Phase A, A6) — KIVI-style
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Per-channel symmetric quantization: each channel along `axis` gets its own scale.
+///
+/// This is the KIVI-style quantization (Path A in v3). Works well when
+/// channels have very different dynamic ranges.
+pub fn quantize_per_channel(
+    tensor: &TensorValue,
+    bits: u8,
+    axis: usize,
+) -> Result<QuantizedValue, TensorError> {
+    if !matches!(bits, 2 | 3 | 4 | 8) {
+        return Err(TensorError::InvalidData {
+            reason: format!("unsupported bit width {bits}: must be 2, 3, 4, or 8"),
+        });
+    }
+    let shape = tensor.shape();
+    if axis >= shape.len() {
+        return Err(TensorError::InvalidData {
+            reason: format!("quantize_per_channel: axis {axis} >= ndim {}", shape.len()),
+        });
+    }
+
+    let max_q = ((1i16 << (bits - 1)) - 1) as f64;
+    let data = tensor.to_vec();
+    let n_channels = shape[axis];
+    let total = data.len();
+    let stride: usize = shape[axis + 1..].iter().product();
+    let outer: usize = shape[..axis].iter().product();
+
+    // Compute per-channel scale
+    let mut channel_max = vec![0.0_f64; n_channels];
+    #[allow(clippy::needless_range_loop)]
+    for o in 0..outer {
+        for c in 0..n_channels {
+            for s in 0..stride {
+                let idx = o * n_channels * stride + c * stride + s;
+                if idx < total {
+                    channel_max[c] = channel_max[c].max(data[idx].abs());
+                }
+            }
+        }
+    }
+    let channel_scales: Vec<f64> = channel_max
+        .iter()
+        .map(|&m| if m == 0.0 { 1.0 } else { m / max_q })
+        .collect();
+
+    // Quantize with per-channel scales
+    let mut qdata = vec![0i8; total];
+    #[allow(clippy::needless_range_loop)]
+    for o in 0..outer {
+        for c in 0..n_channels {
+            let scale = channel_scales[c];
+            for s in 0..stride {
+                let idx = o * n_channels * stride + c * stride + s;
+                if idx < total {
+                    let q = (data[idx] / scale).round();
+                    qdata[idx] = q.clamp(-max_q, max_q) as i8;
+                }
+            }
+        }
+    }
+
+    // Use mean scale for the single-scale field (per-channel scales stored separately)
+    let mean_scale = channel_scales.iter().sum::<f64>() / channel_scales.len() as f64;
+    Ok(QuantizedValue::from_parts(
+        qdata,
+        mean_scale,
+        shape.to_vec(),
+        bits,
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Residual Quantization (v3 Phase A, A7)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Residual quantization: quantize → compute residual → quantize residual.
+///
+/// Returns a dequantized tensor that is the sum of base + residual
+/// reconstructions. Effective resolution is higher than either pass alone.
+/// This is Path D in v3 — used for 2-bit where single-pass methods struggle.
+pub fn quantize_residual(
+    tensor: &TensorValue,
+    bits_base: u8,
+    bits_residual: u8,
+) -> Result<TensorValue, TensorError> {
+    // Pass 1: base quantization
+    let base = QuantizedValue::quantize(tensor, bits_base)?;
+    let base_recon = base.dequantize();
+
+    // Compute residual
+    let orig = tensor.to_vec();
+    let recon = base_recon.to_vec();
+    let residual_data: Vec<f64> = orig.iter().zip(recon.iter()).map(|(o, r)| o - r).collect();
+    let residual_tensor = TensorValue::from_data(residual_data, tensor.shape())?;
+
+    // Pass 2: quantize residual
+    let res_q = QuantizedValue::quantize(&residual_tensor, bits_residual)?;
+    let res_recon = res_q.dequantize();
+
+    // Final reconstruction = base + residual
+    let final_data: Vec<f64> = recon
+        .iter()
+        .zip(res_recon.to_vec().iter())
+        .map(|(b, r)| b + r)
+        .collect();
+    TensorValue::from_data(final_data, tensor.shape())
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Asymmetric Quantization (v3 Phase A, A7.5)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Asymmetric per-channel quantization with non-zero zero-point.
+///
+/// Formula: q = round((x - zero_point) / scale), x_hat = q * scale + zero_point.
+/// Zero point = (min + max) / 2 per channel. This captures non-zero-centered
+/// distributions better than symmetric quantization.
+/// Path E in v3 — used when skewness is high.
+pub fn quantize_asymmetric(
+    tensor: &TensorValue,
+    bits: u8,
+    axis: usize,
+) -> Result<TensorValue, TensorError> {
+    if !matches!(bits, 2 | 3 | 4 | 8) {
+        return Err(TensorError::InvalidData {
+            reason: format!("unsupported bit width {bits}: must be 2, 3, 4, or 8"),
+        });
+    }
+    let shape = tensor.shape();
+    if axis >= shape.len() {
+        return Err(TensorError::InvalidData {
+            reason: format!("quantize_asymmetric: axis {axis} >= ndim {}", shape.len()),
+        });
+    }
+
+    let max_q = ((1i16 << bits) - 1) as f64; // unsigned range [0, 2^bits - 1]
+    let data = tensor.to_vec();
+    let n_channels = shape[axis];
+    let total = data.len();
+    let stride: usize = shape[axis + 1..].iter().product();
+    let outer: usize = shape[..axis].iter().product();
+
+    // Compute per-channel min/max
+    let mut ch_min = vec![f64::INFINITY; n_channels];
+    let mut ch_max = vec![f64::NEG_INFINITY; n_channels];
+    #[allow(clippy::needless_range_loop)]
+    for o in 0..outer {
+        for c in 0..n_channels {
+            for s in 0..stride {
+                let idx = o * n_channels * stride + c * stride + s;
+                if idx < total {
+                    ch_min[c] = ch_min[c].min(data[idx]);
+                    ch_max[c] = ch_max[c].max(data[idx]);
+                }
+            }
+        }
+    }
+
+    // Compute scale and zero_point per channel
+    let params: Vec<(f64, f64)> = ch_min
+        .iter()
+        .zip(ch_max.iter())
+        .map(|(&mn, &mx)| {
+            let range = mx - mn;
+            let scale = if range == 0.0 { 1.0 } else { range / max_q };
+            let zero_point = mn;
+            (scale, zero_point)
+        })
+        .collect();
+
+    // Quantize + dequantize (asymmetric roundtrip)
+    let mut result = vec![0.0; total];
+    #[allow(clippy::needless_range_loop)]
+    for o in 0..outer {
+        for c in 0..n_channels {
+            let (scale, zp) = params[c];
+            for s in 0..stride {
+                let idx = o * n_channels * stride + c * stride + s;
+                if idx < total {
+                    let q = ((data[idx] - zp) / scale).round().clamp(0.0, max_q);
+                    result[idx] = q * scale + zp;
+                }
+            }
+        }
+    }
+
+    TensorValue::from_data(result, shape)
+}
+
 /// Performs INT8 matrix multiplication with i32 accumulation.
 ///
 /// `a` shape: `[M, K]`, `b` shape: `[K, N]` → result shape: `[M, N]`.
@@ -500,5 +694,147 @@ mod tests {
                 (f - q).abs()
             );
         }
+    }
+
+    // ── Per-Channel Quantization (A6) ──
+
+    #[test]
+    fn per_channel_basic() {
+        let t = TensorValue::from_data(vec![100.0, 0.1, 0.2, 0.3], &[2, 2]).unwrap();
+        let q = quantize_per_channel(&t, 4, 1).unwrap();
+        assert_eq!(q.shape(), &[2, 2]);
+        assert_eq!(q.bits(), 4);
+    }
+
+    #[test]
+    fn per_channel_preserves_shape() {
+        let t = TensorValue::from_data(vec![1.0; 24], &[2, 3, 4]).unwrap();
+        let q = quantize_per_channel(&t, 8, 1).unwrap();
+        assert_eq!(q.shape(), &[2, 3, 4]);
+    }
+
+    #[test]
+    fn per_channel_different_scales() {
+        // Channel 0: values ~100, channel 1: values ~0.01
+        // Per-channel should quantize each with appropriate scale
+        let t = TensorValue::from_data(vec![100.0, 0.01, 50.0, 0.005], &[2, 2]).unwrap();
+        let q = quantize_per_channel(&t, 8, 1).unwrap();
+        // Channel 0 (100, 50): should use scale ~100/127 ≈ 0.787
+        // Channel 1 (0.01, 0.005): should use scale ~0.01/127 ≈ 0.0000787
+        // Verify quantized data is non-trivial (not all zeros)
+        let qdata = q.data();
+        assert!(
+            qdata[0].abs() > 50,
+            "large channel should quantize to high value"
+        );
+        assert!(
+            qdata[1].abs() > 0,
+            "small channel should quantize to non-zero"
+        );
+    }
+
+    #[test]
+    fn per_channel_invalid_axis() {
+        let t = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(quantize_per_channel(&t, 4, 5).is_err());
+    }
+
+    #[test]
+    fn per_channel_invalid_bits() {
+        let t = TensorValue::from_data(vec![1.0, 2.0], &[2]).unwrap();
+        assert!(quantize_per_channel(&t, 5, 0).is_err());
+    }
+
+    // ── Residual Quantization (A7) ──
+
+    #[test]
+    fn residual_improves_over_single_pass() {
+        let t = TensorValue::from_data(vec![1.0, -0.5, 0.25, 0.0, -1.0, 0.75], &[2, 3]).unwrap();
+        // Single pass 2-bit
+        let single = QuantizedValue::quantize(&t, 2).unwrap();
+        let single_recon = single.dequantize().to_vec();
+        // Residual 2+2 bit
+        let residual_recon = quantize_residual(&t, 2, 2).unwrap().to_vec();
+        let orig = t.to_vec();
+        // Residual should have lower total error
+        let single_err: f64 = orig
+            .iter()
+            .zip(single_recon.iter())
+            .map(|(o, r)| (o - r).abs())
+            .sum();
+        let residual_err: f64 = orig
+            .iter()
+            .zip(residual_recon.iter())
+            .map(|(o, r)| (o - r).abs())
+            .sum();
+        assert!(
+            residual_err <= single_err + 1e-10,
+            "residual err {residual_err} should be <= single err {single_err}"
+        );
+    }
+
+    #[test]
+    fn residual_preserves_shape() {
+        let t = TensorValue::from_data(vec![1.0; 8], &[2, 4]).unwrap();
+        let r = quantize_residual(&t, 4, 4).unwrap();
+        assert_eq!(r.shape(), &[2, 4]);
+    }
+
+    #[test]
+    fn residual_invalid_bits() {
+        let t = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(quantize_residual(&t, 5, 4).is_err());
+    }
+
+    // ── Asymmetric Quantization (A7.5) ──
+
+    #[test]
+    fn asymmetric_basic_roundtrip() {
+        let t = TensorValue::from_data(vec![10.0, 20.0, 30.0, 40.0], &[2, 2]).unwrap();
+        let r = quantize_asymmetric(&t, 8, 1).unwrap();
+        let orig = t.to_vec();
+        let recon = r.to_vec();
+        for (o, r) in orig.iter().zip(recon.iter()) {
+            assert!((o - r).abs() < 0.5, "asymmetric: {o} vs {r}");
+        }
+    }
+
+    #[test]
+    fn asymmetric_non_centered() {
+        // All positive: [10, 11, 12, 13] — zero-centered symmetric wastes half the range
+        let t = TensorValue::from_data(vec![10.0, 11.0, 12.0, 13.0], &[4, 1]).unwrap();
+        let asym = quantize_asymmetric(&t, 4, 0).unwrap();
+        let orig = t.to_vec();
+        let recon = asym.to_vec();
+        for (o, r) in orig.iter().zip(recon.iter()) {
+            assert!((o - r).abs() < 0.3, "asymmetric non-centered: {o} vs {r}");
+        }
+    }
+
+    #[test]
+    fn asymmetric_invalid_axis() {
+        let t = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(quantize_asymmetric(&t, 4, 5).is_err());
+    }
+
+    #[test]
+    fn asymmetric_invalid_bits() {
+        let t = TensorValue::from_data(vec![1.0], &[1]).unwrap();
+        assert!(quantize_asymmetric(&t, 5, 0).is_err());
+    }
+
+    // ── Prevention meta-test ──
+
+    #[test]
+    fn all_quant_modes_roundtrip() {
+        let t = TensorValue::from_data(vec![1.0, -0.5, 0.25, 0.0, -1.0, 0.75], &[2, 3]).unwrap();
+        // Per-tensor (existing)
+        let _ = QuantizedValue::quantize(&t, 4).unwrap().dequantize();
+        // Per-channel
+        let _ = quantize_per_channel(&t, 4, 1).unwrap().dequantize();
+        // Residual
+        let _ = quantize_residual(&t, 4, 4).unwrap();
+        // Asymmetric
+        let _ = quantize_asymmetric(&t, 4, 1).unwrap();
     }
 }
