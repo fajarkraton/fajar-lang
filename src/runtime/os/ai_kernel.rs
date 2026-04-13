@@ -80,8 +80,8 @@ pub type AiKernelResult<T> = Result<T, AiKernelError>;
 ///
 /// Uses stack-allocated arrays only — no heap allocation.
 /// Suitable for @kernel context where heap is forbidden.
-/// Maximum size: 16x16 (enforced).
-pub const MAX_KERNEL_TENSOR_DIM: usize = 16;
+/// Maximum size: 128x128 (V27.5 P1.1: increased from 16 for Gemma 3 1B head_dim=256).
+pub const MAX_KERNEL_TENSOR_DIM: usize = 128;
 
 /// A small fixed-size matrix for kernel-space computation.
 #[derive(Debug, Clone)]
@@ -1027,7 +1027,10 @@ mod tests {
 
     #[test]
     fn kernel_tensor_exceeds_max_dim() {
-        assert!(KernelMatrix::zeros(20, 20).is_err());
+        // V27.5 P1.1: max increased 16→128, so 20x20 now passes
+        assert!(KernelMatrix::zeros(20, 20).is_ok());
+        assert!(KernelMatrix::zeros(128, 128).is_ok());
+        assert!(KernelMatrix::zeros(129, 129).is_err());
     }
 
     // ── MlScheduler ──
