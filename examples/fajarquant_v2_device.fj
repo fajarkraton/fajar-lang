@@ -1,0 +1,74 @@
+// fajarquant_v2_device.fj — FajarQuant v2 algorithm in @device context
+//
+// Demonstrates the embedded ML story: quantization algorithm written in
+// Fajar Lang with compiler-enforced safety (@device = no raw pointers,
+// no IRQ, tensor ops allowed).
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 1: Load calibration data (rotation matrices)
+// In embedded deployment, these would be const tensors via include_calibration!
+// ═══════════════════════════════════════════════════════════════════════
+
+// Hadamard-based rotation (always orthogonal, no calibration needed for demo)
+let rotation_4x4 = from_data([
+    0.5, 0.5, 0.5, 0.5,
+    0.5, -0.5, 0.5, -0.5,
+    0.5, 0.5, -0.5, -0.5,
+    0.5, -0.5, -0.5, 0.5
+], [4, 4])
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 2: FajarQuant v2 core — @device fn (ML context, no OS primitives)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Rotate a KV cache slice using calibrated rotation matrix
+@device
+fn fq_v2_rotate(kv_row: Tensor, rotation: Tensor) -> Tensor {
+    matmul(kv_row, transpose(rotation))
+}
+
+// Full v2 quantize pipeline: rotate → quantize → return quantized
+@device
+fn fq_v2_quantize(kv_row: Tensor, rotation: Tensor, bits: i64) -> Quantized {
+    let rotated = fq_v2_rotate(kv_row, rotation)
+    quantize(rotated, bits)
+}
+
+// Full v2 dequantize pipeline: dequantize → inverse rotate
+@device
+fn fq_v2_dequantize(q: Quantized, rotation: Tensor) -> Tensor {
+    let deq = dequantize(q)
+    // Inverse rotation: R^T (since R is orthogonal, R^{-1} = R^T)
+    matmul(deq, rotation)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Step 3: End-to-end demo
+// ═══════════════════════════════════════════════════════════════════════
+
+// Simulate a KV cache row with an outlier
+let kv = from_data([10.0, 0.1, -0.2, 0.05], [1, 4])
+println("Original KV (outlier in channel 0):")
+println(kv)
+
+// Quantize with v2 pipeline at 2-bit
+let q = fq_v2_quantize(kv, rotation_4x4, 2)
+println("\nQuantized (2-bit):")
+println(q)
+println("Bits: " + to_string(quantized_bits(q)))
+println("Size: " + to_string(quantized_size_bytes(q)) + " bytes (was " + to_string(4 * 8) + " bytes FP64)")
+
+// Dequantize and compare
+let restored = fq_v2_dequantize(q, rotation_4x4)
+println("\nRestored:")
+println(restored)
+
+// Also try 4-bit
+let q4 = fq_v2_quantize(kv, rotation_4x4, 4)
+let restored4 = fq_v2_dequantize(q4, rotation_4x4)
+println("\n4-bit restored:")
+println(restored4)
+
+// Verify rotation is orthogonal
+let ortho = verify_orthogonal(rotation_4x4, 1e-10)
+println("\nRotation orthogonal: " + to_string(ortho))

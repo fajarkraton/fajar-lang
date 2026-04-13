@@ -551,6 +551,27 @@ impl Type {
         ) {
             return true;
         }
+        // Quantized compatibility: bits=0 is polymorphic (matches any bit width)
+        if let (
+            Type::Quantized {
+                element: ea,
+                bits: ba,
+            },
+            Type::Quantized {
+                element: eb,
+                bits: bb,
+            },
+        ) = (self, other)
+        {
+            return ea.is_compatible(eb) && (*ba == 0 || *bb == 0 || ba == bb);
+        }
+        // Unknown is compatible with Quantized
+        if matches!(
+            (self, other),
+            (Type::Unknown, Type::Quantized { .. }) | (Type::Quantized { .. }, Type::Unknown)
+        ) {
+            return true;
+        }
         // Recursive compatibility for Future<T>
         if let (Type::Future { inner: a }, Type::Future { inner: b }) = (self, other) {
             return a.is_compatible(b);

@@ -2714,6 +2714,10 @@ impl TypeChecker {
                 "char" => Type::Char,
                 "str" | "String" => Type::Str,
                 "Tensor" => Type::dynamic_tensor(),
+                "Quantized" => Type::Quantized {
+                    element: Box::new(Type::F64),
+                    bits: 0, // 0 = any bit width (polymorphic)
+                },
                 "any" => Type::Unknown,
                 other => {
                     // Check type aliases first
