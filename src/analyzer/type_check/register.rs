@@ -1518,6 +1518,14 @@ impl TypeChecker {
         let hadamard_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
             ("hadamard", vec![dyn_t.clone()], dyn_t.clone()),
             ("hadamard_inverse", vec![dyn_t.clone()], dyn_t.clone()),
+            (
+                "hadamard_quantize",
+                vec![dyn_t.clone(), Type::I64],
+                Type::Quantized {
+                    element: Box::new(Type::F64),
+                    bits: 0,
+                },
+            ),
         ];
         for (name, params, ret) in hadamard_builtins {
             self.symbols.define(Symbol {

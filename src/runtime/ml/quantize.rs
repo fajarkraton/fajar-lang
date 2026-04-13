@@ -164,6 +164,16 @@ impl QuantizedValue {
         self.data.len()
     }
 
+    /// Creates a QuantizedValue from raw components (used by fused kernels).
+    pub fn from_parts(data: Vec<i8>, scale: f64, shape: Vec<usize>, bits: u8) -> Self {
+        Self {
+            data,
+            scale,
+            shape,
+            bits,
+        }
+    }
+
     /// Returns the quantized data as a slice.
     pub fn data(&self) -> &[i8] {
         &self.data

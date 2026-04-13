@@ -1467,6 +1467,105 @@ pub fn hadamard_inverse(a: &TensorValue) -> Result<TensorValue, TensorError> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Fused Hadamard + Quantize (B5.L5)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Fused Hadamard transform + quantization in a single pass.
+///
+/// Equivalent to `quantize(hadamard(tensor), bits)` but avoids the
+/// intermediate tensor allocation. The FWHT butterfly is applied in-place,
+/// then symmetric per-tensor quantization is applied directly.
+///
+/// On AVX2-capable CPUs, the butterfly stages and quantization use SIMD.
+pub fn hadamard_quantize(
+    a: &TensorValue,
+    bits: u8,
+) -> Result<super::quantize::QuantizedValue, TensorError> {
+    if !matches!(bits, 2 | 3 | 4 | 8) {
+        return Err(TensorError::InvalidData {
+            reason: format!("unsupported bit width {bits}: must be 2, 3, 4, or 8"),
+        });
+    }
+
+    let shape = a.shape();
+    if shape.is_empty() {
+        return Err(TensorError::InvalidData {
+            reason: "hadamard_quantize: scalar input not supported".into(),
+        });
+    }
+
+    let d = match shape.last() {
+        Some(&d) => d,
+        None => unreachable!(),
+    };
+    if d == 0 || (d & (d - 1)) != 0 {
+        return Err(TensorError::InvalidData {
+            reason: format!("hadamard_quantize: last dimension must be a power of 2, got {d}"),
+        });
+    }
+
+    let mut data = a.to_vec();
+    let n_rows = data.len() / d;
+
+    // Phase 1: In-place FWHT on each row
+    #[cfg(target_arch = "x86_64")]
+    let use_avx2 = std::is_x86_feature_detected!("avx2");
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_avx2 = false;
+
+    for row in 0..n_rows {
+        let base = row * d;
+        if use_avx2 {
+            #[cfg(target_arch = "x86_64")]
+            // SAFETY: AVX2 detected above.
+            unsafe {
+                hadamard_row_avx2(&mut data[base..base + d], d);
+            }
+        } else {
+            // Scalar FWHT
+            let mut stride = 1;
+            while stride < d {
+                for i in (0..d).step_by(stride * 2) {
+                    for j in 0..stride {
+                        let a_idx = base + i + j;
+                        let b_idx = base + i + j + stride;
+                        let x = data[a_idx];
+                        let y = data[b_idx];
+                        data[a_idx] = x + y;
+                        data[b_idx] = x - y;
+                    }
+                }
+                stride *= 2;
+            }
+            let norm = (d as f64).sqrt();
+            for j in 0..d {
+                data[base + j] /= norm;
+            }
+        }
+    }
+
+    // Phase 2: Quantize the rotated data directly (no intermediate TensorValue)
+    let max_q = ((1i16 << (bits - 1)) - 1) as f64;
+    let max_abs = data.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+    let scale = if max_abs == 0.0 { 1.0 } else { max_abs / max_q };
+
+    let qdata: Vec<i8> = data
+        .iter()
+        .map(|&v| {
+            let q = (v / scale).round();
+            q.clamp(-max_q, max_q) as i8
+        })
+        .collect();
+
+    Ok(super::quantize::QuantizedValue::from_parts(
+        qdata,
+        scale,
+        shape.to_vec(),
+        bits,
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -2455,5 +2554,58 @@ mod tests {
         for (o, r) in data.iter().zip(recovered.to_vec().iter()) {
             assert!((o - r).abs() < 1e-8, "128-roundtrip: {o} vs {r}");
         }
+    }
+
+    // ── Fused Hadamard + Quantize (B5.L5) ──
+
+    #[test]
+    fn hadamard_quantize_matches_separate() {
+        use crate::runtime::ml::quantize::QuantizedValue;
+
+        let x =
+            TensorValue::from_data(vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0], &[8]).unwrap();
+
+        // Separate: hadamard → quantize
+        let h = hadamard(&x).unwrap();
+        let q_sep = QuantizedValue::quantize(&h, 4).unwrap();
+
+        // Fused
+        let q_fused = hadamard_quantize(&x, 4).unwrap();
+
+        // Both should produce identical quantized data
+        assert_eq!(q_sep.bits(), q_fused.bits());
+        assert_eq!(q_sep.shape(), q_fused.shape());
+        assert!((q_sep.scale() - q_fused.scale()).abs() < 1e-10);
+        assert_eq!(q_sep.data(), q_fused.data());
+    }
+
+    #[test]
+    fn hadamard_quantize_2bit() {
+        let x = TensorValue::from_data(vec![10.0, 0.0, 0.0, 0.0], &[4]).unwrap();
+        let q = hadamard_quantize(&x, 2).unwrap();
+        assert_eq!(q.bits(), 2);
+        assert_eq!(q.shape(), &[4]);
+        assert_eq!(q.numel(), 4);
+    }
+
+    #[test]
+    fn hadamard_quantize_2d_batch() {
+        let data: Vec<f64> = (0..32).map(|i| i as f64 * 0.1).collect();
+        let x = TensorValue::from_data(data, &[4, 8]).unwrap();
+        let q = hadamard_quantize(&x, 4).unwrap();
+        assert_eq!(q.shape(), &[4, 8]);
+        assert_eq!(q.bits(), 4);
+    }
+
+    #[test]
+    fn hadamard_quantize_non_power_of_two_fails() {
+        let x = TensorValue::from_data(vec![1.0, 2.0, 3.0], &[3]).unwrap();
+        assert!(hadamard_quantize(&x, 4).is_err());
+    }
+
+    #[test]
+    fn hadamard_quantize_invalid_bits_fails() {
+        let x = TensorValue::from_data(vec![1.0, 2.0, 3.0, 4.0], &[4]).unwrap();
+        assert!(hadamard_quantize(&x, 5).is_err());
     }
 }

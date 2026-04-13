@@ -527,6 +527,7 @@ impl Interpreter {
             // Hadamard transform
             "hadamard" => self.builtin_hadamard(args),
             "hadamard_inverse" => self.builtin_hadamard_inverse(args),
+            "hadamard_quantize" => self.builtin_hadamard_quantize(args),
             // Calibration data (B5.L3)
             "load_calibration" => self.builtin_load_calibration(args),
             "save_calibration" => self.builtin_save_calibration(args),
@@ -7417,6 +7418,28 @@ impl Interpreter {
                 .map_err(|e| RuntimeError::TypeError(e.to_string()).into()),
             _ => Err(RuntimeError::TypeError(
                 "hadamard_inverse: expected a Tensor argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `hadamard_quantize(tensor, bits) -> Quantized` — Fused Hadamard + quantize.
+    fn builtin_hadamard_quantize(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Int(bits)) => {
+                crate::runtime::ml::ops::hadamard_quantize(t, *bits as u8)
+                    .map(Value::Quantized)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "hadamard_quantize(tensor, bits): expected (Tensor, Int)".into(),
             )
             .into()),
         }
