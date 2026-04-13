@@ -264,7 +264,7 @@ impl std::fmt::Display for DiagSeverity {
 /// Thread-safe diagnostic collector.
 #[derive(Debug, Clone, Default)]
 pub struct DiagCollector {
-    /// Collected diagnostics (shared across threads via Arc<Mutex>).
+    /// Collected diagnostics (shared across threads via `Arc<Mutex>`).
     diagnostics: Vec<Diagnostic>,
 }
 

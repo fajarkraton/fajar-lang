@@ -181,7 +181,7 @@ enum Command {
         /// Link-time optimization: none, thin, or full. --release defaults to thin.
         #[arg(long, default_value = "none")]
         lto: String,
-        /// Profile-guided optimization: none, generate, generate=<dir>, use=<file.profdata>.
+        /// Profile-guided optimization: none, generate, `generate=<dir>`, `use=<file.profdata>`.
         #[arg(long, default_value = "none")]
         pgo: String,
         /// Target board for BSP (e.g., stm32f407, esp32, rp2040).
@@ -383,7 +383,7 @@ enum Command {
         /// Source language: c, cpp, python, rust (auto-detected from extension if omitted).
         #[arg(long)]
         lang: Option<String>,
-        /// Output path for generated .fj bindings (default: <file>.fj).
+        /// Output path for generated .fj bindings (default: `<file>.fj`).
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Generate safe wrappers around unsafe FFI calls.

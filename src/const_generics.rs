@@ -81,8 +81,8 @@ pub fn type_param_names(params: &[GenericParam]) -> Vec<String> {
 ///
 /// # Example
 ///
-/// `zeros<3>()` with base name "zeros" and const_args = [3]
-/// produces MonoKey { name: "zeros", type_args: [], const_args: [3] }
+/// `zeros<3>()` with base name "zeros" and `const_args = [3]`
+/// produces `MonoKey { name: "zeros", type_args: [], const_args: [3] }`
 /// which mangles to "zeros_N3".
 pub fn build_mono_key(base_name: &str, type_args: &[String], const_args: &[u64]) -> MonoKey {
     MonoKey {

@@ -36,7 +36,7 @@ pub enum BuiltinKernel {
     Softmax,
     /// Matrix multiplication.
     Matmul,
-    /// FajarQuant codebook dot product: score[i] = sum_j query[j] * codebook[indices[i*dim+j]].
+    /// FajarQuant codebook dot product: `score[i] = sum_j query[j] * codebook[indices[i*dim+j]]`.
     CodebookDot,
 }
 

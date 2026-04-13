@@ -170,7 +170,7 @@ impl SpirVModule {
     /// - Type declarations (void, f32, u32, vec3)
     /// - Storage buffer binding (buffer of f32[])
     /// - GlobalInvocationId built-in variable
-    /// - Body: buffer[gid] = buffer[gid] + 1.0
+    /// - Body: `buffer[gid] = buffer[gid] + 1.0`
     ///
     /// This is a production-level element-wise add kernel.
     pub fn emit_elementwise_add_shader(&mut self, entry_name: &str) -> Vec<u8> {

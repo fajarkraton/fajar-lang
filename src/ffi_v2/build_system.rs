@@ -42,7 +42,7 @@ pub enum BuildError {
     },
     /// Duplicate library in linker flags.
     DuplicateLib(String),
-    /// Configuration error in fj.toml [ffi] section.
+    /// Configuration error in `fj.toml` `[ffi]` section.
     ConfigError(String),
     /// Generic build error.
     Other(String),
@@ -133,7 +133,7 @@ pub struct FfiConfig {
     pub custom_steps: Vec<CustomBuildStep>,
 }
 
-/// A pkg-config entry in the [ffi] section.
+/// A pkg-config entry in the `[ffi]` section.
 #[derive(Debug, Clone)]
 pub struct PkgConfigEntry {
     /// Package name.
