@@ -74,13 +74,12 @@ detailed entries.
 ### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     7,552 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
-           ≈ 9,940 total | 0 failures, 0 flakes
-           (was 7,581 lib pre V26 A4; -29 = the 29 unit tests that moved
-            with FajarQuant to standalone repo `fajarkraton/fajarquant`)
+Tests:     7,611 lib + 2,374 integ (in 46 test files) + 14 doc + 1 ignored
+           ≈ 10,000 total | 0 failures, 0 flakes
+           (was 7,581 pre V26 A10; +30 = v3 tensor ops added in Phase A6-A10)
            Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
 LOC:       ~446,000 lines of Rust (394 files in src/)
-Examples:  231 .fj programs in examples/ (was 228, +3 V26 const_*+gui demos)
+Examples:  238 .fj programs in examples/ (was 231, +7 v3 tensor op demos)
            Binary: 14 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
            Source of truth: docs/HONEST_STATUS_V26.md
@@ -101,7 +100,7 @@ Labeling: [x] = production (tested, works E2E)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 
-Numbers verified by runnable commands as of 2026-04-11. CLAUDE.md no longer
+Numbers verified by runnable commands as of 2026-04-14. CLAUDE.md no longer
 trusts inflated counts. Audit corrections in V26:
   - prior 11,395 tests was inflated; real is 7,581 lib + 2,374 integ + 14 doc
   - prior 285 examples was inflated; real is 231
@@ -777,5 +776,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 25.0 | V26 "Final" Phase A done — 7,581 lib + 2,374 integ + 14 doc tests, 0 flakes (80/80 stress), 231 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8 Plan Hygiene Rules added, doc trimmed from 885→~600 lines for context efficiency*
-*Last Updated: 2026-04-11*
+*CLAUDE.md Version: 25.1 | V26 "Final" Phase A done + FajarQuant v3.1 released — 7,611 lib + 2,374 integ + 14 doc tests, 0 flakes, 238 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8+§6.9 Rules*
+*Last Updated: 2026-04-14*
