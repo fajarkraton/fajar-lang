@@ -527,6 +527,10 @@ impl Interpreter {
             // Hadamard transform
             "hadamard" => self.builtin_hadamard(args),
             "hadamard_inverse" => self.builtin_hadamard_inverse(args),
+            // Calibration data (B5.L3)
+            "load_calibration" => self.builtin_load_calibration(args),
+            "save_calibration" => self.builtin_save_calibration(args),
+            "verify_orthogonal" => self.builtin_verify_orthogonal(args),
             // ── Autograd builtins ──
             "tensor_backward" | "backward" => {
                 if args.len() != 1 {
@@ -7413,6 +7417,116 @@ impl Interpreter {
                 .map_err(|e| RuntimeError::TypeError(e.to_string()).into()),
             _ => Err(RuntimeError::TypeError(
                 "hadamard_inverse: expected a Tensor argument".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `load_calibration(path, rows, cols) -> Tensor` — Load raw f64 binary as matrix.
+    ///
+    /// File format: `rows * cols` f64 values in little-endian byte order.
+    /// This is the interpreter-level equivalent of `include_calibration!`.
+    fn builtin_load_calibration(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1], &args[2]) {
+            (Value::Str(path), Value::Int(rows), Value::Int(cols)) => {
+                let rows = *rows as usize;
+                let cols = *cols as usize;
+                let bytes = std::fs::read(path)
+                    .map_err(|e| RuntimeError::TypeError(format!("load_calibration: {e}")))?;
+                let expected = rows * cols * 8; // f64 = 8 bytes
+                if bytes.len() != expected {
+                    return Err(RuntimeError::TypeError(format!(
+                        "load_calibration: expected {expected} bytes ({rows}x{cols} f64), got {}",
+                        bytes.len()
+                    ))
+                    .into());
+                }
+                let data: Vec<f64> = bytes
+                    .chunks_exact(8)
+                    .map(|chunk| f64::from_le_bytes(chunk.try_into().unwrap_or([0; 8])))
+                    .collect();
+                crate::runtime::ml::TensorValue::from_data(data, &[rows, cols])
+                    .map(Value::Tensor)
+                    .map_err(|e| RuntimeError::TypeError(e.to_string()).into())
+            }
+            _ => Err(RuntimeError::TypeError(
+                "load_calibration(path: str, rows: int, cols: int)".into(),
+            )
+            .into()),
+        }
+    }
+
+    /// `save_calibration(tensor, path) -> Null` — Save tensor as raw f64 binary.
+    fn builtin_save_calibration(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Str(path)) => {
+                let data = t.to_vec();
+                let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
+                std::fs::write(path, &bytes)
+                    .map_err(|e| RuntimeError::TypeError(format!("save_calibration: {e}")))?;
+                Ok(Value::Null)
+            }
+            _ => Err(
+                RuntimeError::TypeError("save_calibration(tensor: Tensor, path: str)".into())
+                    .into(),
+            ),
+        }
+    }
+
+    /// `verify_orthogonal(tensor, tolerance) -> Bool` — Check R @ R^T ≈ I.
+    ///
+    /// Returns true if all elements of (R @ R^T - I) have absolute value < tolerance.
+    fn builtin_verify_orthogonal(&self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        match (&args[0], &args[1]) {
+            (Value::Tensor(t), Value::Float(tol)) => {
+                let shape = t.shape();
+                if shape.len() != 2 || shape[0] != shape[1] {
+                    return Err(RuntimeError::TypeError(format!(
+                        "verify_orthogonal: expected square matrix, got shape {:?}",
+                        shape
+                    ))
+                    .into());
+                }
+                let n = shape[0];
+                let data = t.to_vec();
+                // Compute R @ R^T and check against I
+                for i in 0..n {
+                    for j in 0..n {
+                        let mut dot = 0.0;
+                        for k in 0..n {
+                            dot += data[i * n + k] * data[j * n + k];
+                        }
+                        let expected = if i == j { 1.0 } else { 0.0 };
+                        if (dot - expected).abs() > *tol {
+                            return Ok(Value::Bool(false));
+                        }
+                    }
+                }
+                Ok(Value::Bool(true))
+            }
+            _ => Err(RuntimeError::TypeError(
+                "verify_orthogonal(tensor: Tensor, tolerance: float)".into(),
             )
             .into()),
         }

@@ -1532,6 +1532,37 @@ impl TypeChecker {
             });
         }
 
+        // B5.L3: Calibration data builtins
+        let cal_builtins: Vec<(&str, Vec<Type>, Type)> = vec![
+            (
+                "load_calibration",
+                vec![Type::Str, Type::I64, Type::I64],
+                dyn_t.clone(),
+            ),
+            (
+                "save_calibration",
+                vec![dyn_t.clone(), Type::Str],
+                Type::Void,
+            ),
+            (
+                "verify_orthogonal",
+                vec![dyn_t.clone(), Type::F64],
+                Type::Bool,
+            ),
+        ];
+        for (name, params, ret) in cal_builtins {
+            self.symbols.define(Symbol {
+                name: name.to_string(),
+                ty: Type::Function {
+                    params,
+                    ret: Box::new(ret),
+                },
+                mutable: false,
+                span: Span::new(0, 0),
+                used: false,
+            });
+        }
+
         // Layer builtins
         let layer_fns: Vec<(&str, Vec<Type>, Type)> = vec![
             ("layer_dense", vec![Type::I64, Type::I64], Type::Unknown),

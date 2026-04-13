@@ -1420,6 +1420,10 @@ impl Interpreter {
             // Hadamard
             "hadamard",
             "hadamard_inverse",
+            // Calibration (B5.L3)
+            "load_calibration",
+            "save_calibration",
+            "verify_orthogonal",
             // Autograd
             "tensor_backward",
             "backward",

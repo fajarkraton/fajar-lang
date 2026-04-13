@@ -1,0 +1,55 @@
+// calibrated_rotation.fj — Load calibration data + verify orthogonality
+//
+// FajarQuant v2 uses calibrated PCA rotation matrices. This demo shows:
+// 1. Creating a rotation matrix (Hadamard as example — always orthogonal)
+// 2. Saving it as raw binary calibration data
+// 3. Loading it back and verifying orthogonality
+// 4. Applying it to a KV cache vector
+
+// Step 1: Create a 4x4 Hadamard matrix (orthogonal by construction)
+let h_row = from_data([1.0, 0.0, 0.0, 0.0], [1, 4])
+let row0 = hadamard(h_row)
+
+// Build full 4x4 matrix by transforming each basis vector
+let e0 = from_data([1.0, 0.0, 0.0, 0.0], [1, 4])
+let e1 = from_data([0.0, 1.0, 0.0, 0.0], [1, 4])
+let e2 = from_data([0.0, 0.0, 1.0, 0.0], [1, 4])
+let e3 = from_data([0.0, 0.0, 0.0, 1.0], [1, 4])
+
+let r0 = hadamard(e0)
+let r1 = hadamard(e1)
+let r2 = hadamard(e2)
+let r3 = hadamard(e3)
+
+// Flatten rows into a 4x4 matrix
+let rotation = from_data([
+    0.5, 0.5, 0.5, 0.5,
+    0.5, -0.5, 0.5, -0.5,
+    0.5, 0.5, -0.5, -0.5,
+    0.5, -0.5, -0.5, 0.5
+], [4, 4])
+
+println("Rotation matrix:")
+println(rotation)
+
+// Step 2: Save as calibration data
+save_calibration(rotation, "/tmp/fj_test_rotation.bin")
+println("\nSaved to /tmp/fj_test_rotation.bin")
+
+// Step 3: Load back
+let loaded = load_calibration("/tmp/fj_test_rotation.bin", 4, 4)
+println("\nLoaded back:")
+println(loaded)
+
+// Step 4: Verify orthogonality (R @ R^T ≈ I)
+let is_ortho = verify_orthogonal(loaded, 1e-10)
+println("\nOrthogonal: " + to_string(is_ortho))
+
+// Step 5: Apply to a KV cache vector
+let kv = from_data([10.0, 0.0, 0.0, 0.0], [1, 4])
+println("\nKV vector (outlier in channel 0):")
+println(kv)
+
+let rotated = matmul(kv, transpose(loaded))
+println("\nAfter rotation (outlier spread):")
+println(rotated)
