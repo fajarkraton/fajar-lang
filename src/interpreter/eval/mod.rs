@@ -1855,6 +1855,9 @@ impl Interpreter {
             "sys_cpu_temp",
             "sys_ram_total",
             "sys_ram_free",
+            // V27.5 P1.2: AI scheduler
+            "tensor_workload_hint",
+            "schedule_ai_task",
         ]
     }
 

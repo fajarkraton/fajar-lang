@@ -2944,6 +2944,32 @@ impl Interpreter {
             "fb_width" => Ok(Value::Int(1920)),
             "fb_height" => Ok(Value::Int(1080)),
             "kb_read" | "kb_available" => Ok(Value::Int(0)),
+            // V27.5 P1.2: AI scheduler builtins
+            "tensor_workload_hint" => {
+                // Estimate FLOP cost for a matmul of (rows × cols) × (cols × rows)
+                let rows = match args.first() {
+                    Some(Value::Int(n)) => *n,
+                    _ => 0,
+                };
+                let cols = match args.get(1) {
+                    Some(Value::Int(n)) => *n,
+                    _ => 0,
+                };
+                Ok(Value::Int(rows * cols * rows)) // O(n²m) naive matmul cost
+            }
+            "schedule_ai_task" => {
+                // Simulated scheduling: return priority-based slot assignment
+                let task_id = match args.first() {
+                    Some(Value::Int(n)) => *n,
+                    _ => 0,
+                };
+                let priority = match args.get(1) {
+                    Some(Value::Int(n)) => *n,
+                    _ => 0,
+                };
+                // Higher priority → lower slot number (scheduled sooner)
+                Ok(Value::Int(1000 - priority * 100 + task_id))
+            }
             // Phase 8: OS Services stubs
             "proc_spawn" => Ok(Value::Int(2)),
             "proc_wait" | "proc_kill" => Ok(Value::Int(0)),

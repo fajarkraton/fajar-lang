@@ -553,6 +553,17 @@ impl TypeChecker {
             ("sys_cpu_temp", vec![], Type::I64),
             ("sys_ram_total", vec![], Type::I64),
             ("sys_ram_free", vec![], Type::I64),
+            // V27.5 P1.2: AI scheduler builtins
+            (
+                "tensor_workload_hint",
+                vec![Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "schedule_ai_task",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
             // Context switch builtins
             ("sched_get_saved_sp", vec![], Type::I64),
             ("sched_set_next_sp", vec![Type::I64], Type::Void),
