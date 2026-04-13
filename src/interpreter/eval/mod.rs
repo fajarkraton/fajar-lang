@@ -2029,7 +2029,10 @@ impl Interpreter {
                 }
                 Err(EvalError::Control(_)) => Ok(Value::Null),
             },
-            _ => Ok(Value::Null),
+            Some(_non_fn) => Err(RuntimeError::TypeError(
+                "main is defined but is not a function".to_string(),
+            )),
+            None => Ok(Value::Null),
         }
     }
 
