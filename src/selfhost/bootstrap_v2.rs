@@ -65,6 +65,11 @@ impl SubsetDefinition {
                 "break".into(),
                 "continue".into(),
                 "expr_stmt".into(),
+                // V27.5 P3.2: @host annotation enables file I/O for Stage 1
+                "host_fn".into(),
+                "read_file".into(),
+                "write_file".into(),
+                "file_exists".into(),
             ],
             types: vec![
                 "i8".into(),

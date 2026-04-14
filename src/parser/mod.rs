@@ -720,7 +720,9 @@ impl Parser {
             | TokenKind::AtShouldPanic
             | TokenKind::AtIgnore
             | TokenKind::AtDerive
-            | TokenKind::AtPure => {
+            | TokenKind::AtPure
+            | TokenKind::AtApp
+            | TokenKind::AtHost => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -792,6 +794,8 @@ impl Parser {
                     TokenKind::AtInterrupt => ("interrupt", None),
                     TokenKind::AtMessage => ("message", None),
                     TokenKind::AtPure => ("pure", None),
+                    TokenKind::AtApp => ("app", None),
+                    TokenKind::AtHost => ("host", None),
                     TokenKind::AtDerive => {
                         // Parse @derive(Trait1, Trait2, ...)
                         let mut derive_params = Vec::new();

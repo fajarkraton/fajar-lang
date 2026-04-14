@@ -300,6 +300,14 @@ pub enum TokenKind {
     AtPure,
     /// `@shared` — cross-service type sharing
     AtShared,
+    /// `@app` — V27.5 P3.1: GUI application entry point.
+    /// Marks the main entry function for a desktop application (V30 Desktop).
+    /// Implies @safe, must return i64, exactly one per program.
+    AtApp,
+    /// `@host` — V27.5 P3.2: self-hosting compiler context.
+    /// Marks functions usable in Stage 1 self-host compiler — enables
+    /// file I/O (read_file, write_file) that's normally blocked in @safe.
+    AtHost,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -631,6 +639,8 @@ impl fmt::Display for TokenKind {
             TokenKind::AtDerive => write!(f, "@derive"),
             TokenKind::AtPure => write!(f, "@pure"),
             TokenKind::AtShared => write!(f, "@shared"),
+            TokenKind::AtApp => write!(f, "@app"),
+            TokenKind::AtHost => write!(f, "@host"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -758,6 +768,8 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("derive", TokenKind::AtDerive);
     m.insert("pure", TokenKind::AtPure);
     m.insert("shared", TokenKind::AtShared);
+    m.insert("app", TokenKind::AtApp);
+    m.insert("host", TokenKind::AtHost);
     m
 });
 
@@ -1081,6 +1093,8 @@ mod tests {
             (TokenKind::AtIgnore, "@ignore"),
             (TokenKind::AtDerive, "@derive"),
             (TokenKind::AtPure, "@pure"),
+            (TokenKind::AtApp, "@app"),
+            (TokenKind::AtHost, "@host"),
             (TokenKind::AtNpu, "@npu"),
             (TokenKind::AtGpu, "@gpu"),
             (TokenKind::AtEntry, "@entry"),
