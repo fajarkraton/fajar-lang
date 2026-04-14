@@ -2298,35 +2298,9 @@ impl Interpreter {
                     } else {
                         val
                     };
-                // V14 DT4: Check refinement type predicate at runtime.
-                if let Some(crate::parser::ast::TypeExpr::Refinement {
-                    var_name,
-                    predicate,
-                    ..
-                }) = ty.as_ref()
-                {
-                    // Evaluate predicate with the bound variable.
-                    let pred_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
-                        &self.env,
-                    ))));
-                    pred_env
-                        .lock()
-                        .expect("env lock")
-                        .define(var_name.clone(), val.clone());
-                    let prev_env = self.env.clone();
-                    self.env = pred_env;
-                    let pred_result = self.eval_expr(predicate);
-                    self.env = prev_env;
-                    match pred_result {
-                        Ok(Value::Bool(true)) => {}
-                        Ok(Value::Bool(false)) => {
-                            return Err(RuntimeError::TypeError(format!(
-                                "refinement type violation: {name} = {val:?} does not satisfy predicate"
-                            ))
-                            .into());
-                        }
-                        _ => {} // Non-bool predicates: skip check
-                    }
+                // V14 DT4 / V27.5 P4.1: Check refinement type predicate.
+                if let Some(t) = ty.as_ref() {
+                    self.check_refinement(t, &val, &format!("let {name}"))?;
                 }
                 self.env.lock().expect("env lock").define(name.clone(), val);
                 Ok(Value::Null)
@@ -2989,6 +2963,50 @@ impl Interpreter {
         }
     }
 
+    /// V27.5 P4.1: Check a refinement type predicate against a value.
+    /// Returns Ok(()) if the predicate holds (or the type isn't a refinement),
+    /// or Err(TypeError) describing the violation.
+    ///
+    /// Called from 4 sites: let-binding (Stmt::Let), function call (param),
+    /// function return, and mutable assignment.
+    fn check_refinement(
+        &mut self,
+        ty: &crate::parser::ast::TypeExpr,
+        val: &Value,
+        context: &str,
+    ) -> Result<(), EvalError> {
+        use crate::parser::ast::TypeExpr;
+        if let TypeExpr::Refinement {
+            var_name,
+            predicate,
+            ..
+        } = ty
+        {
+            let pred_env = Arc::new(Mutex::new(Environment::new_with_parent(Arc::clone(
+                &self.env,
+            ))));
+            pred_env
+                .lock()
+                .expect("env lock")
+                .define(var_name.clone(), val.clone());
+            let prev_env = self.env.clone();
+            self.env = pred_env;
+            let pred_result = self.eval_expr(predicate);
+            self.env = prev_env;
+            match pred_result {
+                Ok(Value::Bool(true)) => {}
+                Ok(Value::Bool(false)) => {
+                    return Err(RuntimeError::TypeError(format!(
+                        "refinement violation at {context}: {val:?} does not satisfy predicate"
+                    ))
+                    .into());
+                }
+                _ => {} // Non-bool predicate: skip
+            }
+        }
+        Ok(())
+    }
+
     fn call_function(&mut self, fv: &FnValue, args: Vec<Value>) -> EvalResult {
         if args.len() != fv.params.len() {
             return Err(RuntimeError::ArityMismatch {
@@ -3084,7 +3102,9 @@ impl Interpreter {
         ))));
 
         // Bind parameters
+        // V27.5 P4.1: check refinement predicates on each parameter.
         for (param, val) in fv.params.iter().zip(args) {
+            self.check_refinement(&param.ty, &val, &format!("param {}", param.name))?;
             call_env
                 .lock()
                 .expect("env lock")

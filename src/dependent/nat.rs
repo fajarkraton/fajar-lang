@@ -1450,8 +1450,42 @@ mod tests {
         assert!(result.is_err(), "negative value should fail refinement");
         let err_msg = format!("{result:?}");
         assert!(
-            err_msg.contains("refinement type violation"),
+            err_msg.contains("refinement violation"),
             "error should mention refinement: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn v27_5_p4_1_refinement_param_pass() {
+        // V27.5 P4.1: refinement predicate on function param — valid value.
+        let source = r#"
+            fn take_positive(x: { n: i64 | n > 0 }) -> i64 { x + 1 }
+            fn main() -> i64 { take_positive(5) }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let _ = interp.eval_source(source);
+        let result = interp.call_main();
+        assert!(
+            result.is_ok(),
+            "positive param should pass refinement: {result:?}"
+        );
+    }
+
+    #[test]
+    fn v27_5_p4_1_refinement_param_fail() {
+        // V27.5 P4.1: refinement predicate on function param — invalid value.
+        let source = r#"
+            fn take_positive(x: { n: i64 | n > 0 }) -> i64 { x + 1 }
+            fn main() -> i64 { take_positive(-3) }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let _ = interp.eval_source(source);
+        let result = interp.call_main();
+        assert!(result.is_err(), "negative param should fail refinement");
+        let err_msg = format!("{result:?}");
+        assert!(
+            err_msg.contains("refinement violation") && err_msg.contains("param"),
+            "error should mention param refinement: {err_msg}"
         );
     }
 
