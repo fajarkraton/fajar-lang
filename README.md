@@ -5,12 +5,13 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v26.1.0-phase-a](https://img.shields.io/badge/release-v26.1.0--phase--a_Final-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v26.1.0-phase-a)
-[![Tests](https://img.shields.io/badge/tests-7%2C581_lib_+_2%2C374_integ-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Release v27.5.0](https://img.shields.io/badge/release-v27.5.0_Compiler_Prep-blue)](https://github.com/fajarkraton/fajar-lang/releases/tag/v27.5.0)
+[![Tests](https://img.shields.io/badge/tests-7%2C623_lib_+_2%2C575_integ_+_16_E2E-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Stress](https://img.shields.io/badge/stress-80%2F80_at_threads%3D64-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()
+[![Doc Warnings](https://img.shields.io/badge/cargo_doc-0_warnings-success)]()
 [![Modules](https://img.shields.io/badge/modules-54_%5Bx%5D_%2F_0_%5Bf%5D_%2F_0_%5Bs%5D-success)]()
-[![LOC](https://img.shields.io/badge/LOC-446K_Rust-informational)]()
+[![LOC](https://img.shields.io/badge/LOC-448K_Rust-informational)]()
 [![FajarOS](https://img.shields.io/badge/FajarOS-LLM_E2E_in_kernel-success)]()
 [![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
 [![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_GPU_compute-76b900)]()
@@ -519,10 +520,10 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Compiler LOC | ~459,000 Rust across 435+ files |
-| Tests | 10,400+ (0 failures, 0 clippy warnings) |
-| Audit | 131/131 features verified E2E (100% pass rate) |
-| Examples | 221+ `.fj` programs |
+| Release | **v27.5.0 "Compiler Prep"** (2026-04-14) — V28-V33 ready |
+| Compiler LOC | ~448,000 Rust across 394 files in src/ |
+| Tests | 7,623 lib + 2,575 integ + 16 V27.5 E2E + 14 doc = **~10,228 total** (0 failures, 0 flakes, 0 clippy, 0 doc warnings) |
+| Examples | 238 `.fj` programs |
 | FajarQuant | 49-86% lower MSE than TurboQuant (adaptive PCA rotation) |
 | JIT | 76x speedup on fib(30) via Cranelift native compilation |
 | GPU | Real CUDA detection (RTX 4090: 9,728 cores, 16 GB VRAM) |
@@ -551,7 +552,8 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | Effects | Algebraic effects + handlers, effect inference, effect polymorphism |
 | Dependent types | Pi types, Sigma types, refinement types, dependent array bounds |
 | GPU codegen | SPIR-V (Vulkan), PTX (CUDA), kernel fusion, auto-dispatch |
-| Production status | **100% production-ready** (V14 "Infinity" — all 500 tasks verified) |
+| Production status | **100% production-ready** (V27.5 "Compiler Prep" — V28-V33 prerequisites met) |
+| V27.5 additions | AI scheduler builtins, `@interrupt` ARM64+x86_64 wrappers, `@app`+`@host` annotations, `Cap<T>` linear type, refinement param checks, `fb_set_base`/`fb_scroll`, IPC stub generator |
 
 ---
 
@@ -559,7 +561,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
-| [**v26.1.0-phase-a**](https://github.com/fajarkraton/fajar-lang/releases/tag/v26.1.0-phase-a) | **Final (Phase A)** | **V26 Phase A1+A2+A3 complete: pre-commit hook, CI flake-stress (80/80 stress runs at `--test-threads=64`), 14 wall-clock test flakes hardened, production `.unwrap()` audit (4,062 → 174 → 3 → 0, all replaced with `.expect()`), `clippy::unwrap_used` lint at crate root, 3 `const_*` modules wired (const_serialize/const_eval_nat/const_traits builtins). Modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s] — zero framework, zero stubs. CLAUDE.md §6.7 Test Hygiene + §6.8 Plan Hygiene Rules. 7,581 lib + 2,374 integ tests, 0 failures, 0 flakes.** |
+| [**v27.5.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v27.5.0) | **Compiler Prep** | **V28-V33 prerequisites: AI scheduler builtins (`tensor_workload_hint`, `schedule_ai_task`), `@interrupt` ISR wrappers (ARM64 + x86_64 + target dispatcher) wired into AOT pipeline, `fb_set_base`/`fb_scroll` VESA framebuffer extensions, IPC service stub generator (`ServiceStub::from_service_def`), `@app` + `@host` annotations, refinement predicate checking extended to function params, `Cap<T>` linear/affine capability type. 16 new V27.5 E2E integration tests + `v27_5_regression` CI job. 5.6h actual vs 196h est (-97%) — 6/10 reported gaps were already implemented (audit correction pattern).** |
+| [**v27.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v27.0.0) | **Hardened** | **V27 deep re-audit closed 5 gaps: 10 cargo doc warnings → 0, `call_main()` now rejects non-Function main with TypeError (was silent Null), Cargo.toml 24.0.0 → 27.0.0 version sync, 12 untested feature flags get integration tests (`tests/feature_flag_tests.rs`), `scripts/check_version_sync.sh` prevents future drift. 7,611 lib tests pass with 0 warnings.** |
+| [**v26.1.0-phase-a**](https://github.com/fajarkraton/fajar-lang/releases/tag/v26.1.0-phase-a) | **Final (Phase A)** | **V26 Phase A1+A2+A3 complete: pre-commit hook, CI flake-stress (80/80 stress runs at `--test-threads=64`), 14 wall-clock test flakes hardened, production `.unwrap()` audit (4,062 → 174 → 3 → 0, all replaced with `.expect()`), `clippy::unwrap_used` lint at crate root, 3 `const_*` modules wired. Modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s]. CLAUDE.md §6.7 + §6.8 Plan Hygiene Rules. 7,581 lib + 2,374 integ tests.** |
 | [**v25.1.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v25.1.0) | **Production** | **V25 Production Plan v5.0 + 4 rounds of hands-on re-audit. HashMap auto-create, K8s deploy target, WGSL CodebookDot shader. FajarQuant Phase C complete: real Gemma 4 E2B 50-prompt 3-way comparison vs KIVI + TurboQuant (FajarQuant **wins at 2-bit 80.14 ppl** and **3-bit 75.65 ppl**, design tradeoff at 4-bit). Ablation: PCA 4-6%, fused attention 524,288× memory reduction, hierarchical 48.7% bit savings @ 10K context. Paper finalized (5-page LaTeX, real numbers). **`@kernel` transitive heap taint FIXED** (V17 critical bug closed). LLVM release JIT (LTO=false), println segfault, f-string codegen. ~7,581 lib tests.** |
 | [**v24.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v24.0.0) | **Quantum** | **CUDA RTX 4090 GPU compute (9 PTX kernels, tiled matmul, async streams). FajarQuant Phase 5-7 wired (8 safety tests, paper benchmarks, GPU codebook dot product). AVX2 SIMD + AES-NI builtins via LLVM inline asm (LLVM-only). PTX sm_89 (Ada Lovelace) + BF16/FP8. ~3× speedup at 1024×1024 matmul on RTX 4090. ~7,572 tests.** |
 | [**v23.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v23.0.0) | **Boot** | **FajarOS boots to shell (105 commands, 90 auto-tested). Ring 3 user mode (IRETQ+SYSCALL+SYSRETQ→shell resume). FajarQuant kernel-native. NVMe storage. 22 bugs fixed: LLVM asm constraint ordering, iretq selectors, PIC/LAPIC handlers, entry block alloca, frame allocator BSF/POPCNT. x86_64-user standalone ELF target. 7,572 tests.** |
