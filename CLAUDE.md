@@ -117,6 +117,7 @@ trusts inflated counts. Audit corrections in V26:
 
 | Version | Date | Highlight |
 |---|---|---|
+| **V27.5** "Compiler Prep" | 2026-04-14 | AI scheduler builtins, @interrupt wrappers (ARM64+x86_64), @app/@host annotations, refinement params, Cap<T> linear type, fb_set_base/fb_scroll, IPC stub generator. V28-ready. |
 | **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError, version sync 27.0.0, FajarOS OOM hardening |
 | **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
 | V25 "Production" | 2026-04-07 | Hands-on re-audit, K8s deploy, FajarQuant Phase C real Gemma 4 E2B, @kernel transitive fix |
@@ -776,5 +777,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 27.0 | V27 "Hardened" — 7,611 lib + 2,553 integ + 14 doc tests, 0 flakes, 0 doc warnings, 238 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8+§6.9 Rules*
+*CLAUDE.md Version: 27.5 | V27.5 "Compiler Prep" — 7,623 lib + 2,575 integ + 16 V27.5 E2E + 14 doc tests, 0 flakes, 0 doc warnings, 238 examples, 0 production .unwrap(), 0 [f]/[s] modules | §6.8+§6.9 Rules | V28-ready*
 *Last Updated: 2026-04-14*
