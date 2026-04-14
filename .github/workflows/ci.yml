@@ -226,3 +226,32 @@ jobs:
         with:
           files: coverage/cobertura.xml
           fail_ci_if_error: false
+
+  # V27.5 P5.2: regression gate for compiler prep features.
+  # Runs V27.5 integration test suite + bare-metal codegen tests.
+  # Ensures P1-P4 features (AI scheduler, framebuffer, @app/@host,
+  # refinement params, Cap<T>) stay working for V28-V33 consumers.
+  v27_5_regression:
+    name: V27.5 Compiler Prep Regression
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-v27_5-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-v27_5-
+      - name: V27.5 integration tests
+        run: cargo test --test v27_5_compiler_prep -- --test-threads=1
+      - name: Bare-metal codegen tests (interrupt wrappers + framebuffer)
+        run: cargo test --lib --features native -- interrupt_wrapper target_dispatcher bare_fb
+      - name: Refinement + capability unit tests
+        run: cargo test --lib -- refinement cap_
+      - name: Version sync check
+        run: bash scripts/check_version_sync.sh
