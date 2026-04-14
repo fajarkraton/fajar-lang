@@ -17060,8 +17060,10 @@ fn s5_interrupt_detected() {
 
 #[test]
 fn s5_interrupt_wrapper_assembly() {
-    use crate::codegen::linker::generate_interrupt_wrapper;
-    let wrapper = generate_interrupt_wrapper("timer_handler");
+    // V27.5 P1.3b: explicit aarch64 (was generate_interrupt_wrapper which
+    // now defaults to host arch — would return x86_64 on CI).
+    use crate::codegen::linker::generate_interrupt_wrapper_aarch64;
+    let wrapper = generate_interrupt_wrapper_aarch64("timer_handler");
     assert!(wrapper.contains("__interrupt_timer_handler"));
     assert!(wrapper.contains("bl      timer_handler"));
     assert!(wrapper.contains("eret"));

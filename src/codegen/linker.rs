@@ -3827,10 +3827,88 @@ pub fn generate_x86_64_linker_script(config: &LinkerConfig) -> Result<String, Co
 /// Usage: include the generated assembly in the AOT compilation output.
 /// The wrapper symbol is `__interrupt_{fn_name}` and should be placed
 /// in the vector table instead of the raw function.
+///
+/// V27.5 P1.3b: Architecture detection — defaults to host arch via
+/// std::env::consts::ARCH. For cross-compilation, use
+/// `generate_interrupt_wrapper_for_target()`.
 pub fn generate_interrupt_wrapper(fn_name: &str) -> String {
+    generate_interrupt_wrapper_for_target(fn_name, std::env::consts::ARCH)
+}
+
+/// V27.5 P1.3b: Target-aware ISR wrapper generation.
+/// Dispatches to architecture-specific generator based on target triple.
+/// Supports: aarch64 (eret), x86_64 (iretq).
+pub fn generate_interrupt_wrapper_for_target(fn_name: &str, target: &str) -> String {
+    if target.starts_with("x86_64") || target == "x86_64" {
+        generate_interrupt_wrapper_x86_64(fn_name)
+    } else {
+        // Default to ARM64 for aarch64 + unknown
+        generate_interrupt_wrapper_aarch64(fn_name)
+    }
+}
+
+/// V27.5 P1.3b: x86_64 ISR wrapper.
+/// Saves all 16 GP registers + RFLAGS, calls handler, restores, uses iretq.
+/// On x86_64, the CPU pushes SS, RSP, RFLAGS, CS, RIP automatically on
+/// interrupt entry, and iretq pops them. The wrapper handles GP register
+/// preservation that the CPU does NOT save.
+pub fn generate_interrupt_wrapper_x86_64(fn_name: &str) -> String {
     format!(
         r#"
-/* @interrupt wrapper for {fn_name} — auto-generated */
+/* @interrupt wrapper for {fn_name} — auto-generated x86_64 (V27.5 P1.3b) */
+.global __interrupt_{fn_name}
+.type __interrupt_{fn_name}, @function
+__interrupt_{fn_name}:
+    /* Save all GP registers (16 × 8 = 128 bytes) */
+    pushq   %rax
+    pushq   %rcx
+    pushq   %rdx
+    pushq   %rbx
+    pushq   %rsi
+    pushq   %rdi
+    pushq   %rbp
+    pushq   %r8
+    pushq   %r9
+    pushq   %r10
+    pushq   %r11
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
+
+    /* Call the actual handler (System V AMD64 ABI: caller-saved already on stack) */
+    call    {fn_name}
+
+    /* Restore all GP registers in reverse order */
+    popq    %r15
+    popq    %r14
+    popq    %r13
+    popq    %r12
+    popq    %r11
+    popq    %r10
+    popq    %r9
+    popq    %r8
+    popq    %rbp
+    popq    %rdi
+    popq    %rsi
+    popq    %rbx
+    popq    %rdx
+    popq    %rcx
+    popq    %rax
+
+    /* Interrupt return: pops RIP, CS, RFLAGS, RSP, SS pushed by CPU */
+    iretq
+.size __interrupt_{fn_name}, . - __interrupt_{fn_name}
+"#
+    )
+}
+
+/// V27.5 P1.3b: ARM64 (aarch64) ISR wrapper.
+/// Original implementation (renamed from generate_interrupt_wrapper for clarity).
+pub fn generate_interrupt_wrapper_aarch64(fn_name: &str) -> String {
+    format!(
+        r#"
+/* @interrupt wrapper for {fn_name} — auto-generated aarch64 */
 .global __interrupt_{fn_name}
 .type __interrupt_{fn_name}, @function
 __interrupt_{fn_name}:
@@ -4048,8 +4126,8 @@ mod tests {
     }
 
     #[test]
-    fn interrupt_wrapper_contains_save_restore() {
-        let wrapper = generate_interrupt_wrapper("irq_handler");
+    fn interrupt_wrapper_aarch64_contains_save_restore() {
+        let wrapper = generate_interrupt_wrapper_aarch64("irq_handler");
         assert!(wrapper.contains("__interrupt_irq_handler"));
         assert!(wrapper.contains("stp     x0,  x1,  [sp, #0]"));
         assert!(wrapper.contains("ldp     x0,  x1,  [sp, #0]"));
@@ -4060,9 +4138,8 @@ mod tests {
     }
 
     #[test]
-    fn interrupt_wrapper_saves_all_registers() {
-        let wrapper = generate_interrupt_wrapper("timer_irq");
-        // Verify all GP register pairs are saved
+    fn interrupt_wrapper_aarch64_saves_all_registers() {
+        let wrapper = generate_interrupt_wrapper_aarch64("timer_irq");
         for reg_pair in &[
             "x0,  x1", "x2,  x3", "x4,  x5", "x6,  x7", "x8,  x9", "x10, x11", "x12, x13",
             "x14, x15", "x16, x17", "x18, x19", "x20, x21", "x22, x23", "x24, x25", "x26, x27",
@@ -4077,9 +4154,52 @@ mod tests {
                 "missing LDP for {reg_pair}"
             );
         }
-        // x30 saved individually
         assert!(wrapper.contains("str     x30"));
         assert!(wrapper.contains("ldr     x30"));
+    }
+
+    #[test]
+    fn interrupt_wrapper_x86_64_contains_iretq() {
+        // V27.5 P1.3b: x86_64 wrapper uses iretq (not eret)
+        let wrapper = generate_interrupt_wrapper_x86_64("timer_irq");
+        assert!(wrapper.contains("__interrupt_timer_irq"));
+        assert!(wrapper.contains("call    timer_irq"));
+        assert!(wrapper.contains("iretq"));
+        assert!(!wrapper.contains("eret")); // ARM-only instruction
+    }
+
+    #[test]
+    fn interrupt_wrapper_x86_64_saves_all_gp_registers() {
+        let wrapper = generate_interrupt_wrapper_x86_64("isr");
+        for reg in &[
+            "%rax", "%rcx", "%rdx", "%rbx", "%rsi", "%rdi", "%rbp", "%r8", "%r9", "%r10", "%r11",
+            "%r12", "%r13", "%r14", "%r15",
+        ] {
+            assert!(
+                wrapper.contains(&format!("pushq   {reg}")),
+                "missing pushq {reg}"
+            );
+            assert!(
+                wrapper.contains(&format!("popq    {reg}")),
+                "missing popq {reg}"
+            );
+        }
+    }
+
+    #[test]
+    fn target_dispatcher_selects_correct_arch() {
+        // V27.5 P1.3b: dispatcher routes by target string
+        let aarch64_wrapper = generate_interrupt_wrapper_for_target("h", "aarch64-unknown-none");
+        assert!(aarch64_wrapper.contains("eret"));
+        assert!(!aarch64_wrapper.contains("iretq"));
+
+        let x86_wrapper = generate_interrupt_wrapper_for_target("h", "x86_64-unknown-none");
+        assert!(x86_wrapper.contains("iretq"));
+        assert!(!x86_wrapper.contains("eret"));
+
+        // Default to aarch64 for unknown targets
+        let unknown_wrapper = generate_interrupt_wrapper_for_target("h", "riscv64");
+        assert!(unknown_wrapper.contains("eret"));
     }
 
     // ═══════════════════════════════════════════════════════════════
