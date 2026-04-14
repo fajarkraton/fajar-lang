@@ -253,6 +253,17 @@ pub enum Value {
         /// Virtual method table: method name → function value.
         vtable: HashMap<String, FnValue>,
     },
+    /// V27.5 P4.2: Capability (linear/affine type).
+    ///
+    /// Wraps a resource handle that must be consumed exactly once. Once
+    /// unwrapped via `cap_unwrap()`, the capability is invalidated and
+    /// subsequent access returns an error. Cannot be cloned at the .fj
+    /// level (Arc<Mutex<>> provides shared mutability for the consumed
+    /// flag; the inner value itself is moved out on unwrap).
+    Cap {
+        /// Inner value wrapped by the capability (None after consumption).
+        inner: Arc<Mutex<Option<Value>>>,
+    },
 }
 
 /// A user-defined function value, capturing its closure environment.
@@ -429,6 +440,13 @@ impl fmt::Display for Value {
                 concrete_type,
                 ..
             } => write!(f, "<dyn {trait_name} ({concrete_type})>"),
+            Value::Cap { inner } => {
+                let guard = inner.lock().expect("cap lock");
+                match &*guard {
+                    Some(v) => write!(f, "Cap({v})"),
+                    None => write!(f, "Cap(<consumed>)"),
+                }
+            }
         }
     }
 }
@@ -475,6 +493,7 @@ impl Value {
             Value::Future { .. } => "future",
             Value::Generator { .. } => "generator",
             Value::TraitObject { .. } => "trait_object",
+            Value::Cap { .. } => "Cap",
         }
     }
 }

@@ -2946,6 +2946,43 @@ impl Interpreter {
             "fb_width" => Ok(Value::Int(1920)),
             "fb_height" => Ok(Value::Int(1080)),
             "kb_read" | "kb_available" => Ok(Value::Int(0)),
+            // V27.5 P4.2: Capability type builtins (linear/affine semantics)
+            "cap_new" => {
+                // Wrap any value in a capability
+                let val = args.into_iter().next().unwrap_or(Value::Null);
+                Ok(Value::Cap {
+                    inner: std::sync::Arc::new(std::sync::Mutex::new(Some(val))),
+                })
+            }
+            "cap_unwrap" => {
+                // Consume capability, return inner value. Further access fails.
+                match args.into_iter().next() {
+                    Some(Value::Cap { inner }) => {
+                        let mut guard = inner.lock().expect("cap lock");
+                        match guard.take() {
+                            Some(v) => Ok(v),
+                            None => Err(RuntimeError::TypeError(
+                                "cap_unwrap: capability already consumed".into(),
+                            )
+                            .into()),
+                        }
+                    }
+                    _ => Err(RuntimeError::TypeError(
+                        "cap_unwrap: argument must be a Cap".into(),
+                    )
+                    .into()),
+                }
+            }
+            "cap_is_valid" => {
+                // Returns 1 if capability still holds a value, 0 if consumed.
+                match args.first() {
+                    Some(Value::Cap { inner }) => {
+                        let guard = inner.lock().expect("cap lock");
+                        Ok(Value::Int(if guard.is_some() { 1 } else { 0 }))
+                    }
+                    _ => Ok(Value::Int(0)),
+                }
+            }
             // V27.5 P1.2: AI scheduler builtins
             "tensor_workload_hint" => {
                 // Estimate FLOP cost for a matmul of (rows × cols) × (cols × rows)

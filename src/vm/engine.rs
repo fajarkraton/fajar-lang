@@ -1093,6 +1093,13 @@ fn format_value(v: &Value) -> String {
             ..
         } => format!("<dyn {trait_name} ({concrete_type})>"),
         Value::Generator { name, .. } => format!("<generator {name}>"),
+        Value::Cap { inner } => {
+            let guard = inner.lock().expect("cap lock");
+            match &*guard {
+                Some(v) => format!("Cap({})", format_value(v)),
+                None => "Cap(<consumed>)".to_string(),
+            }
+        }
     }
 }
 

@@ -1601,6 +1601,10 @@ impl TypeChecker {
             // V27.5 P1.2: AI scheduler
             "tensor_workload_hint",
             "schedule_ai_task",
+            // V27.5 P4.2: Capability builtins
+            "cap_new",
+            "cap_unwrap",
+            "cap_is_valid",
             // Context switch
             "sched_get_saved_sp",
             "sched_set_next_sp",

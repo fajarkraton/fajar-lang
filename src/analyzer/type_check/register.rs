@@ -556,6 +556,10 @@ impl TypeChecker {
             ("sys_cpu_temp", vec![], Type::I64),
             ("sys_ram_total", vec![], Type::I64),
             ("sys_ram_free", vec![], Type::I64),
+            // V27.5 P4.2: Capability type builtins (Cap<T> linear type)
+            ("cap_new", vec![Type::I64], Type::I64),
+            ("cap_unwrap", vec![Type::I64], Type::I64),
+            ("cap_is_valid", vec![Type::I64], Type::I64),
             // V27.5 P1.2: AI scheduler builtins
             (
                 "tensor_workload_hint",

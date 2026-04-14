@@ -1490,6 +1490,48 @@ mod tests {
     }
 
     #[test]
+    fn v27_5_p4_2_cap_new_and_unwrap() {
+        // V27.5 P4.2: capability lifecycle — create, unwrap, access consumed
+        let source = r#"
+            fn main() -> i64 {
+                let c = cap_new(42)
+                let valid = cap_is_valid(c)
+                let v = cap_unwrap(c)
+                let consumed = cap_is_valid(c)
+                valid * 1000 + v * 10 + consumed
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let _ = interp.eval_source(source);
+        let result = interp.call_main();
+        assert!(result.is_ok(), "cap lifecycle should work: {result:?}");
+        // valid=1, v=42, consumed=0 → 1000 + 420 + 0 = 1420
+        assert_eq!(format!("{:?}", result.unwrap()), "Int(1420)");
+    }
+
+    #[test]
+    fn v27_5_p4_2_cap_double_unwrap_fails() {
+        // V27.5 P4.2: double-unwrap must error (linear type violation)
+        let source = r#"
+            fn main() -> i64 {
+                let c = cap_new(99)
+                let v1 = cap_unwrap(c)
+                let v2 = cap_unwrap(c)
+                v1 + v2
+            }
+        "#;
+        let mut interp = crate::interpreter::Interpreter::new();
+        let _ = interp.eval_source(source);
+        let result = interp.call_main();
+        assert!(result.is_err(), "double unwrap should error");
+        let err_msg = format!("{result:?}");
+        assert!(
+            err_msg.contains("already consumed"),
+            "error should mention consumed: {err_msg}"
+        );
+    }
+
+    #[test]
     fn v14_dt5_pi_type_instantiation() {
         // PiType instantiation with concrete Nat values
         let pi = PiType::new(
