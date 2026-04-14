@@ -1841,6 +1841,8 @@ impl Interpreter {
             "fb_fill_rect",
             "fb_width",
             "fb_height",
+            "fb_set_base",
+            "fb_scroll",
             "kb_init",
             "kb_read",
             "kb_available",

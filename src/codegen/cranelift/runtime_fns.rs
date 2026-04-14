@@ -7694,6 +7694,9 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_bare_fb_fill_rect" => Some(runtime_bare::fj_rt_bare_fb_fill_rect as *const u8),
         "fj_rt_bare_fb_width" => Some(runtime_bare::fj_rt_bare_fb_width as *const u8),
         "fj_rt_bare_fb_height" => Some(runtime_bare::fj_rt_bare_fb_height as *const u8),
+        // V27.5 P1.4: VESA framebuffer extensions
+        "fj_rt_bare_fb_set_base" => Some(runtime_bare::fj_rt_bare_fb_set_base as *const u8),
+        "fj_rt_bare_fb_scroll" => Some(runtime_bare::fj_rt_bare_fb_scroll as *const u8),
         "fj_rt_bare_kb_init" => Some(runtime_bare::fj_rt_bare_kb_init as *const u8),
         "fj_rt_bare_kb_read" => Some(runtime_bare::fj_rt_bare_kb_read as *const u8),
         "fj_rt_bare_kb_available" => Some(runtime_bare::fj_rt_bare_kb_available as *const u8),

@@ -2941,6 +2941,8 @@ impl Interpreter {
             "net_recv" => Ok(Value::Int(0)), // nothing to receive
             // Phase 6: Display & Input stubs
             "fb_init" | "fb_write_pixel" | "fb_fill_rect" | "kb_init" => Ok(Value::Int(0)),
+            // V27.5 P1.4: VESA framebuffer extensions
+            "fb_set_base" | "fb_scroll" => Ok(Value::Int(0)),
             "fb_width" => Ok(Value::Int(1920)),
             "fb_height" => Ok(Value::Int(1080)),
             "kb_read" | "kb_available" => Ok(Value::Int(0)),

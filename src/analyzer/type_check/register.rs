@@ -539,6 +539,9 @@ impl TypeChecker {
             ),
             ("fb_width", vec![], Type::I64),
             ("fb_height", vec![], Type::I64),
+            // V27.5 P1.4: VESA framebuffer extensions
+            ("fb_set_base", vec![Type::I64], Type::I64),
+            ("fb_scroll", vec![Type::I64], Type::I64),
             ("kb_init", vec![], Type::I64),
             ("kb_read", vec![], Type::I64),
             ("kb_available", vec![], Type::I64),

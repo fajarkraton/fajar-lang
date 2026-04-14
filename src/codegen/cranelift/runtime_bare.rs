@@ -1256,6 +1256,40 @@ pub extern "C" fn fj_rt_bare_fb_height() -> i64 {
     FB_HEIGHT.load(Ordering::Relaxed) as i64
 }
 
+/// V27.5 P1.4: Set the framebuffer MMIO base address.
+/// On real hardware, this is the VESA Linear Framebuffer (LFB) physical
+/// address from Multiboot2 tag 8 (typically ~0xE0000000 on x86_64).
+/// On bare-metal: subsequent fb_write_pixel calls write to base + offset.
+/// In simulation: stores the address but doesn't perform real MMIO.
+static FB_BASE: AtomicU64 = AtomicU64::new(0);
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_fb_set_base(addr: i64) -> i64 {
+    if addr < 0 {
+        return -1;
+    }
+    FB_BASE.store(addr as u64, Ordering::Relaxed);
+    0
+}
+
+/// V27.5 P1.4: Scroll framebuffer up by N pixel rows.
+/// On real hardware: copies rows N..H to 0..(H-N), zeros bottom N rows.
+/// In simulation: validates parameters and updates cursor position.
+#[unsafe(no_mangle)]
+pub extern "C" fn fj_rt_bare_fb_scroll(lines: i64) -> i64 {
+    if FB_INIT.load(Ordering::Relaxed) == 0 || lines <= 0 {
+        return -1;
+    }
+    let h = FB_HEIGHT.load(Ordering::Relaxed) as i64;
+    if lines > h {
+        return -1;
+    }
+    // Update cursor Y position (simulation)
+    let cy = FB_CURSOR_Y.load(Ordering::Relaxed) as i64;
+    let new_cy = (cy - lines).max(0);
+    FB_CURSOR_Y.store(new_cy as u64, Ordering::Relaxed);
+    0
+}
+
 /// Simulated keyboard: last key pressed (0 = no key).
 static KB_LAST_KEY: AtomicU64 = AtomicU64::new(0);
 static KB_INIT: AtomicU64 = AtomicU64::new(0);
@@ -1821,6 +1855,23 @@ mod tests {
         fj_rt_bare_fb_init(800, 600);
         assert_eq!(fj_rt_bare_fb_fill_rect(10, 10, 100, 50, 0xFF_00_FF_00), 0);
         assert_eq!(fj_rt_bare_fb_fill_rect(0, 0, 0, 0, 0), -1); // zero size
+    }
+
+    #[test]
+    fn bare_fb_set_base() {
+        // V27.5 P1.4: framebuffer base address can be set
+        assert_eq!(fj_rt_bare_fb_set_base(0xE0000000), 0);
+        assert_eq!(fj_rt_bare_fb_set_base(-1), -1); // invalid
+    }
+
+    #[test]
+    fn bare_fb_scroll() {
+        // V27.5 P1.4: scroll requires init + positive lines
+        assert_eq!(fj_rt_bare_fb_scroll(10), -1); // not initialized
+        fj_rt_bare_fb_init(800, 600);
+        assert_eq!(fj_rt_bare_fb_scroll(0), -1); // zero lines
+        assert_eq!(fj_rt_bare_fb_scroll(700), -1); // exceeds height
+        assert_eq!(fj_rt_bare_fb_scroll(20), 0); // valid
     }
 
     #[test]

@@ -6309,6 +6309,9 @@ impl CraneliftCompiler {
                 "fb_write_pixel",
                 &sig_3i64_ret_i64,
             ),
+            // V27.5 P1.4: VESA framebuffer extensions
+            ("fj_rt_bare_fb_set_base", "fb_set_base", &sig_i64_ret_i64),
+            ("fj_rt_bare_fb_scroll", "fb_scroll", &sig_i64_ret_i64),
             ("fj_rt_bare_kb_init", "kb_init", &sig_ret_i64),
             ("fj_rt_bare_kb_read", "kb_read", &sig_ret_i64),
             ("fj_rt_bare_kb_available", "kb_available", &sig_ret_i64),
