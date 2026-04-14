@@ -22,6 +22,7 @@ pub mod avx10;
 pub mod avx512;
 pub mod benchmarks;
 pub mod interop;
+pub mod ipc_stub;
 pub mod nostd;
 pub mod opt_passes;
 pub mod optimizer;
