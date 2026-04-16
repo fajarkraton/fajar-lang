@@ -5,6 +5,12 @@
 4 open tracks fully enumerated, the plan-drafting pattern pinned,
 and the skill-creation scope scoped.
 
+**🟢 STATUS UPDATE 2026-04-16 (end of V29.P3 + V29.P3.P6 session):**
+**Track 1 ✅ COMPLETE — V26 B4.2 security triple 3/3 SHIPPED.**
+17 commits across fajaros-x86 + fajar-lang + GitHub Release v3.5.0
+"Security Triple" published. 3 tracks remain (2, 3, 4). Full rollup
+in §Track 1 below + `CLAUDE.md` §3 V29.P3 + V29.P3.P6 rows.
+
 ## Context for Next Session
 
 Today's session shipped V29.P1 (compiler enhancement, 4 phases) +
@@ -24,31 +30,50 @@ Each track gets its own plan file in the established V29.P1 pattern
 verification, surprise budget tracking, prevention layers, decision
 gates). Estimated plan-drafting time per track: ~30 min.
 
-### Track 1: V29.P3.SMAP — Characterize SMAP Double-Fault
+### Track 1: V29.P3.SMAP — ✅ COMPLETE (2026-04-16)
 
-**Entry doc:** `fajaros-x86/docs/V29_P2_SMEP_STEP4_BISECT.md`
-**Goal:** identify why `write_cr4(cr4 | CR4_SMAP)` triggers a double
-fault despite PTE_LEAKS=0x0, then re-enable SMAP + NX without
-breaking boot.
+**Entry doc:** `fajaros-x86/docs/V29_P2_SMEP_STEP4_BISECT.md` (historical)
+**Status:** V26 B4.2 SMEP+SMAP+NX all enabled; GitHub Release v3.5.0
+published 2026-04-16.
 
-**Plan should cover:**
-- P0 pre-flight: re-run bisect, confirm V29.P2.SMEP.4 findings
-  still hold (walker 0, SMAP fails)
-- P1 walker extension: report PDPT + PML4 USER bits (not just leaf)
-- P2 RIP-logging double-fault handler (attribution data)
-- P3 fix identified root cause
-- P4 re-enable SMAP + NX, verify regression suite still green
-- P5 regression test addition (SMAP active check similar to
-  `test_smep_enabled`)
+**Outcome summary:**
+- V29.P3 (SMAP closure): H2 matched (non-leaf USER at PML4[0]+PDPT[0]
+  via SMAP AND-chain). Fix: `690124b` extended
+  `strip_user_from_kernel_identity()`. SMEP+SMAP shipped in `f2dd682`.
+  8 commits, 2.4h (-9% vs budget).
+- V29.P3.P6 (NX closure, same session): H3 matched via P0 static
+  analysis alone (P1 walker skipped, saved 0.55h). Root cause:
+  kernel `.text` spans 0x101000-0x248297 (PD[0] AND PD[1]); loop
+  `pd_idx = 1` wrongly NX-marked PD[1] → silent triple-fault
+  (no EXC marker — handler page also NX). Fix `540743b`:
+  single-line `pd_idx = 1 → pd_idx = 2` in `security.fj:236`.
+  5 commits, 1.48h (-35% vs original budget).
 
-**Estimated effort:** 4-8h if root cause is architectural,
-research-grade if deeper numerical or CPU-errata territory.
+**Plans + docs shipped:**
+- `V29_P3_SMAP_PLAN.md`, `V29_P3_SMAP_FINDINGS.md`, `V29_P3_SMAP_DECISION.md`
+- `V29_P3_P6_NX_PLAN.md`, `V29_P3_P6_NX_FINDINGS.md`, `V29_P3_P6_NX_DECISION.md`
+- CHANGELOG v3.5.0 "Security Triple" narrative
+- CLAUDE.md §3 V29.P3 + V29.P3.P6 rows
+- GitHub Release: https://github.com/fajarkraton/fajaros-x86/releases/tag/v3.5.0
 
-**Skill candidate:** `fajaros-bisect` — boot-QEMU + grep-marker
-runner that automates the "enable feature X, boot, check for
-marker" loop. Takes a flag name + toggle path; returns pass/fail
-with log capture. Would make future CR4/MSR/paging-flag bisects
-much faster.
+**Prevention shipped:** `make test-security-triple-regression` — 6-invariant
+Makefile gate (PTE_LEAKS=0, PTE_LEAKS_FULL=0, no PLKNL, no EXC/PANIC,
+nova>, NX_ENFORCED=0x800). `test-smap-regression` retained as alias.
+
+**Skill created + matured:** `fajaros-bisect` at `~/.claude/skills/`
+— battle-tested on 4 real configs during P0 execution. 2 sed bugs
+found + fixed during first use (delimiter conflict + empty-pattern
+group reference). `--also-comment <regex>` flag added for bidirectional
+toggles.
+
+**Remaining non-blocking** (tracked as `TODO(P3, V30+)` inline):
+- `protect_kernel_data()` dead code cleanup
+- Dynamic `__kernel_end` symbol (current headroom: 1.72 MB before
+  `pd_idx = 2` needs re-evaluation)
+
+**Wall clock total:** ~3.9h across both sub-tracks, 17 commits
+pushed (13 code/plan/doc in fajaros-x86 + 2 CLAUDE.md in fajar-lang
++ this status update + GitHub Release).
 
 ### Track 2: V28.1 Gemma 3 1B Full Sprint
 
