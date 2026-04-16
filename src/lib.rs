@@ -266,7 +266,7 @@ impl FjDiagnostic {
             LexError::UnknownAnnotation { span, .. } => (
                 "LE001",
                 *span,
-                Some("valid annotations: @kernel @device @safe @unsafe @ffi".into()),
+                Some("valid annotations: @kernel @device @safe @unsafe @ffi @noinline @interrupt @test @app @host (and others — see src/lexer/token.rs ANNOTATIONS)".into()),
             ),
         };
         FjDiagnostic {

@@ -308,6 +308,27 @@ pub enum TokenKind {
     /// Marks functions usable in Stage 1 self-host compiler — enables
     /// file I/O (read_file, write_file) that's normally blocked in @safe.
     AtHost,
+    /// `@noinline` — V29.P1: LLVM NoInline attribute (alias for
+    /// `@inline("never")`). Prevents the optimizer from inlining the
+    /// function into callers, preserving explicit call boundaries.
+    /// Used for hot paths where O2 inlining was observed to reorder
+    /// memory accesses and produce EXC:13 faults (FajarOS v8 kernel
+    /// hot paths: km_vecmat_packed_v8, mdl_stream_embed_lookup_raw_v8,
+    /// mdl_ram_lmhead_argmax_v8_tied). Codegen support in
+    /// src/codegen/llvm/mod.rs shipped earlier; lexer support added
+    /// V29.P1 to close the silent-build-failure gap.
+    AtNoInline,
+    /// `@inline` — V29.P1: LLVM AlwaysInline attribute (or NoInline with
+    /// `@inline("never")`). Hints the optimizer to inline across call
+    /// boundaries. Codegen support in src/codegen/llvm/mod.rs:3260;
+    /// lexer entry added V29.P1. The `("never")` parameter form is
+    /// handled at the parser/analyzer layer when present.
+    AtInline,
+    /// `@cold` — V29.P1: LLVM Cold attribute. Marks the function as
+    /// an unlikely path; LLVM places it in `.text.unlikely` and
+    /// deprioritizes inlining. Codegen support in
+    /// src/codegen/llvm/mod.rs:3283; lexer entry added V29.P1.
+    AtCold,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -641,6 +662,9 @@ impl fmt::Display for TokenKind {
             TokenKind::AtShared => write!(f, "@shared"),
             TokenKind::AtApp => write!(f, "@app"),
             TokenKind::AtHost => write!(f, "@host"),
+            TokenKind::AtNoInline => write!(f, "@noinline"),
+            TokenKind::AtInline => write!(f, "@inline"),
+            TokenKind::AtCold => write!(f, "@cold"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -770,6 +794,9 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("shared", TokenKind::AtShared);
     m.insert("app", TokenKind::AtApp);
     m.insert("host", TokenKind::AtHost);
+    m.insert("noinline", TokenKind::AtNoInline);
+    m.insert("inline", TokenKind::AtInline);
+    m.insert("cold", TokenKind::AtCold);
     m
 });
 
@@ -886,6 +913,7 @@ mod tests {
             Some(TokenKind::AtShouldPanic)
         );
         assert_eq!(lookup_annotation("ignore"), Some(TokenKind::AtIgnore));
+        assert_eq!(lookup_annotation("noinline"), Some(TokenKind::AtNoInline));
     }
 
     #[test]
@@ -1095,6 +1123,9 @@ mod tests {
             (TokenKind::AtPure, "@pure"),
             (TokenKind::AtApp, "@app"),
             (TokenKind::AtHost, "@host"),
+            (TokenKind::AtNoInline, "@noinline"),
+            (TokenKind::AtInline, "@inline"),
+            (TokenKind::AtCold, "@cold"),
             (TokenKind::AtNpu, "@npu"),
             (TokenKind::AtGpu, "@gpu"),
             (TokenKind::AtEntry, "@entry"),

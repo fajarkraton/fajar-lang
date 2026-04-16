@@ -198,6 +198,13 @@ pub struct FnDef {
     pub should_panic: bool,
     /// Whether this test is ignored by default (`@ignore`).
     pub is_ignored: bool,
+    /// V29.P1: Whether this function has `@noinline` modifier, stacked
+    /// with a primary context annotation (e.g., `@noinline @kernel fn f()`).
+    /// Codegen applies LLVM NoInline attribute when true. Unlike the
+    /// primary `annotation` field, this is a MODIFIER that coexists with
+    /// @kernel/@device/@safe/@unsafe — matching the pattern used by
+    /// `is_test`/`should_panic`/`is_ignored`.
+    pub no_inline: bool,
     /// Doc comment lines (from `///` comments preceding the function).
     pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `@kernel`, `@device`).
@@ -2321,6 +2328,7 @@ mod tests {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            no_inline: false,
             doc_comment: None,
             annotation: Some(Annotation {
                 name: "kernel".into(),

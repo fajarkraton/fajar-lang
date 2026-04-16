@@ -460,9 +460,13 @@ impl Parser {
         };
 
         // Collect all annotations (supports multiple: @test @should_panic fn ...)
+        // V29.P1: @noinline joins this modifier group — it stacks with
+        // primary context annotations like @kernel, matching the pattern
+        // used by @test/@should_panic/@ignore.
         let mut is_test = false;
         let mut should_panic = false;
         let mut is_ignored = false;
+        let mut no_inline = false;
         let annotation;
         loop {
             match self.peek_kind() {
@@ -478,8 +482,12 @@ impl Parser {
                     self.advance();
                     is_ignored = true;
                 }
+                TokenKind::AtNoInline => {
+                    self.advance();
+                    no_inline = true;
+                }
                 _ => {
-                    // Try non-test annotation (only one allowed)
+                    // Try non-modifier annotation (only one allowed)
                     annotation = self.try_parse_annotation();
                     break;
                 }
@@ -492,6 +500,7 @@ impl Parser {
                 fndef.is_test = is_test;
                 fndef.should_panic = should_panic;
                 fndef.is_ignored = is_ignored;
+                fndef.no_inline = no_inline;
                 fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }
@@ -504,6 +513,7 @@ impl Parser {
                     fndef.is_test = is_test;
                     fndef.should_panic = should_panic;
                     fndef.is_ignored = is_ignored;
+                    fndef.no_inline = no_inline;
                     fndef.doc_comment = doc_comment;
                     Ok(Item::FnDef(fndef))
                 } else {
@@ -520,6 +530,7 @@ impl Parser {
                     fndef.is_test = is_test;
                     fndef.should_panic = should_panic;
                     fndef.is_ignored = is_ignored;
+                    fndef.no_inline = no_inline;
                     fndef.doc_comment = doc_comment;
                     Ok(Item::FnDef(fndef))
                 } else {
@@ -722,7 +733,9 @@ impl Parser {
             | TokenKind::AtDerive
             | TokenKind::AtPure
             | TokenKind::AtApp
-            | TokenKind::AtHost => {
+            | TokenKind::AtHost
+            | TokenKind::AtInline
+            | TokenKind::AtCold => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -796,6 +809,27 @@ impl Parser {
                     TokenKind::AtPure => ("pure", None),
                     TokenKind::AtApp => ("app", None),
                     TokenKind::AtHost => ("host", None),
+                    TokenKind::AtInline => {
+                        // V29.P1: @inline or @inline("never"). The
+                        // `("never")` form is an alias for @noinline.
+                        let inline_param = if matches!(self.peek_kind(), TokenKind::LParen) {
+                            self.advance();
+                            let s = if let TokenKind::StringLit(val) = self.peek_kind().clone() {
+                                self.advance();
+                                val
+                            } else {
+                                String::new()
+                            };
+                            if matches!(self.peek_kind(), TokenKind::RParen) {
+                                self.advance();
+                            }
+                            Some(s)
+                        } else {
+                            None
+                        };
+                        ("inline", inline_param)
+                    }
+                    TokenKind::AtCold => ("cold", None),
                     TokenKind::AtDerive => {
                         // Parse @derive(Trait1, Trait2, ...)
                         let mut derive_params = Vec::new();
@@ -2293,6 +2327,51 @@ mod tests {
                 assert!(f.is_pub);
                 assert!(f.annotation.is_some());
                 assert_eq!(f.name, "boot");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    // ── V29.P1: @noinline modifier stacks with primary annotation ────────
+
+    #[test]
+    fn parse_noinline_alone() {
+        let item = first_item("@noinline fn f() -> i64 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                assert!(f.no_inline, "no_inline flag should be set");
+                assert!(
+                    f.annotation.is_none(),
+                    "no primary annotation when only @noinline"
+                );
+                assert_eq!(f.name, "f");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_noinline_stacked_with_kernel() {
+        let item = first_item("@noinline @kernel fn hot_path() -> i64 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                assert!(f.no_inline, "no_inline flag should be set");
+                assert!(f.annotation.is_some(), "primary annotation preserved");
+                assert_eq!(f.annotation.as_ref().unwrap().name, "kernel");
+                assert_eq!(f.name, "hot_path");
+            }
+            _ => panic!("expected FnDef"),
+        }
+    }
+
+    #[test]
+    fn parse_kernel_without_noinline_flag_false() {
+        // Regression guard: @kernel alone leaves no_inline=false
+        let item = first_item("@kernel fn k() -> i64 { 0 }");
+        match item {
+            Item::FnDef(f) => {
+                assert!(!f.no_inline, "no_inline must default to false");
+                assert_eq!(f.annotation.as_ref().unwrap().name, "kernel");
             }
             _ => panic!("expected FnDef"),
         }

@@ -98,6 +98,7 @@ mod tests {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            no_inline: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),

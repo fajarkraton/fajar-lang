@@ -3309,6 +3309,17 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
+        // ── V29.P1: Modifier annotations stacked on top of primary ─────
+        // The @noinline modifier (tracked as `fndef.no_inline` flag)
+        // is independent of the primary @kernel/@device/@safe context
+        // annotation. Applied here so @noinline @kernel fn f() gets both
+        // context tracking AND the LLVM NoInline attribute.
+        if fndef.no_inline {
+            let attr_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+            let attr = self.context.create_enum_attribute(attr_kind, 0);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+        }
+
         // ── Parameter-based attributes ─────────────────────────────────
         // Reference parameters get noalias/nonnull/readonly attributes
         for (i, param) in fndef.params.iter().enumerate() {
@@ -8955,6 +8966,7 @@ mod tests {
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            no_inline: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
