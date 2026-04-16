@@ -65,3 +65,10 @@ paper/*.blg
 paper/*.log
 paper/*.out
 test_deploy.wasm
+
+# Local development environments (V28.5 Gap 3)
+.venv/
+venv/
+.claude/
+__pycache__/
+*.pyc
