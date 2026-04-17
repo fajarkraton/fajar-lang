@@ -8542,10 +8542,27 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 }
             }
         }
+        // V30 diagnostic: dump LLVM IR before codegen when FJ_EMIT_IR is set.
+        // Usage: FJ_EMIT_IR=1 fj build --backend llvm ...
+        if std::env::var("FJ_EMIT_IR").is_ok() {
+            let ir_path = path.with_extension("ll");
+            if let Err(e) = self.emit_ir(&ir_path) {
+                eprintln!("warning: FJ_EMIT_IR dump failed: {e}");
+            } else {
+                eprintln!("FJ_EMIT_IR: wrote {}", ir_path.display());
+            }
+        }
         let tm = self.create_target_machine(None)?;
         self.configure_module_target(&tm);
         tm.write_to_file(&self.module, FileType::Object, path)
             .map_err(|e| CodegenError::Internal(format!("LLVM emit object error: {e}")))
+    }
+
+    /// Writes the compiled module as LLVM IR text (.ll) file.
+    pub fn emit_ir(&self, path: &Path) -> Result<(), CodegenError> {
+        self.module
+            .print_to_file(path)
+            .map_err(|e| CodegenError::Internal(format!("LLVM IR emit error: {e}")))
     }
 
     /// Writes the compiled module to an assembly file.
