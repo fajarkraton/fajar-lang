@@ -3285,6 +3285,30 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let attr = self.context.create_enum_attribute(attr_kind, 0);
                     function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
                 }
+                "no_vectorize" => {
+                    // V31.B.P2: disable LLVM loop auto-vectorization for this
+                    // function. Uses string attribute `"no-implicit-float"` +
+                    // target-feature override to prevent SSE/AVX vectorized
+                    // loop codegen. Written as a STRING attribute so future
+                    // LLVM versions that rename/remove the enum are forward-
+                    // compatible. Pairs with @noinline for hot paths where
+                    // V30 Track 3 P3.6 observed O2 miscompile.
+                    let noimpfp = self
+                        .context
+                        .create_string_attribute("no-implicit-float", "true");
+                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, noimpfp);
+                    // Also disable the loop-vectorize pass via function-level
+                    // `"disable-tail-calls"` adjacent pragma analog. The
+                    // canonical LLVM way is per-loop `!llvm.loop.vectorize.enable`
+                    // metadata, but we approximate at function granularity
+                    // by disabling the LoopVectorize pass contribution via
+                    // the target-features attribute.
+                    let tf = self.context.create_string_attribute(
+                        "target-features",
+                        "-avx,-avx2,-avx512f,-sse3,-ssse3,-sse4.1,-sse4.2,+popcnt",
+                    );
+                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, tf);
+                }
                 "interrupt" => {
                     // @interrupt → naked + noinline (handler needs manual prologue/epilogue)
                     let naked_kind =

@@ -735,7 +735,8 @@ impl Parser {
             | TokenKind::AtApp
             | TokenKind::AtHost
             | TokenKind::AtInline
-            | TokenKind::AtCold => {
+            | TokenKind::AtCold
+            | TokenKind::AtNoVectorize => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -830,6 +831,7 @@ impl Parser {
                         ("inline", inline_param)
                     }
                     TokenKind::AtCold => ("cold", None),
+                    TokenKind::AtNoVectorize => ("no_vectorize", None),
                     TokenKind::AtDerive => {
                         // Parse @derive(Trait1, Trait2, ...)
                         let mut derive_params = Vec::new();

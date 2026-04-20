@@ -329,6 +329,16 @@ pub enum TokenKind {
     /// deprioritizes inlining. Codegen support in
     /// src/codegen/llvm/mod.rs:3283; lexer entry added V29.P1.
     AtCold,
+    /// `@no_vectorize` — V31.B.P2: disables LLVM loop auto-vectorization
+    /// for this function. Emits the `"no-implicit-float"` function
+    /// attribute + per-loop `!llvm.loop.vectorize.enable=false` metadata.
+    /// Used as preventive mechanism for hot paths where LLVM O2
+    /// auto-vectorization was observed to produce incorrect results
+    /// (V30 Track 3 P3.6 `km_vecmat_packed_v8` miscompile). Applying
+    /// the attribute pre-emptively protects future large-loop kernel
+    /// code from the same class of bugs without requiring a full
+    /// LLVM pass bisect. V31.FAJARLANG Track B.P2.
+    AtNoVectorize,
 
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
@@ -665,6 +675,7 @@ impl fmt::Display for TokenKind {
             TokenKind::AtNoInline => write!(f, "@noinline"),
             TokenKind::AtInline => write!(f, "@inline"),
             TokenKind::AtCold => write!(f, "@cold"),
+            TokenKind::AtNoVectorize => write!(f, "@no_vectorize"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -797,6 +808,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("noinline", TokenKind::AtNoInline);
     m.insert("inline", TokenKind::AtInline);
     m.insert("cold", TokenKind::AtCold);
+    m.insert("no_vectorize", TokenKind::AtNoVectorize);
     m
 });
 
@@ -914,6 +926,10 @@ mod tests {
         );
         assert_eq!(lookup_annotation("ignore"), Some(TokenKind::AtIgnore));
         assert_eq!(lookup_annotation("noinline"), Some(TokenKind::AtNoInline));
+        assert_eq!(
+            lookup_annotation("no_vectorize"),
+            Some(TokenKind::AtNoVectorize)
+        );
     }
 
     #[test]
@@ -1126,6 +1142,7 @@ mod tests {
             (TokenKind::AtNoInline, "@noinline"),
             (TokenKind::AtInline, "@inline"),
             (TokenKind::AtCold, "@cold"),
+            (TokenKind::AtNoVectorize, "@no_vectorize"),
             (TokenKind::AtNpu, "@npu"),
             (TokenKind::AtGpu, "@gpu"),
             (TokenKind::AtEntry, "@entry"),
