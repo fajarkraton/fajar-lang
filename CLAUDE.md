@@ -545,6 +545,47 @@ will appear in a paper, README, or other publishable artifact:
 ```
 Seven YES = publish. Any NO = block.
 
+### 6.10 Filesystem Roundtrip Coverage Rule
+
+> **Reason:** V30 Track 4 surfaced `ext2_create` returning -1 on a
+> freshly-`mkfs`-formatted disk. This bug had been latent for at least
+> two releases because no regression harness exercised the write path
+> end-to-end. Any feature that touches on-disk filesystem state
+> (ext2, FAT32, future ext4/vfat variants) must be covered by a
+> Makefile gate that boots QEMU, attaches a disk, and greps the
+> serial log for mount + roundtrip invariants. Code-path audits
+> alone are insufficient; the write path has invariants that only
+> fail under actual disk I/O.
+
+When adding or modifying any on-disk filesystem write path in the
+kernel:
+
+1. **Must have a Makefile regression target** following the
+   `test-fs-roundtrip` pattern (shell-driven QEMU + grep invariants
+   on serial log). Example pattern: `test-security-triple-regression`
+   (V29.P2), `test-gemma3-e2e` (V30.T2), `test-fs-roundtrip`
+   (V30.T4).
+2. **Attach the test disk with `-boot order=d`** to force CDROM
+   boot. Otherwise QEMU boots from a disk whose boot sector has the
+   `0x55 0xAA` signature (which `mkfs.fat`/`mkfs.ext2` always write),
+   triple-faulting before any serial output.
+3. **Prefer in-kernel `mkfs` + `mount` + write** over host-built
+   images when the kernel's on-disk layout is custom. The honest
+   roundtrip is what the kernel actually does, not what the host
+   does.
+4. **Surface pre-existing bugs in the harness output** via NOTE
+   lines rather than hiding them. A gate that silently passes
+   despite a known-broken path is worse than no gate.
+
+**Self-check before marking an FS write task `[x]`:**
+```
+[ ] Makefile regression target exists and is green?              (R1)
+[ ] Test disk attached with -boot order=d?                        (R2)
+[ ] Either kernel-owned mkfs or bytes-identical host layout?      (R3)
+[ ] Known-broken paths surfaced as NOTE, not hidden?              (R4)
+```
+Four YES = ship. Any NO = block.
+
 ---
 
 ## 7. Error Code System
