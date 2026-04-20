@@ -1,0 +1,22 @@
+// V31 Track B Phase P2.3 — verify @no_vectorize prevents LLVM O2 auto-vectorization.
+//
+// Expectation after `FJ_EMIT_IR=1 fj build --backend llvm --opt-level 2`:
+//   - `grep no-implicit-float examples/v31b_no_vectorize_test.ll` → hits tight_loop
+//   - `objdump -d /tmp/nv_test | grep -E 'xmm|ymm|zmm'` in tight_loop body → empty
+// The shape matches the kernel vecmat inner loop that V30.T3 proved miscompiles
+// under O2 vectorization once inlined.
+
+@no_vectorize
+fn tight_loop(m: i64) -> i64 {
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < m {
+        sum = sum + k * 37
+        k = k + 1
+    }
+    sum
+}
+
+fn main() {
+    println(tight_loop(1152))
+}
