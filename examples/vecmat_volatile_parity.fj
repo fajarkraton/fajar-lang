@@ -1,0 +1,48 @@
+// V30 P3.6: vecmat volatile parity test.
+// Uses arrays (heap-allocated) with element access to mimic the kernel's
+// volatile_read pattern. Tests if LLVM JIT produces different results
+// when data comes from memory reads vs local variables.
+
+fn main() {
+    let m = 8
+    // x vector
+    let x = [26069, -16529, 12345, -8765, 5000, -3000, 7777, -9999]
+    // w_x_1M vector (pre-computed (q-zero)*scale)
+    let w = [277536, -78708, 0, 31152, -150000, 200000, -50000, 100000]
+
+    // Compute sum = sum_k (x[k] * w[k]) / 1000000
+    let mut sum: i64 = 0
+    let mut k = 0
+    while k < m {
+        let v = x[k]
+        let wv = w[k]
+        let term = (v * wv) / 1000000
+        sum = sum + term
+        k = k + 1
+    }
+    print("sum="); println(sum)
+
+    // Now with larger arrays matching kernel dimension
+    let m2 = 1152
+    let mut x2: [i64; 1152] = [0; 1152]
+    let mut w2: [i64; 1152] = [0; 1152]
+
+    // Fill with pseudo-random values in kernel range
+    let mut i = 0
+    while i < m2 {
+        x2[i] = ((i * 47 + 13) % 53000) - 26500
+        w2[i] = ((i * 131 + 7) % 600000) - 300000
+        i = i + 1
+    }
+
+    let mut sum2: i64 = 0
+    k = 0
+    while k < m2 {
+        let v = x2[k]
+        let wv = w2[k]
+        let term = (v * wv) / 1000000
+        sum2 = sum2 + term
+        k = k + 1
+    }
+    print("sum2="); println(sum2)
+}

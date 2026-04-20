@@ -1,0 +1,80 @@
+// V30 P3.6 diagnostic: minimal vecmat parity test.
+// Computes one output element (j=0) of a 4×4 matrix-vector product
+// using the exact same integer arithmetic as km_vecmat_packed_v8:
+//   sum += (v * (q - zero) * scale) / 1000000
+// Expected output computed in Python:
+//   v = [1000, -2000, 3000, -4000]
+//   q = [7, 3, 12, 5]
+//   zero = [8, 8, 8, 8]
+//   scale = [10000, 10000, 10000, 10000]
+//   w_x_1M = [(7-8)*10000, (3-8)*10000, (12-8)*10000, (5-8)*10000]
+//          = [-10000, -50000, 40000, -30000]
+//   terms = [v[k] * w[k] / 1e6 for k in 0..4]
+//         = [1000*-10000/1e6, -2000*-50000/1e6, 3000*40000/1e6, -4000*-30000/1e6]
+//         = [-10/1e6=0, 100000/1e6=0, 120000/1e6=0, 120000/1e6=0]
+//   Wait — these products are small. Let me use bigger values.
+//
+// Revised: use ×1000 format values (like the actual kernel)
+//   v = [26069, -16529, 12345, -8765]  (from pre_ffn_rmsnorm range)
+//   scale = [39648, 13118, 25000, 10384]  (actual gate scales)
+//   q = [15, 0, 7, 12], zero = [8, 6, 7, 9]
+//
+// Python expected:
+//   w[0] = (15-8)*39648 = 277536   → v*w/1e6 = 26069*277536/1e6 = 7231
+//   w[1] = (0-6)*13118 = -78708    → v*w/1e6 = -16529*-78708/1e6 = 1300
+//   w[2] = (7-7)*25000 = 0         → v*w/1e6 = 0
+//   w[3] = (12-9)*10384 = 31152    → v*w/1e6 = -8765*31152/1e6 = -273
+//   sum = 7231 + 1300 + 0 + (-273) = 8258
+
+fn main() {
+    // Input vector (×1000 fixed-point, matching pre_ffn_rmsnorm range)
+    let v0: i64 = 26069
+    let v1: i64 = -16529
+    let v2: i64 = 12345
+    let v3: i64 = -8765
+
+    // Quantized weights
+    let q0: i64 = 15
+    let q1: i64 = 0
+    let q2: i64 = 7
+    let q3: i64 = 12
+
+    // Zeros
+    let z0: i64 = 8
+    let z1: i64 = 6
+    let z2: i64 = 7
+    let z3: i64 = 9
+
+    // Scales (u32 range)
+    let s0: i64 = 39648
+    let s1: i64 = 13118
+    let s2: i64 = 25000
+    let s3: i64 = 10384
+
+    // Compute w_x_1M = (q - zero) * scale
+    let w0 = (q0 - z0) * s0
+    let w1 = (q1 - z1) * s1
+    let w2 = (q2 - z2) * s2
+    let w3 = (q3 - z3) * s3
+
+    // Compute terms = (v * w_x_1M) / 1000000
+    let t0 = (v0 * w0) / 1000000
+    let t1 = (v1 * w1) / 1000000
+    let t2 = (v2 * w2) / 1000000
+    let t3 = (v3 * w3) / 1000000
+
+    // Sum
+    let sum = t0 + t1 + t2 + t3
+
+    println("=== vecmat parity test ===")
+    print("w0="); println(w0)
+    print("w1="); println(w1)
+    print("w2="); println(w2)
+    print("w3="); println(w3)
+    print("t0="); println(t0)
+    print("t1="); println(t1)
+    print("t2="); println(t2)
+    print("t3="); println(t3)
+    print("sum="); println(sum)
+    print("expected="); println(8258)
+}

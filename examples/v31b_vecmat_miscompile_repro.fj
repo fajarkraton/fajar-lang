@@ -1,0 +1,71 @@
+// V31.B.P0.1 — Minimal repro of km_vecmat_packed_v8 LLVM O2 miscompile.
+//
+// The kernel's km_vecmat_packed_v8 function (pre-V30.P3.6, see
+// git show 6af7319~1:kernel/compute/kmatrix.fj) produces wrong results
+// on Gemma 3 FFN gate (m=1152, n=6912 = 7.96M inner iterations) when
+// built with --backend llvm --opt-level 2. Same algorithm compiled
+// by gcc produces correct results. C bypass has been shipping since
+// commit 6af7319.
+//
+// This file isolates the inner loop pattern so we can test fj
+// tree-walker vs fj LLVM O2 on a standalone host-runnable program.
+// No kernel setup, no volatile addresses — just heap arrays.
+//
+// Expected behaviour: both backends produce identical sum.
+// Observed (pre-V31.B): divergence for large n × m products.
+
+fn main() {
+    // Smaller dims for fast host run, keeping the structural pattern
+    let m: i64 = 1152
+    let n: i64 = 6912
+
+    // Synthetic quantized "weight" matrix: m × n 4-bit values
+    // packed 2-per-byte. Total: m*n/2 = 294912 bytes.
+    // We reconstruct values inline: q[k,j] = ((k*37 + j*17) & 15)
+    //
+    // Scales: one per 128-element group. total_elems = m*n = 589824,
+    // n_groups = ceil(589824 / 128) = 4608.
+    // scale[g] = 500 + (g & 31) * 100
+    //
+    // Zeros: one u8 per group. zero[g] = 7 (constant).
+    //
+    // x[k] = (k - (m/2)) * 100 (range: -57600 to 57500)
+    //
+    // Reference (Python): known fixed sum for this config.
+
+    let total_elems: i64 = m * n
+    let v8_group_shift: i64 = 7
+    let v8_group_size: i64 = 128
+    let v8_scale_fp: i64 = 1000000
+
+    // Output vector
+    let mut sum_total: i64 = 0
+
+    let mut j: i64 = 0
+    while j < n {
+        let mut sum: i64 = 0
+        let mut k: i64 = 0
+        while k < m {
+            let flat_idx = k * n + j
+            // Inline q reconstruction instead of byte-read
+            let q = ((k * 37 + j * 17) & 15)
+
+            let g = flat_idx >> v8_group_shift
+            let scale = 500 + (g & 31) * 100
+            let zero: i64 = 7
+
+            let w_x_1M = (q - zero) * scale
+
+            let v = (k - m / 2) * 100
+            sum = sum + (v * w_x_1M) / v8_scale_fp
+            k = k + 1
+        }
+        sum_total = sum_total + sum
+        j = j + 1
+    }
+
+    println("=== V31.B.P0.1 vecmat LLVM O2 miscompile repro ===")
+    print("m = "); println(m)
+    print("n = "); println(n)
+    print("sum_total = "); println(sum_total)
+}

@@ -1,0 +1,53 @@
+// V30 P3.6: vecmat loop parity test.
+// Mimics km_vecmat_packed_v8 inner loop structure with m=1152 iterations.
+// Uses synthetic constant weights to make expected result computable.
+//
+// Setup: x[k] = k - 576 (range: -576 to 575, mean ~0)
+//        w_x_1M[k] = 10000 for all k (constant weight)
+//        sum = sum_k (x[k] * 10000) / 1000000
+//            = sum_k x[k] / 100
+//            = sum(-576..575) / 100
+//            = (-576 + -575 + ... + -1 + 0 + 1 + ... + 575) / 100
+//            = -576 / 100 = -5  (sum of -576..575 = -576)
+// Actually: sum(-576..575) = sum(0..575) + sum(-576..-1)
+//         = (575*576/2) + (-(576*577/2)) = 165600 - 166176 = -576
+// Each term: (k-576)*10000 / 1e6 = (k-576) / 100 (integer trunc div)
+// For k=0: -576/100 = -5
+// For k=576: 0/100 = 0
+// For k=1151: 575/100 = 5
+// Sum of all terms: sum_k floor((k-576)/100) for k=0..1151
+//
+// Python:  sum(int((k-576)*10000)//1000000 if (k-576)*10000>=0 else -(-(k-576)*10000//1000000) for k in range(1152))
+
+fn main() {
+    let m: i64 = 1152
+    let w_x_1M: i64 = 10000
+
+    let mut sum: i64 = 0
+    let mut k: i64 = 0
+    while k < m {
+        let v = k - 576
+        let product = v * w_x_1M
+        let term = product / 1000000
+        sum = sum + term
+        k = k + 1
+    }
+
+    println("=== vecmat loop parity (m=1152) ===")
+    print("sum="); println(sum)
+
+    // Now test with actual-range values — larger x and varying w
+    // x[k] = ((k * 47) % 53000) - 26500  (pseudo-random in [-26500, 26499])
+    // w[k] = ((k * 131) % 600000) - 300000  (pseudo-random in [-300000, 299999])
+    // These match the magnitude of real pre_ffn_rmsnorm × dequant values
+    let mut sum2: i64 = 0
+    k = 0
+    while k < m {
+        let v = ((k * 47) % 53000) - 26500
+        let w = ((k * 131) % 600000) - 300000
+        let term = (v * w) / 1000000
+        sum2 = sum2 + term
+        k = k + 1
+    }
+    print("sum2="); println(sum2)
+}
