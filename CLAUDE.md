@@ -117,13 +117,13 @@ trusts inflated counts. Audit corrections in V26:
 
 | Version | Date | Highlight |
 |---|---|---|
-| **V30.TRACK4** "FS Roundtrip" | 2026-04-20 | FajarOS Nova v3.7.0. V30 Track 4 ext2/FAT32 disk harness — **5 phases (P0-P5) shipped, 9-invariant regression gate live**, ~2.0h vs 7.75h budget (-74%). Closes V29.P2 scope-pin *"ext2/FAT32 tests need disk-backed mount"*. New: `scripts/build_test_disk.py` (6/6 self-test PASS), `make test-fs-roundtrip` (FAT32 full roundtrip + ext2 mkfs/mount/ls path), `ext2-mkfs` + `ext2-mount` shell dispatch (`cmd_mkfs_ext2` + `cmd_mount_ext2` existed but were dead code). Fixed QEMU `-boot order=d` — test disks' `0x55 0xAA` signature would have silent-triple-faulted the harness. Rule: CLAUDE.md §6.10 "FS Roundtrip Coverage" with 4-invariant pre-[x] checklist. Surfaced (V31): `ext2_create` returns -1 on freshly-mkfs'd disk — write path has latent bug. Docs: `V30_TRACK4_DISK_HARNESS_PLAN.md`. Commits: `3b8a747`..`1becf90` in fajaros-x86 + `459a3f6` in fajar-lang. |
-| **V30.GEMMA3** "Foundation (Path D)" | 2026-04-20 | FajarOS Nova v3.6.0. V30 Track 2 Gemma 3 1B **12 phases (P0-P12) audit-PASS**, ~8.6h vs budget ~46.5h (-82%). HEAD substantially V30-complete via V28.1+V28.2+V30 C-bypass work: GQA (4Q:1KV C-bypass bit-exact), dual-theta RoPE, SWA (globals at 5,11,17,23), gated FFN, 4-norm RMSNorm, 262K BPE tokenizer @ LBA 1054705, .fjm v7 + v8 group-wise quant. P9 Path D decision: ship as research artifact; pad-collapse (4-bit→token 107 repeat, 8-bit→token 106 EOS) deferred to V31 R3 (4 ranked hypotheses). Prevention: `make test-gemma3-e2e` (5 invariants) + `make test-gemma3-kernel-path` (4 invariants). Makefile `--target-features=` equals-form fix unblocked silent cached-ELF fallback. Docs: `V30_GEMMA3_{FINDINGS,P9_DECISION,P10_FOUNDATION}.md`. Commits: `beaee1e`..`027fc3a` in fajaros-x86. |
-| **V29.P3.P6** "NX Triple Closure" | 2026-04-16 | FajarOS **V26 B4.2 security triple 3/3 COMPLETE** — 5 commits in ~1.48h (-35% vs 2.27h). H3 matched via static analysis alone (skipped P1 walker). Root cause: `.text` (0x101000-0x248297) straddles PD[0]+PD[1]; loop started `pd_idx=1` marked PD[1] NX → silent triple-fault. Fix: `pd_idx=1→2` in `security.fj:236`. Prevention: `make test-security-triple-regression` 6-invariant gate. Full V29.P3 session: 13 commits, ~3.9h. Docs: `V29_P3_P6_NX_{PLAN,FINDINGS,DECISION}.md`. |
-| **V29.P3** "SMAP Re-enable" | 2026-04-16 | FajarOS **V26 B4.2 SMAP CLOSED** — 8 commits in ~2.4h (-9%). H2 matched: non-leaf USER bits at PML4[0]+PDPT[0] leaked via SMAP AND-chain (new `pte_walk_find_u_leaks_full` 4-level walker). Fix: extend `strip_user_from_kernel_identity()` to strip USER from non-leaf entries; `PTE_LEAKS_FULL=0x0`. SMEP+SMAP co-exist; NX deferred → V29.P3.P6. Prevention: `make test-smap-regression` 5-invariant gate. Docs: `V29_P3_SMAP_{PLAN,FINDINGS,DECISION}.md`. |
-| **V29.P1** "Compiler Enhancement" | 2026-04-16 | @noinline + @inline + @cold lexer support closed silent-build-failure bug class. 5-layer prevention: lexer ANNOTATIONS entries, codegen meta-test, Makefile ELF-gate, pre-commit check 5/5, install-git-hooks refactor. Retrospective: V28.5 multilingual attribution corrected (stability ✅, multilingual not reproduced in retest). Plan: `docs/V29_P1_COMPILER_ENHANCEMENT_PLAN.md`. |
-| **V27.5** "Compiler Prep" | 2026-04-14 | AI scheduler builtins, @interrupt wrappers (ARM64+x86_64), @app/@host annotations, refinement params, Cap<T> linear type, fb_set_base/fb_scroll, IPC stub generator. V28-ready. **Retroactive note (V29.P1):** V27.5 compiler shipped WITHOUT @noinline lexer support — codegen layer supported it but the ANNOTATIONS table in src/lexer/token.rs was missing the entry. FajarOS kernel code that used @noinline failed to compile silently (fj build exit 0, no ELF produced). Closed by V29.P1 2026-04-16 afternoon. |
-| **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError, version sync 27.0.0, FajarOS OOM hardening |
+| **V30.TRACK4** "FS Roundtrip" | 2026-04-20 | FajarOS Nova v3.7.0. ext2/FAT32 disk harness: `scripts/build_test_disk.py` + `make test-fs-roundtrip` (9-invariant gate). Fixed silent QEMU triple-fault via `-boot order=d`. Surfaced V31 latent bug: `ext2_create` returns -1 on freshly-mkfs'd disk. Rule: §6.10. |
+| **V30.GEMMA3** "Foundation (Path D)" | 2026-04-20 | FajarOS Nova v3.6.0. Gemma 3 1B 12 phases audit-PASS: GQA, dual-theta RoPE, SWA, gated FFN, 4-norm RMSNorm, 262K BPE @ LBA 1054705. Ship as research artifact; pad-collapse deferred to V31 R3. Gates: `make test-gemma3-{e2e,kernel-path}`. |
+| **V29.P3.P6** "NX Triple Closure" | 2026-04-16 | V26 B4.2 security triple 3/3 COMPLETE. Fix: `pd_idx=1→2` in `security.fj:236` (kernel `.text` straddles PD[0]+PD[1]). Gate: `make test-security-triple-regression`. |
+| **V29.P3** "SMAP Re-enable" | 2026-04-16 | V26 B4.2 SMAP CLOSED. Fix: extend `strip_user_from_kernel_identity()` to strip USER from non-leaf PML4[0]+PDPT[0]. Gate: `make test-smap-regression`. |
+| **V29.P1** "Compiler Enhancement" | 2026-04-16 | @noinline + @inline + @cold lexer support — closed silent-build-failure class. 5-layer prevention (lexer, codegen test, Makefile ELF-gate, pre-commit, install-hooks). |
+| **V27.5** "Compiler Prep" | 2026-04-14 | AI scheduler builtins, @interrupt wrappers, @app/@host, refinement params, Cap<T>, fb_set_base, IPC stub generator. Note: shipped w/o @noinline lexer entry (silent compile failure), closed in V29.P1. |
+| **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError fix, version sync 27.0.0, FajarOS OOM hardening |
 | **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
 | V25 "Production" | 2026-04-07 | Hands-on re-audit, K8s deploy, FajarQuant Phase C real Gemma 4 E2B, @kernel transitive fix |
 | V24 "Quantum" | 2026-04-07 | CUDA RTX 4090 (9 PTX kernels, ~3x matmul), AVX2 + AES-NI inline asm, FajarQuant Phase 5-7 |
@@ -332,116 +332,44 @@ These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated cla
 
 ### 6.7 Test Hygiene Rules (No Wall-Clock Assertions in Unit Tests)
 
-> **Reason:** V26 A1.3 found 14 tests asserting `elapsed < threshold` on
-> microsecond-scale work. They flaked under `cargo test --test-threads=64`
-> because scheduler jitter parks threads for 100s of ms — far above the
-> assertion threshold. Pre-fix flake rate was ~20% per full test run.
-> Fixed by 10x threshold bump + noise floor (commit `13aa9e3`).
+> **Reason:** V26 A1.3: 14 tests asserting `elapsed < threshold` on
+> microsecond work flaked ~20% under `--test-threads=64` (commit `13aa9e3`).
 
-1. **NEVER** write `assert!(elapsed < N_ms)` in unit tests when the work
-   measured is microsecond-scale or contains a no-op simulation. Wall-clock
-   timing is unreliable under parallel test load.
-
-2. **DO** put performance regression detection in **criterion benchmarks**
-   under `benches/`, not unit tests. Criterion handles statistical noise.
-
-3. **IF** a unit test must check timing (e.g., for asynchronous behavior),
-   set the threshold to **at least 10x** the actual expected value, OR use
-   a noise floor pattern that treats sub-millisecond differences as passing.
-
-4. **CI safeguard:** the `flake-stress` job in `.github/workflows/ci.yml`
-   runs `cargo test --lib -- --test-threads=64` 5x to catch new wall-clock
-   flakes before they're observed in production.
-
-5. **Antipattern example (DO NOT WRITE):**
-   ```rust
-   #[test]
-   fn fast_operation_is_fast() {
-       let start = Instant::now();
-       compute_thing();              // takes microseconds
-       assert!(start.elapsed() < Duration::from_millis(50));  // FLAKY
-   }
-   ```
-
-6. **Acceptable pattern:**
-   ```rust
-   #[test]
-   fn fast_operation_is_fast() {
-       let start = Instant::now();
-       compute_thing();
-       // Target: <50ms; test allows <500ms (10x) for parallel jitter immunity
-       assert!(start.elapsed() < Duration::from_millis(500));
-   }
-   ```
+1. **NEVER** `assert!(elapsed < N_ms)` in unit tests for microsecond-scale
+   work. Wall-clock timing is unreliable under parallel load.
+2. **DO** put perf regression detection in **criterion benchmarks**, not unit tests.
+3. **IF** a unit test must check timing, set threshold **≥10x** expected value,
+   or use a noise-floor pattern treating sub-ms differences as passing.
+4. **CI safeguard:** `flake-stress` job runs `--test-threads=64` 5x per push.
+5. Antipattern: `assert!(start.elapsed() < Duration::from_millis(50))` on µs work.
+   Acceptable: same with `500` (10x) for jitter immunity.
 
 ### 6.8 Plan Hygiene Rules (No Inflated Estimates, No Skipped Decisions)
 
-> **Reason:** V26 Phase A1+A2+A3 surfaced 6 systemic patterns + Phase A4
-> and C3.2 added 2 more (cross-repo drift), for **8 total** that, if left
-> unchecked, distort future plans the same way prior plans were distorted.
-> A2.1 found "174 unwraps" was actually **3** (58× inflation). A1.3 found
-> "1 flaky test" was actually **14** (14× scope expansion). A4 found
-> fajaros-x86 had **40 commits unpushed for 5 days**. These are not
-> outliers — they are the default outcome of trusting baselines without
-> hands-on verification. Full evidence: `docs/V26_PRODUCTION_PLAN.md` §10.5.
+> **Reason:** V26 surfaced 8 systemic distortion patterns. Examples:
+> "174 unwraps" was actually 3 (58× inflation). "1 flaky test" was 14.
+> fajaros-x86 had 40 unpushed commits for 5 days. Full evidence:
+> `docs/V26_PRODUCTION_PLAN.md` §10.5.
 
 When writing or reviewing any plan, audit, or status doc:
 
-1. **Pre-flight audit mandatory.** Every Phase starts with a B0/C0/D0
-   subphase that hands-on verifies the baseline via runnable commands
-   and produces a `docs/V26_<phase>_FINDINGS.md`. Downstream subphases
-   cannot start until findings are committed. (Lesson: A2.1 inflated
-   174→3; A3 found 5 [f] modules already deleted.)
-
-2. **Verification columns must be runnable commands.** Every task table
-   has a "Verification" column. That column must contain a literal command
-   whose output can be checked, not prose like "test passes" or "feature
-   works". (Lesson: CLAUDE.md drift 11,395 tests claim → real 7,581.)
-
-3. **Prevention layer per phase.** Every fix that closes a class of bugs
-   must spawn at least one prevention mechanism: a pre-commit hook, a
-   CI job, or a CLAUDE.md rule. One-time fixes are forbidden — the
-   prevention layer is the deliverable, not the patch. (Lesson: A1.2
-   added pre-commit hook; A1.4 added flake-stress CI + §6.7.)
-
-4. **Multi-agent audit cross-check mandatory.** Numbers produced by
-   parallel sub-agents must be manually re-verified with `Bash` before
-   being committed. Single-source agent claims are inadmissible.
-   (Lesson: V26 audit agent claimed "4,062 unwraps" + "no LLM shell
-   commands" — both wrong by huge factors.)
-
-5. **Surprise budget +25% minimum, tracked per commit.** Every Phase
-   allocates an explicit surprise budget. Default +25%; high-uncertainty
-   phases use +30%. Commit messages tag actual variance:
-   `feat(v26-b1): fork() PID return [actual 3h, est 2h, +50%]`. If
-   average variance exceeds budget, the next Phase escalates to +40%.
-   (Lesson: A1.3 hypothesized 1 flaky test, found 14.)
-
-6. **Decision gates must be mechanical.** "Decision required before X"
-   prose markers get skipped under execution pressure. Every decision
-   must produce a committed file (e.g., `docs/V26_B5_DECISION.md`)
-   that pre-commit/commit-msg hooks check, mechanically blocking
-   downstream work until the file exists. (Lesson: A1.4 mechanical CI
-   job worked where prose hadn't; C3.2 implemented `commit-msg` hook
-   in fajarquant for the venue decision file.)
-
-7. **Public-facing artifact sync.** When fixing internal doc drift
-   (CLAUDE.md, status, plan), audit public artifacts in the same
-   session: README badges, git tags, GitHub Releases, project
-   description, README links. Internal fix alone is incomplete.
-   (Lesson: V26 §A4 fixed CLAUDE.md `11,395 → 7,581 tests` but missed
-   the README badge for 6 hours; V24/V25/V26 release tags didn't exist
-   on GitHub despite being in CHANGELOG; fajaros-x86 README claimed
-   `v3.0.0 Nusantara` for weeks with no matching tag.)
-
-8. **Multi-repo state check.** Before any session that crosses repo
-   boundaries, run `git status -sb` AND
-   `git rev-list --count origin/main..main` for every known local
-   repo (currently `Fajar Lang/`, `fajaros-x86/`, `fajarquant/`).
-   Single-repo `git status` misses silent accumulation. (Lesson:
-   fajaros-x86 had **40 commits unpushed for 5 days** of major
-   FajarQuant Phase 1-8 + Gemma 3 + SmolLM-135M v3-v6 work — at risk
-   of total loss on a disk failure; only manual GitHub audit caught it.)
+1. **Pre-flight audit mandatory.** Every Phase starts with B0/C0/D0
+   subphase that hands-on verifies baseline via runnable commands and
+   produces `docs/V26_<phase>_FINDINGS.md`. Downstream blocked until committed.
+2. **Verification columns must be runnable commands.** Literal command
+   whose output can be checked — not "test passes"/"feature works".
+3. **Prevention layer per phase.** Every class-of-bugs fix ships a
+   pre-commit hook, CI job, or CLAUDE.md rule. The patch alone is not the deliverable.
+4. **Multi-agent audit cross-check.** Numbers from parallel sub-agents
+   must be manually re-verified with `Bash` before commit.
+5. **Surprise budget +25% min, tracked per commit.** Default +25%,
+   high-uncertainty +30%. Tag variance: `feat(v26-b1): X [actual 3h, est 2h, +50%]`.
+6. **Decision gates must be mechanical.** Decisions produce a committed
+   file that pre-commit/commit-msg hooks check, mechanically blocking downstream.
+7. **Public-facing artifact sync.** When fixing CLAUDE.md/status/plan,
+   audit README badges, git tags, GitHub Releases, project description same session.
+8. **Multi-repo state check.** Before cross-repo sessions, run `git status -sb`
+   AND `git rev-list --count origin/main..main` for all local repos.
 
 **Self-check before any plan/audit commit:**
 ```
@@ -471,68 +399,29 @@ Eight NO answers = revert. Eight YES answers = ship.
 > → `3015545` → R-α.1 smoke test. Companion memory:
 > `memory/feedback_research_integrity.md`.
 
-When designing, implementing, or evaluating any algorithm whose results
-will appear in a paper, README, or other publishable artifact:
+When designing/evaluating any algorithm whose results appear in a paper,
+README, or publishable artifact:
 
-1. **No paper claim without canonical-protocol benchmark.** Never write a
-   quantitative paper claim ("we achieve X PPL", "we outperform Y by Z%")
-   until the underlying number is generated by the canonical evaluation
-   protocol from at least 2 reference papers in the same field. Custom
-   "convenience" protocols always introduce invisible advantages or
-   disadvantages that invalidate the comparison and invite reviewer
-   rejection. If the FP16 baseline produced by the protocol is implausible
-   compared to the literature, the protocol is broken — fix it before
-   measuring quantization.
-
-2. **Literature review precedes algorithm design.** Before designing a new
-   algorithm in a competitive area, do a literature sweep covering at
-   least 8-10 recent papers (last 24 months) in the field. Catalog the
-   dominant patterns. Position the proposed algorithm explicitly against
-   them. The first step in any "let's improve algorithm X" turn is a
-   parallel WebSearch + WebFetch sweep, NOT a code edit. Synthesize a
-   landscape table before recommending a design.
-
-3. **Baseline parity — port full features, not naive versions.** When
-   benchmarking against a published baseline, port ALL of its published
-   features (outlier handling, calibration, quantization grid choice,
-   etc.), not just the core algorithm. Otherwise the comparison is unfair
-   in the baseline's disfavor — and the unfairness flips when reviewers
-   re-run with the published baseline. Document any unported features
-   explicitly in the methodology section. Better to skip a baseline than
-   compare against a strawman.
-
-4. **Calibrated > per-chunk for data-driven decompositions.** When using
-   data-driven decompositions (PCA, SVD, learned rotations, learned
-   scales) in a quantization or compression pipeline, calibrate ONCE on
-   a representative dataset and reuse the result. Do not recompute per
-   chunk, per prompt, or per inference call. Per-chunk recomputation
-   introduces accumulated noise that degrades downstream quality.
-   Calibration cost is paid once and amortized.
-
-5. **Outlier handling is non-negotiable for modern LLM quantization.**
-   Any quantization method targeting LLM activations or KV cache must
-   include explicit outlier handling: top-K channel/token preservation
-   in higher precision, per-coordinate adaptive bit allocation, OR
-   rotation that spreads outliers (Hadamard, learned). Methods without
-   it are automatically inferior on real LLMs. Test with and without
-   outlier handling to quantify impact in ablation tables.
-
-6. **Algorithmic validation precedes paper validation.** Don't write
-   paper sections describing algorithm advantages until canonical-protocol
-   benchmarks demonstrate them. Drafting paper text around unverified
-   algorithmic claims creates political pressure to keep claims even when
-   data later contradicts them. Quantitative-claim text is the LAST thing
-   written. Methodology and related work sections can be written earlier;
-   results sections cannot.
-
-7. **Pre-publication audit gate (mechanical).** Before any paper-related
-   artifact (PDF, README claim, GitHub release, blog post) goes public,
-   run a mechanical pre-publication audit that verifies every numerical
-   claim against source data via a `verify_paper_tables.py`-style script
-   with `--strict` mode. Add it as a pre-commit hook on the paper
-   directory and as a required CI check before any release. Audit the
-   README, blog draft, and release notes for claims not in the verify
-   script — either add them or remove them.
+1. **No paper claim without canonical-protocol benchmark.** Quantitative
+   claims require the canonical protocol from ≥2 reference papers. Custom
+   "convenience" protocols introduce invisible bias. If FP16 baseline is
+   implausible vs literature, the protocol is broken — fix before measuring.
+2. **Literature review precedes algorithm design.** Sweep ≥8-10 papers
+   (24mo) before code edits. Synthesize landscape table first.
+3. **Baseline parity — port full features, not naive versions.** Port ALL
+   published features (outlier handling, calibration, grids). Document
+   unported features explicitly. Better to skip a baseline than strawman it.
+4. **Calibrated > per-chunk for data-driven decompositions.** Calibrate
+   PCA/SVD/rotations/scales ONCE on representative data, reuse. Per-chunk
+   recomputation accumulates noise.
+5. **Outlier handling non-negotiable for LLM quantization.** Require top-K
+   preservation, per-coord adaptive bits, OR rotation (Hadamard/learned).
+   Ablate with/without to quantify.
+6. **Algorithmic validation precedes paper validation.** Results-section
+   text is LAST. Methodology/related-work can be earlier; claims cannot.
+7. **Pre-publication audit gate (mechanical).** `verify_paper_tables.py
+   --strict` as pre-commit hook + required CI check. Audit README/blog/
+   release notes for claims not in the verify script.
 
 **Self-check before publishing any algorithm-claim artifact:**
 ```
@@ -548,35 +437,21 @@ Seven YES = publish. Any NO = block.
 
 ### 6.10 Filesystem Roundtrip Coverage Rule
 
-> **Reason:** V30 Track 4 surfaced `ext2_create` returning -1 on a
-> freshly-`mkfs`-formatted disk. This bug had been latent for at least
-> two releases because no regression harness exercised the write path
-> end-to-end. Any feature that touches on-disk filesystem state
-> (ext2, FAT32, future ext4/vfat variants) must be covered by a
-> Makefile gate that boots QEMU, attaches a disk, and greps the
-> serial log for mount + roundtrip invariants. Code-path audits
-> alone are insufficient; the write path has invariants that only
-> fail under actual disk I/O.
+> **Reason:** V30 Track 4 surfaced `ext2_create` returning -1 on freshly-mkfs'd
+> disk — latent ≥2 releases because no regression harness exercised the write
+> path E2E. Code-path audits alone miss invariants that only fail under disk I/O.
 
-When adding or modifying any on-disk filesystem write path in the
-kernel:
+When adding/modifying any on-disk FS write path in the kernel:
 
 1. **Must have a Makefile regression target** following the
-   `test-fs-roundtrip` pattern (shell-driven QEMU + grep invariants
-   on serial log). Example pattern: `test-security-triple-regression`
-   (V29.P2), `test-gemma3-e2e` (V30.T2), `test-fs-roundtrip`
-   (V30.T4).
-2. **Attach the test disk with `-boot order=d`** to force CDROM
-   boot. Otherwise QEMU boots from a disk whose boot sector has the
-   `0x55 0xAA` signature (which `mkfs.fat`/`mkfs.ext2` always write),
-   triple-faulting before any serial output.
-3. **Prefer in-kernel `mkfs` + `mount` + write** over host-built
-   images when the kernel's on-disk layout is custom. The honest
-   roundtrip is what the kernel actually does, not what the host
-   does.
-4. **Surface pre-existing bugs in the harness output** via NOTE
-   lines rather than hiding them. A gate that silently passes
-   despite a known-broken path is worse than no gate.
+   `test-fs-roundtrip` pattern (shell QEMU + grep invariants on serial log).
+   Refs: `test-security-triple-regression`, `test-gemma3-e2e`, `test-fs-roundtrip`.
+2. **Attach test disk with `-boot order=d`** to force CDROM boot. Otherwise
+   QEMU boots a disk whose `0x55 0xAA` signature triple-faults before any serial.
+3. **Prefer in-kernel `mkfs`+`mount`+write** over host-built images when layout
+   is custom. The honest roundtrip is what the kernel does, not the host.
+4. **Surface pre-existing bugs via NOTE lines**, not hidden. A silently-passing
+   gate despite known-broken path is worse than no gate.
 
 **Self-check before marking an FS write task `[x]`:**
 ```
