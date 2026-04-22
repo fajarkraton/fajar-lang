@@ -462,6 +462,60 @@ When adding/modifying any on-disk FS write path in the kernel:
 ```
 Four YES = ship. Any NO = block.
 
+### 6.11 Training Script Interruption-Safety Rule
+
+> **Reason:** V31 Phase D Base c.1 hang on 2026-04-22: training ran 1h42m,
+> then laptop hit battery-low → OS suspend → dead HF CDN TCP sockets → urllib3
+> blocked forever on socket-read → process stayed in State=R with 0 step
+> progress for **8.5 hours** before user noticed. No intermediate checkpoint
+> had been saved, no watchdog, no read timeout — whole run lost, restart
+> from step 0. Full forensics: `memory/feedback_hf_streaming_hang.md`.
+
+When adding/modifying any production training script (anywhere that
+loops `for batch in stream: loss = model(...); loss.backward(); opt.step()`):
+
+1. **Must save intermediate checkpoints.** `ckpt_every` wired into the
+   step loop, not just a one-shot save at the end. Atomic write (.tmp +
+   `os.replace`) so SIGKILL mid-save cannot leave partial files. Rotate
+   `keep_last_n_ckpts` to cap disk usage.
+2. **Must support `--resume <path>` and `--resume-auto`.** Resume loads
+   model + optimizer + LR-scheduler state bit-exactly (unit test:
+   pre-save vs post-resume loss within 1e-4). LambdaLR / OneCycleLR /
+   etc. all have `state_dict()` — use it. Step counter continues from
+   true total, not relative.
+3. **Must arm a step-idle watchdog.** A daemon thread that SIGTERMs
+   the main process if the step counter doesn't advance for N seconds
+   (default 1800 = 30 min). Skip during warmup (before first touch).
+   Single-shot: fire once, then exit. External orchestrator owns restart
+   via `--resume-auto`.
+4. **Must set per-chunk read timeouts on streaming data sources.**
+   `HF_DATASETS_DOWNLOAD_TIMEOUT=60` + `HF_HUB_DOWNLOAD_TIMEOUT=60` at
+   module import (via `os.environ.setdefault` so external overrides
+   still win). Wrap the iterator in a retry loop that rebuilds on
+   transient network exceptions (socket.timeout, ConnectionError,
+   requests/urllib3 read-timeout variants). Seed offset by attempt
+   number so retries see a different shuffle order.
+5. **Must have a `test-*-watchdog` Makefile regression.** The gate
+   exercises at minimum: watchdog real-thread fire, default on_fire
+   SIGTERM delivery, ckpt rotation, --resume bit-exact load, retry_iter
+   on transient exception. Pre-push hook runs it when training code
+   changes.
+
+Reference implementation: `fajarquant/python/phase_d/{intllm/train.py,
+intllm/data.py, scripts/train_*.py}` V31.C.P6.1–P6.5. Make target:
+`make test-train-watchdog`.
+
+**Self-check before marking a production training task `[x]`:**
+```
+[ ] ckpt_every wired into step loop, atomic write, rotation?       (R1)
+[ ] --resume / --resume-auto with bit-exact state restoration?     (R2)
+[ ] StepWatchdog armed with sensible default (e.g. 30 min)?        (R3)
+[ ] HF read timeouts + retry_iter on transient network errors?     (R4)
+[ ] test-*-watchdog Makefile gate green + pre-push hooked?         (R5)
+```
+Five YES = ship. Any NO = block. A training script that loses hours
+of GPU time to a single interruption is NOT production-ready.
+
 ---
 
 ## 7. Error Code System
@@ -698,5 +752,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 27.5+V29.P1+V30.GEMMA3+V30.TRACK4 | V30.TRACK4 "FS Roundtrip" 2026-04-20 — FajarOS Nova v3.7.0, ext2+FAT32 disk harness with 9-invariant regression gate | V30.GEMMA3 "Foundation (Path D)" — v3.6.0 Gemma 3 1B audit-complete, pad-collapse deferred to V31 R3 | V29.P1 "Compiler Enhancement" — @noinline lexer + 5-layer prevention | V27.5 baseline — 7,626 lib + 2,575 integ + 16 V27.5 E2E + 14 doc tests | §6.8+§6.9+§6.10 Rules*
-*Last Updated: 2026-04-20*
+*CLAUDE.md Version: 27.5+V29.P1+V30.GEMMA3+V30.TRACK4+V31.C.TRACKB | V31.C Track B "Training Interruption-Safety" 2026-04-22 — §6.11 rule + 5-layer defence (ckpt_every/--resume/StepWatchdog/HF timeout+retry/test-train-watchdog) in fajarquant Phase D post-c.1 hang | V30.TRACK4 "FS Roundtrip" — FajarOS Nova v3.7.0, ext2+FAT32 disk harness 9-invariant gate | V30.GEMMA3 "Foundation (Path D)" — v3.6.0 Gemma 3 1B audit-complete, pad-collapse deferred to V31 R3 | V29.P1 "Compiler Enhancement" — @noinline lexer + 5-layer prevention | V27.5 baseline — 7,626 lib + 2,575 integ + 16 V27.5 E2E + 14 doc tests | §6.8+§6.9+§6.10+§6.11 Rules*
+*Last Updated: 2026-04-22*
