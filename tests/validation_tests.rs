@@ -901,9 +901,16 @@ fn v14_w11_10_mnist_model_pattern() {
 
 #[test]
 fn v14_w12_1_fj_binary_exists() {
+    // Windows appends .exe to bin names. Accept either for cross-platform CI.
+    let candidates = [
+        "target/debug/fj",
+        "target/release/fj",
+        "target/debug/fj.exe",
+        "target/release/fj.exe",
+    ];
     assert!(
-        std::path::Path::new("target/debug/fj").exists()
-            || std::path::Path::new("target/release/fj").exists()
+        candidates.iter().any(|p| std::path::Path::new(p).exists()),
+        "no fj binary found in target/{{debug,release}}/{{fj,fj.exe}}"
     );
 }
 
