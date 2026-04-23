@@ -13,7 +13,11 @@ path = "src/main.rs"
 [dependencies]
 # FajarQuant — extracted to standalone crate (V26 Phase A4 split, 2026-04-11).
 # Path dep during local dev; switch to git/version dep before publishing fajar-lang to crates.io.
-fajarquant = { path = "../fajarquant" }
+# fajarquant: git dep with pinned rev so CI runners (which only checkout
+# fajar-lang) can resolve it. For local dev iteration with un-pushed
+# fajarquant changes, temporarily switch to: { path = "../fajarquant" }
+# (do NOT commit the path form — it breaks CI).
+fajarquant = { git = "https://github.com/fajarkraton/fajarquant", rev = "b05ecf1705ba79145049373510ad63f42ab5efbe" }
 
 thiserror = "2.0"
 miette = { version = "7.0", features = ["fancy"] }
