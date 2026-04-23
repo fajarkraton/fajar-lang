@@ -798,11 +798,9 @@ impl MethodMetrics {
 
     /// Returns the average latency in microseconds, or 0 if no successes.
     pub fn avg_latency_us(&self) -> u64 {
-        if self.success_count == 0 {
-            0
-        } else {
-            self.total_latency_us / self.success_count
-        }
+        self.total_latency_us
+            .checked_div(self.success_count)
+            .unwrap_or(0)
     }
 
     /// Returns the error rate as a fraction (0.0 - 1.0).

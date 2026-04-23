@@ -300,7 +300,7 @@ impl PriorityTaskQueue {
     pub fn enqueue(&mut self, task: DistributedTask) {
         self.tasks.push(task);
         // Keep sorted by priority descending.
-        self.tasks.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.tasks.sort_by_key(|t| std::cmp::Reverse(t.priority));
     }
 
     /// Dequeues the next task respecting fairness.

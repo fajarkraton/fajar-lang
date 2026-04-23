@@ -928,15 +928,11 @@ impl AnalyzerV2 {
                     self.check_expr(v);
                 }
             }
-            Stmt::Break { span } => {
-                if !self.scopes.in_loop() {
-                    self.error("SE007", "break outside of loop", *span);
-                }
+            Stmt::Break { span } if !self.scopes.in_loop() => {
+                self.error("SE007", "break outside of loop", *span);
             }
-            Stmt::Continue { span } => {
-                if !self.scopes.in_loop() {
-                    self.error("SE007", "continue outside of loop", *span);
-                }
+            Stmt::Continue { span } if !self.scopes.in_loop() => {
+                self.error("SE007", "continue outside of loop", *span);
             }
             Stmt::ExprStmt { expr, .. } => {
                 self.check_expr(expr);

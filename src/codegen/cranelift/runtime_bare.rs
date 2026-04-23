@@ -1427,9 +1427,23 @@ pub extern "C" fn fj_rt_bare_sys_ram_free() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// All tests in this module touch shared static state (FB_INIT, BUMP_PTR,
+    /// HEAP_END, GPIO_*, UART_*, SPI_*, I2C_*, DMA_*, NVMe, SD, VFS, ETH, etc.)
+    /// and race under cargo's default parallel test execution. This Mutex
+    /// serializes every test in the module. Acquire via `let _g = test_lock();`
+    /// at the top of each #[test] fn.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+        // Recover from a poisoned lock (a prior test panicked while holding it).
+        TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner())
+    }
 
     #[test]
     fn bare_memcpy_basic() {
+        let _g = test_lock();
         let src = [1u8, 2, 3, 4, 5, 6, 7, 8];
         let mut dst = [0u8; 8];
         fj_rt_bare_memcpy(dst.as_mut_ptr(), src.as_ptr(), 8);
@@ -1438,6 +1452,7 @@ mod tests {
 
     #[test]
     fn bare_memcpy_partial() {
+        let _g = test_lock();
         let src = [10u8, 20, 30, 40];
         let mut dst = [0u8; 4];
         fj_rt_bare_memcpy(dst.as_mut_ptr(), src.as_ptr(), 3);
@@ -1446,12 +1461,14 @@ mod tests {
 
     #[test]
     fn bare_memcpy_null_safe() {
+        let _g = test_lock();
         let result = fj_rt_bare_memcpy(std::ptr::null_mut(), std::ptr::null(), 10);
         assert!(result.is_null());
     }
 
     #[test]
     fn bare_memset_basic() {
+        let _g = test_lock();
         let mut buf = [0u8; 16];
         fj_rt_bare_memset(buf.as_mut_ptr(), 0xFF, 16);
         assert!(buf.iter().all(|&b| b == 0xFF));
@@ -1459,6 +1476,7 @@ mod tests {
 
     #[test]
     fn bare_memset_partial() {
+        let _g = test_lock();
         let mut buf = [0u8; 8];
         fj_rt_bare_memset(buf.as_mut_ptr(), 0xAA, 4);
         assert_eq!(buf, [0xAA, 0xAA, 0xAA, 0xAA, 0, 0, 0, 0]);
@@ -1466,6 +1484,7 @@ mod tests {
 
     #[test]
     fn bare_memcmp_equal() {
+        let _g = test_lock();
         let a = [1u8, 2, 3, 4];
         let b = [1u8, 2, 3, 4];
         assert_eq!(fj_rt_bare_memcmp(a.as_ptr(), b.as_ptr(), 4), 0);
@@ -1473,6 +1492,7 @@ mod tests {
 
     #[test]
     fn bare_memcmp_different() {
+        let _g = test_lock();
         let a = [1u8, 2, 3, 4];
         let b = [1u8, 2, 5, 4];
         assert!(fj_rt_bare_memcmp(a.as_ptr(), b.as_ptr(), 4) < 0); // 3 < 5
@@ -1480,6 +1500,7 @@ mod tests {
 
     #[test]
     fn bare_bump_alloc() {
+        let _g = test_lock();
         // Reset allocator
         fj_rt_bare_heap_init(0x1000, 0x100);
         let p1 = fj_rt_bare_alloc(16);
@@ -1491,6 +1512,7 @@ mod tests {
 
     #[test]
     fn bare_bump_alloc_alignment() {
+        let _g = test_lock();
         fj_rt_bare_heap_init(0x2000, 0x100);
         let p1 = fj_rt_bare_alloc(3); // 3 bytes → aligned to 8
         assert_eq!(p1, 0x2000);
@@ -1500,6 +1522,7 @@ mod tests {
 
     #[test]
     fn bare_bump_alloc_oom() {
+        let _g = test_lock();
         fj_rt_bare_heap_init(0xF000, 16); // tiny 16-byte heap at unique address
         let p1 = fj_rt_bare_alloc(8);
         assert_eq!(p1, 0xF000);
@@ -1511,6 +1534,7 @@ mod tests {
 
     #[test]
     fn bare_print_i64_formats_correctly() {
+        let _g = test_lock();
         // Can't easily test UART output in unit tests,
         // but verify the function doesn't crash
         UART_BASE.store(0, Ordering::Relaxed); // disable output
@@ -1522,6 +1546,7 @@ mod tests {
 
     #[test]
     fn bare_free_is_noop() {
+        let _g = test_lock();
         fj_rt_bare_heap_init(0x4000, 0x100);
         let p = fj_rt_bare_alloc(16);
         let used_before = fj_rt_bare_heap_used();
@@ -1533,6 +1558,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_config_and_readback() {
+        let _g = test_lock();
         // Configure pin 42 as output with pull-up
         assert_eq!(fj_rt_bare_gpio_config(42, 0, 1, 2), 0);
         assert_eq!(GPIO_MODES[42].load(Ordering::Relaxed), 2); // output
@@ -1541,6 +1567,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_write_read() {
+        let _g = test_lock();
         fj_rt_bare_gpio_set_output(50);
         fj_rt_bare_gpio_write(50, 1);
         assert_eq!(fj_rt_bare_gpio_read(50), 1);
@@ -1550,6 +1577,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_toggle() {
+        let _g = test_lock();
         fj_rt_bare_gpio_set_output(51);
         fj_rt_bare_gpio_write(51, 0);
         fj_rt_bare_gpio_toggle(51);
@@ -1560,6 +1588,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_invalid_pin() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_gpio_write(200, 1), -1); // out of range
         assert_eq!(fj_rt_bare_gpio_read(-1), -1); // negative
         assert_eq!(fj_rt_bare_gpio_config(999, 0, 1, 0), -1);
@@ -1567,6 +1596,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_pull_config() {
+        let _g = test_lock();
         fj_rt_bare_gpio_set_pull(60, 1); // pull-down
         assert_eq!(GPIO_PULLS[60].load(Ordering::Relaxed), 1);
         fj_rt_bare_gpio_set_pull(60, 2); // pull-up
@@ -1577,6 +1607,7 @@ mod tests {
 
     #[test]
     fn bare_gpio_input_mode() {
+        let _g = test_lock();
         fj_rt_bare_gpio_set_input(70);
         assert_eq!(GPIO_MODES[70].load(Ordering::Relaxed), 1); // input
     }
@@ -1585,6 +1616,7 @@ mod tests {
 
     #[test]
     fn bare_uart_init_success() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_uart_init(1, 115200), 0);
         assert_eq!(UART_INIT[1].load(Ordering::Relaxed), 1);
         assert_eq!(UART_BAUD[1].load(Ordering::Relaxed), 115200);
@@ -1592,6 +1624,7 @@ mod tests {
 
     #[test]
     fn bare_uart_init_invalid() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_uart_init(-1, 9600), -1);
         assert_eq!(fj_rt_bare_uart_init(4, 9600), -1); // out of range
         assert_eq!(fj_rt_bare_uart_init(0, 0), -1); // invalid baud
@@ -1599,6 +1632,7 @@ mod tests {
 
     #[test]
     fn bare_uart_write_byte_no_crash() {
+        let _g = test_lock();
         // With base=0 (no MMIO), should succeed without writing
         UART_BASES[2].store(0, Ordering::Relaxed);
         assert_eq!(fj_rt_bare_uart_write_byte(2, b'A' as i64), 0);
@@ -1606,6 +1640,7 @@ mod tests {
 
     #[test]
     fn bare_uart_set_base() {
+        let _g = test_lock();
         fj_rt_bare_uart_set_base(3, 0x0A8C_0000);
         assert_eq!(UART_BASES[3].load(Ordering::Relaxed), 0x0A8C_0000);
     }
@@ -1614,6 +1649,7 @@ mod tests {
 
     #[test]
     fn bare_spi_init_and_transfer() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_spi_init(0, 1_000_000), 0);
         // First transfer: send 0xAB, receive previous loopback (0)
         let rx1 = fj_rt_bare_spi_transfer(0, 0xAB);
@@ -1625,6 +1661,7 @@ mod tests {
 
     #[test]
     fn bare_spi_cs() {
+        let _g = test_lock();
         fj_rt_bare_spi_init(1, 500_000);
         fj_rt_bare_spi_cs_set(1, 0, 1); // assert CS
         assert_eq!(SPI_CS[1].load(Ordering::Relaxed), 0); // active low
@@ -1634,6 +1671,7 @@ mod tests {
 
     #[test]
     fn bare_spi_uninit_fails() {
+        let _g = test_lock();
         SPI_INIT[2].store(0, Ordering::Relaxed);
         assert_eq!(fj_rt_bare_spi_transfer(2, 0xFF), -1);
     }
@@ -1642,6 +1680,7 @@ mod tests {
 
     #[test]
     fn bare_i2c_write_read() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_i2c_init(0, 400_000), 0);
         let tx_data = [0x42u8];
         assert_eq!(fj_rt_bare_i2c_write(0, 0x50, tx_data.as_ptr(), 1), 0);
@@ -1652,6 +1691,7 @@ mod tests {
 
     #[test]
     fn bare_i2c_write_read_combined() {
+        let _g = test_lock();
         fj_rt_bare_i2c_init(1, 100_000);
         let tx = [0x99u8];
         let mut rx = [0u8; 2];
@@ -1662,6 +1702,7 @@ mod tests {
 
     #[test]
     fn bare_i2c_invalid_addr() {
+        let _g = test_lock();
         fj_rt_bare_i2c_init(0, 400_000);
         assert_eq!(fj_rt_bare_i2c_write(0, 128, std::ptr::null(), 1), -1); // addr > 127
     }
@@ -1670,6 +1711,7 @@ mod tests {
 
     #[test]
     fn bare_timer_get_ticks_monotonic() {
+        let _g = test_lock();
         let t1 = fj_rt_bare_timer_get_ticks();
         let t2 = fj_rt_bare_timer_get_ticks();
         let t3 = fj_rt_bare_timer_get_ticks();
@@ -1679,12 +1721,14 @@ mod tests {
 
     #[test]
     fn bare_timer_frequency() {
+        let _g = test_lock();
         let freq = fj_rt_bare_timer_get_freq();
         assert_eq!(freq, 62_500_000); // default QEMU frequency
     }
 
     #[test]
     fn bare_timer_mark_boot_and_uptime() {
+        let _g = test_lock();
         // Reset sim ticks
         SIM_TICKS.store(0, Ordering::Relaxed);
         fj_rt_bare_timer_mark_boot();
@@ -1696,6 +1740,7 @@ mod tests {
 
     #[test]
     fn bare_timer_set_deadline_no_crash() {
+        let _g = test_lock();
         fj_rt_bare_timer_set_deadline(1_000_000);
         fj_rt_bare_timer_enable_virtual();
         fj_rt_bare_timer_disable_virtual();
@@ -1705,6 +1750,7 @@ mod tests {
 
     #[test]
     fn bare_dma_config_start_wait() {
+        let _g = test_lock();
         // Set up source and destination buffers
         let src = [1u8, 2, 3, 4, 5, 6, 7, 8];
         let mut dst = [0u8; 8];
@@ -1721,6 +1767,7 @@ mod tests {
 
     #[test]
     fn bare_dma_invalid_channel() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_dma_config(8, 0, 0, 1), -1); // out of range
         assert_eq!(fj_rt_bare_dma_start(-1), -1);
         assert_eq!(fj_rt_bare_dma_status(8), -1);
@@ -1728,6 +1775,7 @@ mod tests {
 
     #[test]
     fn bare_dma_alloc_aligned() {
+        let _g = test_lock();
         fj_rt_bare_heap_init(0x5000, 0x1000);
         let p = fj_rt_bare_dma_alloc(100);
         assert_eq!(p, 0x5000);
@@ -1739,6 +1787,7 @@ mod tests {
 
     #[test]
     fn bare_dma_barrier_no_crash() {
+        let _g = test_lock();
         fj_rt_bare_dma_barrier(); // should not panic
     }
 
@@ -1746,6 +1795,7 @@ mod tests {
 
     #[test]
     fn bare_nvme_init_and_read() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_nvme_init(), 0);
         let mut buf = [0xFFu8; 512];
         assert_eq!(fj_rt_bare_nvme_read(0, 1, buf.as_mut_ptr()), 0);
@@ -1754,6 +1804,7 @@ mod tests {
 
     #[test]
     fn bare_nvme_write_and_bounds() {
+        let _g = test_lock();
         let data = [0xABu8; 512];
         assert_eq!(fj_rt_bare_nvme_write(0, 1, data.as_ptr()), 0);
         // Out of bounds
@@ -1762,6 +1813,7 @@ mod tests {
 
     #[test]
     fn bare_sd_read_write() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_sd_init(), 0);
         let mut buf = [0u8; 512];
         assert_eq!(fj_rt_bare_sd_read_block(0, buf.as_mut_ptr()), 0);
@@ -1772,6 +1824,7 @@ mod tests {
 
     #[test]
     fn bare_vfs_open_close() {
+        let _g = test_lock();
         let path = b"/test.txt\0";
         let fd = fj_rt_bare_vfs_open(path.as_ptr(), 9, 1); // read mode
         assert!(fd >= 3); // 0-2 are reserved
@@ -1780,6 +1833,7 @@ mod tests {
 
     #[test]
     fn bare_vfs_write_stdout() {
+        let _g = test_lock();
         // Mark stdout as open for write, disable UART output
         VFS_FD_STATE[1].store(3, Ordering::Relaxed); // rw
         UART_BASE.store(0, Ordering::Relaxed); // disable MMIO output
@@ -1791,6 +1845,7 @@ mod tests {
 
     #[test]
     fn bare_vfs_stat() {
+        let _g = test_lock();
         let path = b"/etc/config\0";
         let size = fj_rt_bare_vfs_stat(path.as_ptr(), 11);
         assert_eq!(size, 0); // simulation returns 0
@@ -1800,6 +1855,7 @@ mod tests {
 
     #[test]
     fn bare_eth_init_send_recv() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_eth_init(), 0);
         let frame = [0u8; 64];
         assert_eq!(fj_rt_bare_eth_send(frame.as_ptr(), 64), 0);
@@ -1809,6 +1865,7 @@ mod tests {
 
     #[test]
     fn bare_net_tcp_lifecycle() {
+        let _g = test_lock();
         let sock = fj_rt_bare_net_socket(0); // TCP
         assert!(sock >= 0);
         assert_eq!(fj_rt_bare_net_bind(sock, 8080), 0);
@@ -1826,6 +1883,7 @@ mod tests {
 
     #[test]
     fn bare_net_udp_socket() {
+        let _g = test_lock();
         let sock = fj_rt_bare_net_socket(1); // UDP
         assert!(sock >= 0);
         assert_eq!(fj_rt_bare_net_bind(sock, 53), 0);
@@ -1834,6 +1892,7 @@ mod tests {
 
     #[test]
     fn bare_net_invalid() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_net_socket(5), -1); // invalid type
         assert_eq!(fj_rt_bare_net_send(-1, std::ptr::null(), 0), -1);
         assert_eq!(fj_rt_bare_net_close(99), -1);
@@ -1843,6 +1902,7 @@ mod tests {
 
     #[test]
     fn bare_fb_init_and_pixel() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_fb_init(1920, 1080), 0);
         assert_eq!(fj_rt_bare_fb_width(), 1920);
         assert_eq!(fj_rt_bare_fb_height(), 1080);
@@ -1852,6 +1912,7 @@ mod tests {
 
     #[test]
     fn bare_fb_fill_rect() {
+        let _g = test_lock();
         fj_rt_bare_fb_init(800, 600);
         assert_eq!(fj_rt_bare_fb_fill_rect(10, 10, 100, 50, 0xFF_00_FF_00), 0);
         assert_eq!(fj_rt_bare_fb_fill_rect(0, 0, 0, 0, 0), -1); // zero size
@@ -1859,6 +1920,7 @@ mod tests {
 
     #[test]
     fn bare_fb_set_base() {
+        let _g = test_lock();
         // V27.5 P1.4: framebuffer base address can be set
         assert_eq!(fj_rt_bare_fb_set_base(0xE0000000), 0);
         assert_eq!(fj_rt_bare_fb_set_base(-1), -1); // invalid
@@ -1866,7 +1928,11 @@ mod tests {
 
     #[test]
     fn bare_fb_scroll() {
+        let _g = test_lock();
         // V27.5 P1.4: scroll requires init + positive lines
+        // Reset FB_INIT first — prior tests in the same module may have
+        // initialized the framebuffer (shared static state).
+        FB_INIT.store(0, Ordering::Relaxed);
         assert_eq!(fj_rt_bare_fb_scroll(10), -1); // not initialized
         fj_rt_bare_fb_init(800, 600);
         assert_eq!(fj_rt_bare_fb_scroll(0), -1); // zero lines
@@ -1876,6 +1942,7 @@ mod tests {
 
     #[test]
     fn bare_kb_init_read() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_kb_init(), 0);
         assert_eq!(fj_rt_bare_kb_available(), 0); // no key
         assert_eq!(fj_rt_bare_kb_read(), 0);
@@ -1890,6 +1957,7 @@ mod tests {
 
     #[test]
     fn bare_proc_spawn_wait_kill() {
+        let _g = test_lock();
         let pid = fj_rt_bare_proc_spawn(0x4000_0000);
         assert!(pid >= 2);
         assert_eq!(fj_rt_bare_proc_wait(pid), 0);
@@ -1900,12 +1968,14 @@ mod tests {
 
     #[test]
     fn bare_proc_self_yield() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_proc_self(), 1); // init
         fj_rt_bare_proc_yield(); // no-op, should not crash
     }
 
     #[test]
     fn bare_sys_info() {
+        let _g = test_lock();
         assert_eq!(fj_rt_bare_sys_cpu_temp(), 45_000); // 45°C
         assert!(fj_rt_bare_sys_ram_total() > 0);
         assert!(fj_rt_bare_sys_ram_free() > 0);
@@ -1914,6 +1984,7 @@ mod tests {
 
     #[test]
     fn bare_sys_poweroff_reboot_no_crash() {
+        let _g = test_lock();
         // These are no-ops in simulation
         fj_rt_bare_sys_reboot();
         // Don't call poweroff in tests — it's a no-op but semantically wrong
