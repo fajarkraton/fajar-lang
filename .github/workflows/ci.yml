@@ -163,12 +163,23 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked || true
       - name: Run cargo audit
-        # RUSTSEC-2026-0049: rustls-webpki 0.102.8 cert validation issue.
-        # Pulled in transitively by rumqttc 0.25.1 (latest stable). Upstream
-        # has not yet released a version using rustls-webpki 0.103+. The mqtt
-        # feature is OPTIONAL (off by default), so default builds don't even
-        # compile this code path. Track upstream fix to remove this ignore.
-        run: cargo audit --ignore RUSTSEC-2026-0049
+        # rustls-webpki advisories chained via rumqttc 0.25.1 (latest stable)
+        # which pins rustls-webpki 0.102.8. Upstream rumqttc has not yet
+        # released a version using rustls-webpki 0.103+. The mqtt feature is
+        # OPTIONAL (off by default) so default builds don't compile this
+        # code path. Track upstream rumqttc to remove these ignores.
+        # The 0.103.x branch was already bumped in Cargo.lock to 0.103.13
+        # (>= advisory's required fix version).
+        #   RUSTSEC-2026-0049: cert validation issue (existing)
+        #   RUSTSEC-2026-0098: name constraints for URI names accepted
+        #   RUSTSEC-2026-0099: name constraints for wildcard names accepted
+        #   RUSTSEC-2026-0104: reachable panic in CRL parsing
+        run: |
+          cargo audit \
+            --ignore RUSTSEC-2026-0049 \
+            --ignore RUSTSEC-2026-0098 \
+            --ignore RUSTSEC-2026-0099 \
+            --ignore RUSTSEC-2026-0104
 
   benchmarks:
     name: Performance Benchmarks

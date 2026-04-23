@@ -9,11 +9,16 @@
 
 use fajar_lang::interpreter::Interpreter;
 
+// These helpers are used only by #[cfg(feature = "...")]-gated tests below.
+// Under the default-features build (no test gates active), neither is
+// referenced — silence dead_code under -D warnings.
+#[allow(dead_code)]
 fn eval(code: &str) -> Result<fajar_lang::interpreter::Value, String> {
     let mut interp = Interpreter::new();
     interp.eval_source(code).map_err(|e| format!("{e:?}"))
 }
 
+#[allow(dead_code)]
 fn eval_ok(code: &str) -> fajar_lang::interpreter::Value {
     eval(code).unwrap_or_else(|e| panic!("eval failed: {e}"))
 }
