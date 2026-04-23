@@ -1018,7 +1018,8 @@ mod tests {
             shared_decls: Vec::new(),
         };
         module.add_minimal_kernel("main");
-        let path = "/tmp/fj_test_compute.ptx";
+        let path_buf = std::env::temp_dir().join("fj_test_compute.ptx");
+        let path = path_buf.to_str().unwrap();
         let result = module.emit_to_file(path);
         assert!(result.is_ok());
         let content = std::fs::read_to_string(path).unwrap();
@@ -1101,7 +1102,8 @@ mod tests {
             shared_decls: Vec::new(),
         };
         module.add_elementwise_add_kernel("main");
-        let path = "/tmp/fj_test_full_compute.ptx";
+        let path_buf = std::env::temp_dir().join("fj_test_full_compute.ptx");
+        let path = path_buf.to_str().unwrap();
         let result = module.emit_compute_to_file(path);
         assert!(result.is_ok());
         let size = result.unwrap();

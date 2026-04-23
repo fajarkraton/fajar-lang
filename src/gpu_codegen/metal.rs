@@ -124,7 +124,7 @@ mod tests {
     fn v14_gs3_4_metal_write_file() {
         let mut m = MetalModule::new("test_kernel");
         m.emit_add_kernel();
-        let path = std::path::PathBuf::from("/tmp/test_kernel.metal");
+        let path = std::env::temp_dir().join("test_kernel.metal");
         m.write_to_file(&path).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("kernel void test_kernel"));
@@ -142,7 +142,7 @@ mod tests {
     /// V14 GS3.1: Verify Metal CLI path produces valid .metal file end-to-end.
     #[test]
     fn v14_gs3_1_metal_cli_e2e() {
-        let out_path = std::path::PathBuf::from("/tmp/fj_test_cli.metal");
+        let out_path = std::env::temp_dir().join("fj_test_cli.metal");
         let mut module = MetalModule::new("main");
         module.emit_add_kernel();
         module.write_to_file(&out_path).unwrap();

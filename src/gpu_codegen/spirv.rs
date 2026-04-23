@@ -1211,7 +1211,8 @@ mod tests {
     #[test]
     fn v16_g2_spirv_emit_to_file() {
         let mut module = SpirVModule::new_compute();
-        let path = "/tmp/fj_test_compute.spv";
+        let path_buf = std::env::temp_dir().join("fj_test_compute.spv");
+        let path = path_buf.to_str().unwrap();
         let result = module.emit_to_file(path, "main");
         assert!(result.is_ok(), "emit_to_file failed: {:?}", result.err());
         let bytes = std::fs::read(path).unwrap();
@@ -1249,7 +1250,8 @@ mod tests {
     #[test]
     fn v16_g2_emit_compute_to_file() {
         let mut module = SpirVModule::new_compute();
-        let path = "/tmp/fj_test_full_compute.spv";
+        let path_buf = std::env::temp_dir().join("fj_test_full_compute.spv");
+        let path = path_buf.to_str().unwrap();
         let result = module.emit_compute_to_file(path, "main");
         assert!(result.is_ok());
         let size = result.unwrap();

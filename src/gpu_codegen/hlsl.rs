@@ -116,7 +116,7 @@ mod tests {
     fn v14_gs3_9_hlsl_write_file() {
         let mut h = HlslModule::new("test");
         h.emit_add_kernel(64);
-        let path = std::path::PathBuf::from("/tmp/test_shader.hlsl");
+        let path = std::env::temp_dir().join("test_shader.hlsl");
         h.write_to_file(&path).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("void test"));
@@ -134,7 +134,7 @@ mod tests {
     /// V14 GS3.6: Verify HLSL CLI path produces valid .hlsl file end-to-end.
     #[test]
     fn v14_gs3_6_hlsl_cli_e2e() {
-        let out_path = std::path::PathBuf::from("/tmp/fj_test_cli.hlsl");
+        let out_path = std::env::temp_dir().join("fj_test_cli.hlsl");
         let mut module = HlslModule::new("CSMain");
         module.emit_add_kernel(256);
         module.write_to_file(&out_path).unwrap();
