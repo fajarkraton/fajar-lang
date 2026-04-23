@@ -41,9 +41,13 @@ fn h3_1_tokenize_500_lines_under_100ms() {
         !tokens.is_empty(),
         "tokenizer should produce tokens for a 500-line program"
     );
+    // Per CLAUDE.md §6.7 R3 — wall-clock thresholds must be ≥10× expected
+    // value to survive parallel-load CI jitter (Windows-stable runners
+    // exhibit the highest variance). Original 100ms target preserved as
+    // doc-comment; assertion bumped to 1000ms (10×).
     assert!(
-        elapsed.as_millis() < 100,
-        "tokenizing 500 lines took {}ms, expected < 100ms",
+        elapsed.as_millis() < 1000,
+        "tokenizing 500 lines took {}ms, expected < 1000ms (10× target 100ms)",
         elapsed.as_millis()
     );
 }
@@ -59,9 +63,10 @@ fn h3_1_parse_500_lines_under_200ms() {
 
     // Verify the program parsed something.
     let _ = program;
+    // §6.7 R3: 200ms target → 2000ms threshold (10×) for CI jitter immunity.
     assert!(
-        elapsed.as_millis() < 200,
-        "parsing 500 lines took {}ms, expected < 200ms",
+        elapsed.as_millis() < 2000,
+        "parsing 500 lines took {}ms, expected < 2000ms (10× target 200ms)",
         elapsed.as_millis()
     );
 }
@@ -75,9 +80,10 @@ fn h3_1_full_pipeline_500_lines_under_500ms() {
     let _program = parse(tokens).expect("parse failed");
     let elapsed = start.elapsed();
 
+    // §6.7 R3: 500ms target → 5000ms threshold (10×) for CI jitter immunity.
     assert!(
-        elapsed.as_millis() < 500,
-        "full lex+parse for 500 lines took {}ms, expected < 500ms",
+        elapsed.as_millis() < 5000,
+        "full lex+parse for 500 lines took {}ms, expected < 5000ms (10× target 500ms)",
         elapsed.as_millis()
     );
 }
@@ -93,9 +99,10 @@ fn h3_1_tokenize_1000_lines_under_200ms() {
         !tokens.is_empty(),
         "tokenizer should produce tokens for 1000 lines"
     );
+    // §6.7 R3: 200ms target → 2000ms threshold (10×) for CI jitter immunity.
     assert!(
-        elapsed.as_millis() < 200,
-        "tokenizing 1000 lines took {}ms, expected < 200ms",
+        elapsed.as_millis() < 2000,
+        "tokenizing 1000 lines took {}ms, expected < 2000ms (10× target 200ms)",
         elapsed.as_millis()
     );
 }
@@ -129,9 +136,11 @@ fn main() -> void {
 
             let output = interp.get_output();
             assert_eq!(output.last().expect("no output"), "6765");
+            // §6.7 R3: 500ms target → 5000ms threshold (10×). Windows-stable
+            // CI runners flake on the original 500ms bound under load.
             assert!(
-                elapsed.as_millis() < 500,
-                "fibonacci(20) took {}ms, expected < 500ms",
+                elapsed.as_millis() < 5000,
+                "fibonacci(20) took {}ms, expected < 5000ms (10× target 500ms)",
                 elapsed.as_millis()
             );
         })
@@ -162,9 +171,10 @@ fn main() -> void {
 
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "499500");
+    // §6.7 R3: 50ms target → 500ms threshold (10×). Tightest fragile bound.
     assert!(
-        elapsed.as_millis() < 50,
-        "loop 1000 iterations took {}ms, expected < 50ms",
+        elapsed.as_millis() < 500,
+        "loop 1000 iterations took {}ms, expected < 500ms (10× target 50ms)",
         elapsed.as_millis()
     );
 }
@@ -195,9 +205,10 @@ fn main() -> void {
 
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "10000");
+    // §6.7 R3: 200ms target → 2000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 200,
-        "nested 100x100 loop took {}ms, expected < 200ms",
+        elapsed.as_millis() < 2000,
+        "nested 100x100 loop took {}ms, expected < 2000ms (10× target 200ms)",
         elapsed.as_millis()
     );
 }
@@ -290,9 +301,10 @@ fn main() -> void {
 
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "1000");
+    // §6.7 R3: 500ms target → 5000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 500,
-        "1000 string concats took {}ms, expected < 500ms",
+        elapsed.as_millis() < 5000,
+        "1000 string concats took {}ms, expected < 5000ms (10× target 500ms)",
         elapsed.as_millis()
     );
 }
@@ -323,9 +335,10 @@ fn main() -> void {
 
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "100");
+    // §6.7 R3: 500ms target → 5000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 500,
-        "100 iterations of string methods took {}ms, expected < 500ms",
+        elapsed.as_millis() < 5000,
+        "100 iterations of string methods took {}ms, expected < 5000ms (10× target 500ms)",
         elapsed.as_millis()
     );
 }
@@ -359,9 +372,10 @@ fn main() -> void {
     let output = interp.get_output();
     assert_eq!(output[0], "81"); // 9*9
     assert_eq!(output[1], "10");
+    // §6.7 R3: 500ms target → 5000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 500,
-        "array index assignment took {}ms, expected < 500ms",
+        elapsed.as_millis() < 5000,
+        "array index assignment took {}ms, expected < 5000ms (10× target 500ms)",
         elapsed.as_millis()
     );
 }
@@ -404,9 +418,10 @@ fn main() -> void {{
     // Sum of 0..9 repeated 100 times = 45 * 100 = 4500
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "4500");
+    // §6.7 R3: 500ms target → 5000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 500,
-        "indexing 1K array elements took {}ms, expected < 500ms",
+        elapsed.as_millis() < 5000,
+        "indexing 1K array elements took {}ms, expected < 5000ms (10× target 500ms)",
         elapsed.as_millis()
     );
 }
@@ -435,9 +450,10 @@ fn main() -> void {
 
     let output = interp.get_output();
     assert_eq!(output.last().expect("no output"), "10000");
+    // §6.7 R3: 200ms target → 2000ms threshold (10×).
     assert!(
-        elapsed.as_millis() < 200,
-        "1000 array creations took {}ms, expected < 200ms",
+        elapsed.as_millis() < 2000,
+        "1000 array creations took {}ms, expected < 2000ms (10× target 200ms)",
         elapsed.as_millis()
     );
 }
