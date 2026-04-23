@@ -565,59 +565,52 @@ fn validate_asm_register_class(
 
     match constraint {
         // General-purpose integer register — reject float values
-        "reg" => {
-            if is_float {
-                return Err(CodegenError::NotImplemented(format!(
-                    "asm: float value in integer register ({direction}(reg) operand has type {val_ty})"
-                )));
-            }
+        "reg" if is_float => {
+            return Err(CodegenError::NotImplemented(format!(
+                "asm: float value in integer register ({direction}(reg) operand has type {val_ty})"
+            )));
         }
         // Floating-point register — reject integer values
-        "freg" => {
-            if !is_float {
-                return Err(CodegenError::NotImplemented(format!(
-                    "asm: integer value in float register ({direction}(freg) operand has type {val_ty})"
-                )));
-            }
+        "freg" if !is_float => {
+            return Err(CodegenError::NotImplemented(format!(
+                "asm: integer value in float register ({direction}(freg) operand has type {val_ty})"
+            )));
         }
         // Specific x86 GP registers — reject float values
-        c if matches!(
-            c,
-            "rax"
-                | "rbx"
-                | "rcx"
-                | "rdx"
-                | "rsi"
-                | "rdi"
-                | "rsp"
-                | "rbp"
-                | "eax"
-                | "ebx"
-                | "ecx"
-                | "edx"
-        ) =>
+        c if is_float
+            && matches!(
+                c,
+                "rax"
+                    | "rbx"
+                    | "rcx"
+                    | "rdx"
+                    | "rsi"
+                    | "rdi"
+                    | "rsp"
+                    | "rbp"
+                    | "eax"
+                    | "ebx"
+                    | "ecx"
+                    | "edx"
+            ) =>
         {
-            if is_float {
-                return Err(CodegenError::NotImplemented(format!(
-                    "asm: float value in integer register ({direction}(\"{c}\") operand has type {val_ty})"
-                )));
-            }
+            return Err(CodegenError::NotImplemented(format!(
+                "asm: float value in integer register ({direction}(\"{c}\") operand has type {val_ty})"
+            )));
         }
         // Specific x86 SSE/AVX registers — reject integer values
-        c if c.starts_with("xmm") || c.starts_with("ymm") || c.starts_with("zmm") => {
-            if !is_float {
-                return Err(CodegenError::NotImplemented(format!(
-                    "asm: integer value in float register ({direction}(\"{c}\") operand has type {val_ty})"
-                )));
-            }
+        c if !is_float
+            && (c.starts_with("xmm") || c.starts_with("ymm") || c.starts_with("zmm")) =>
+        {
+            return Err(CodegenError::NotImplemented(format!(
+                "asm: integer value in float register ({direction}(\"{c}\") operand has type {val_ty})"
+            )));
         }
         // ARM64 GP registers (x0-x30, w0-w30, sp, lr, xzr, wzr) — reject float values
-        c if crate::codegen::aarch64_asm::reg_number(c).is_some() => {
-            if is_float {
-                return Err(CodegenError::NotImplemented(format!(
-                    "asm: float value in ARM64 integer register ({direction}(\"{c}\") operand has type {val_ty})"
-                )));
-            }
+        c if is_float && crate::codegen::aarch64_asm::reg_number(c).is_some() => {
+            return Err(CodegenError::NotImplemented(format!(
+                "asm: float value in ARM64 integer register ({direction}(\"{c}\") operand has type {val_ty})"
+            )));
         }
         // ARM64 NEON/FP registers (v0-v31, d0-d31, s0-s31) — reject integer values
         c if c.starts_with('v') || c.starts_with('d') || c.starts_with('s') => {

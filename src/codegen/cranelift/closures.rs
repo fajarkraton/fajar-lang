@@ -38,10 +38,8 @@ pub(crate) fn collect_free_vars(expr: &Expr, bound: &HashSet<String>) -> HashSet
 /// Recursive helper for free variable collection.
 fn collect_free_vars_inner(expr: &Expr, bound: &HashSet<String>, free: &mut HashSet<String>) {
     match expr {
-        Expr::Ident { name, .. } => {
-            if !bound.contains(name) {
-                free.insert(name.clone());
-            }
+        Expr::Ident { name, .. } if !bound.contains(name) => {
+            free.insert(name.clone());
         }
         Expr::Binary { left, right, .. } => {
             collect_free_vars_inner(left, bound, free);
