@@ -2,6 +2,113 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [31.0.0] — 2026-04-23 "Phase D + Track B"
+
+> 8-day catch-up consolidating V28-V31 across compiler + OS + quant. Last
+> CHANGELOG entry was v26.2.0 (2026-04-13); this entry covers v26.3.0,
+> v27.0.0, v27.5.0, and v31.0.0 collectively. GitHub Releases preserve
+> the granular release notes for each intermediate tag. Granular CHANGELOG
+> back-fill for the 3 intermediate tags is a deferred follow-up.
+
+### Added
+
+**Compiler attrs (V29.P1, V31.B.P2):**
+- **`@noinline`+`@inline`+`@cold` lexer** (V29.P1) — lexer recognition closes silent-build-failure class. 5-layer prevention chain: lexer + codegen test + Makefile ELF-gate + pre-commit hook + install-hooks script.
+- **`@no_vectorize` codegen attribute** (V31.B.P2) — lexer + parser + codegen E2E. IR + disasm verified. Forces scalar codegen for kernels whose vectorization triggers downstream issues (e.g. V31 R3 pad-collapse).
+- **`FJ_EMIT_IR` env var** — dumps pre-optimization LLVM IR to stderr, enabling root-cause investigation of optimizer-induced bugs without rebuilding with verbose flags.
+
+**CLAUDE.md rules (V30.TRACK4, V31.C):**
+- **§6.10 Filesystem Roundtrip Coverage Rule** — surfaced by V30 Track 4. Any kernel FS write path needs a Makefile regression target with QEMU `-boot order=d` for CDROM boot, in-kernel mkfs+mount+write over host-built images, and pre-existing bugs surfaced as NOTE lines. 4-YES self-check.
+- **§6.11 Training Script Interruption-Safety Rule** — surfaced by FajarQuant c.1 hang (laptop suspend → dead HF sockets → 8.5h wasted GPU). Codifies Track B 5-layer defence as cross-repo rule. 5-YES self-check.
+
+**Earlier compiler additions (v27.5.0 "Compiler Prep", v27.0.0 "Hardened", v26.3.0 "V26 Final" — covered en bloc here):**
+- AI scheduler builtins (`tensor_workload_hint(rows,cols)`, `schedule_ai_task(id,priority,deadline)`) — V27.5.
+- `@interrupt` ISR wrappers (ARM64 + x86_64 + target dispatcher) wired to AOT pipeline — V27.5.
+- `@app` (GUI app entry) + `@host` (Stage 1 self-hosting) annotations — V27.5.
+- `Cap<T>` linear/affine capability type with `cap_new`/`cap_unwrap`/`cap_is_valid` — V27.5.
+- Refinement predicates extended from let-binding to function parameters — V27.5.
+- `fb_set_base(addr)` + `fb_scroll(lines)` VESA framebuffer extensions + full MMIO stack — V27.5.
+- IPC service stub generator (`ServiceStub::from_service_def()`) — V27.5.
+- `MAX_KERNEL_TENSOR_DIM` 16 → 128 (Gemma 3 head_dim=256) — V27.5.
+- `tests/v27_5_compiler_prep.rs` 16 E2E integration tests + `v27_5_regression` CI job — V27.5.
+- `tests/feature_flag_tests.rs` 12 untested feature flag tests — V27.0.
+- `scripts/check_version_sync.sh` (V27 A4 prevention layer for §6.8 Rule 3) — V27.0.
+- Phase B + C completion per `docs/V26_PRODUCTION_PLAN.md` — V26.3.
+
+### Changed
+
+- **Cargo.toml version** 27.5.0 → 31.0.0 (matches CLAUDE.md major bump for `scripts/check_version_sync.sh` CI gate).
+- **CLAUDE.md banner** Version `27.5+V29.P1+V30.GEMMA3+V30.TRACK4+V31.C.TRACKB` → `31.0+V31.C.TRACKB`; Last Updated 2026-04-22 → 2026-04-23.
+- **README.md** Release/Tests/FajarOS/FajarQuant badges + Project Stats Release+Tests+FajarOS Nova rows + Production status row + new V28-V31 additions row + Release History new top entry.
+- **GitHub repo metadata** — 5 new topics added (`cuda`, `llvm`, `quantization`, `risc-v`, `wasm`); 12 → 17 total.
+- **`Cargo.toml` description** kept at v27.5 baseline phrasing (still accurate for v31.0.0; not regenerated).
+- **`call_main()`** rejects non-Function main with TypeError (was silent Null) — V27.0.
+- **10 cargo doc warnings → 0** — V27.0.
+
+### Fixed
+
+**FajarOS Nova security triple (V29.P2, V29.P3, V29.P3.P6):**
+- **SMEP re-enabled** (V29.P2) — closed V28.1 U-bit leak. 35/35 kernel tests.
+- **SMAP re-enabled** (V29.P3) — V26 B4.2 SMAP CLOSED. Fix: extend `strip_user_from_kernel_identity()` to strip USER from non-leaf PML4[0]+PDPT[0]. Gate: `make test-smap-regression`.
+- **NX triple closure** (V29.P3.P6) — V26 B4.2 security triple 3/3 (SMEP+SMAP+NX) COMPLETE. Fix: `pd_idx=1→2` in `security.fj:236` (kernel `.text` straddles PD[0]+PD[1]). Gate: `make test-security-triple-regression` 6-invariant.
+
+**FajarOS Nova FS write (V30.TRACK4 + V31.D Track D, fajaros-x86 commit `c2d6be7`):**
+- **`ext2_create` returning -1 on freshly-mkfs'd disk** — root inode missing BLOCK0 allocation. 3 `cmd_mkfs_ext2` bugs + 1 UI bug closed. `make test-fs-roundtrip` 11/11 invariants PASS.
+- **Silent QEMU triple-fault** — `-boot order=d` forces CDROM boot, otherwise QEMU boots a disk whose `0x55 0xAA` signature triple-faults before any serial output.
+
+### Stats
+
+```
+Compiler:        0 production .unwrap() | 0 clippy warnings | 0 fmt drift
+                 0 doc warnings | CI gates green at every push since v27.5.0
+                 Modules: 54 [x] / 0 [f] / 0 [s] (no regression from v26.1.0-phase-a)
+                 Cargo.toml: 31.0.0 | CLAUDE.md banner: 31.0+V31.C.TRACKB
+
+FajarOS Nova:    v3.4.0 → v3.7.0 ("FS Roundtrip")
+                 108K LOC | 183 .fj files | 35 kernel tests
+                 SMEP+SMAP+NX security triple closed | ASLR
+                 VFS write: RamFS + FAT32 + ext2
+                 14 LLM shell commands | SmolLM-135M v5/v6 E2E
+                 Gemma 3 1B foundation audit-complete (Path D, 12 phases PASS)
+                 Gates green:
+                   test-security-triple-regression (6-invariant)
+                   test-fs-roundtrip (11/11 invariants after V31.D fix)
+                   test-gemma3-{e2e,kernel-path} (0 crashes)
+                 Boots reliably to nova> in QEMU
+
+FajarQuant:      Phase D IntLLM (separate repo fajarkraton/fajarquant)
+                 Custom MatMul-Free LLM (HGRNBitForCausalLM + ternary BitLinear)
+                 Mini v2: val_loss 4.38 (PPL 80.0)
+                 Base c.1 PASS: val_loss 3.9903 (PPL 54.1)
+                                by 0.21 nat margin (3× wider than c.2's 0.071)
+                                Chinchilla-optimal 21.16 tok/p
+                                8h03m wall-clock on RTX 4090 Laptop
+                 Track B 5+1 layers (V31.C.P6.1-P6.6):
+                   ckpt_every (atomic + rotation)
+                   --resume / --resume-auto (bit-exact state restore)
+                   StepWatchdog (SIGTERM if step idle > 1800s)
+                   HF timeout + retry_iter
+                   test-train-watchdog Makefile gate (24 tests + signal delivery)
+                   nohup line-buffering hardening
+                 Medium training: in flight at v31 cut (~17.8h ETA, 91K steps × 16,384 tok)
+
+GitHub:          5 new topics: cuda, llvm, quantization, risc-v, wasm (12 → 17)
+                 Release v27.5.0 → v31.0.0 (Latest)
+                 Tag v31.0.0 → commit 6650545 on main
+```
+
+### Notes (intermediate tags not back-filled)
+
+This entry covers v26.3.0 (2026-04-13 "V26 Final"), v27.0.0 (2026-04-13 "Hardened"), v27.5.0 (2026-04-14 "Compiler Prep") collectively rather than as separate CHANGELOG entries. Granular detail for those tags lives in their GitHub Release pages:
+
+- https://github.com/fajarkraton/fajar-lang/releases/tag/v26.3.0
+- https://github.com/fajarkraton/fajar-lang/releases/tag/v27.0.0
+- https://github.com/fajarkraton/fajar-lang/releases/tag/v27.5.0
+
+Granular back-fill into CHANGELOG.md is a deferred follow-up (no functional gap; release pages cover the same content).
+
+---
+
 ## [26.2.0] — 2026-04-13 "FajarQuant v2.12" (C1.6 Path B complete)
 
 ### Added
