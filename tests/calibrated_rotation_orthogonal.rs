@@ -23,14 +23,20 @@ fn run_err(src: &str, substr: &str) {
 
 #[test]
 fn save_load_roundtrip() {
-    let result = run_ok(
+    // Use env::temp_dir() so the test works on Windows (no /tmp).
+    // Forward-slashes avoid Rust/.fj escape ambiguity from Windows backslashes.
+    let p = std::env::temp_dir()
+        .join("fj_test_cal_rt.bin")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let result = run_ok(&format!(
         r#"
         let t = from_data([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-        save_calibration(t, "/tmp/fj_test_cal_rt.bin")
-        let loaded = load_calibration("/tmp/fj_test_cal_rt.bin", 2, 3)
+        save_calibration(t, "{p}")
+        let loaded = load_calibration("{p}", 2, 3)
         loaded
-    "#,
-    );
+    "#
+    ));
     assert!(result.contains("1.0000"), "should contain 1.0: {result}");
     assert!(result.contains("6.0000"), "should contain 6.0: {result}");
 }
@@ -87,26 +93,40 @@ fn verify_orthogonal_rejects_non_square() {
 
 #[test]
 fn load_calibration_wrong_size() {
-    run_ok(
+    let p = std::env::temp_dir()
+        .join("fj_test_cal_bad.bin")
+        .to_string_lossy()
+        .replace('\\', "/");
+    run_ok(&format!(
         r#"
         let t = from_data([1.0, 2.0], [1, 2])
-        save_calibration(t, "/tmp/fj_test_cal_bad.bin")
-    "#,
-    );
+        save_calibration(t, "{p}")
+    "#
+    ));
     run_err(
-        r#"
-        load_calibration("/tmp/fj_test_cal_bad.bin", 3, 3)
-    "#,
+        &format!(
+            r#"
+        load_calibration("{p}", 3, 3)
+    "#
+        ),
         "expected",
     );
 }
 
 #[test]
 fn load_calibration_file_not_found() {
+    // Use a path that won't exist on any platform (guaranteed-missing dir).
+    let p = std::env::temp_dir()
+        .join("fj_nonexistent_dir_1234567890")
+        .join("file.bin")
+        .to_string_lossy()
+        .replace('\\', "/");
     run_err(
-        r#"
-        load_calibration("/tmp/fj_nonexistent_1234567890.bin", 2, 2)
-    "#,
+        &format!(
+            r#"
+        load_calibration("{p}", 2, 2)
+    "#
+        ),
         "load_calibration",
     );
 }
@@ -114,7 +134,11 @@ fn load_calibration_file_not_found() {
 #[test]
 fn save_load_verify_pipeline() {
     // Full pipeline: create orthogonal matrix → save → load → verify
-    let result = run_ok(
+    let p = std::env::temp_dir()
+        .join("fj_test_cal_pipe.bin")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let result = run_ok(&format!(
         r#"
         let rotation = from_data([
             0.5, 0.5, 0.5, 0.5,
@@ -122,10 +146,10 @@ fn save_load_verify_pipeline() {
             0.5, 0.5, -0.5, -0.5,
             0.5, -0.5, -0.5, 0.5
         ], [4, 4])
-        save_calibration(rotation, "/tmp/fj_test_cal_pipe.bin")
-        let loaded = load_calibration("/tmp/fj_test_cal_pipe.bin", 4, 4)
+        save_calibration(rotation, "{p}")
+        let loaded = load_calibration("{p}", 4, 4)
         verify_orthogonal(loaded, 1e-10)
-    "#,
-    );
+    "#
+    ));
     assert_eq!(result, "true");
 }
