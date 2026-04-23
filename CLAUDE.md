@@ -752,5 +752,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 27.5+V29.P1+V30.GEMMA3+V30.TRACK4+V31.C.TRACKB | V31.C Track B "Training Interruption-Safety" 2026-04-22 — §6.11 rule + 5-layer defence (ckpt_every/--resume/StepWatchdog/HF timeout+retry/test-train-watchdog) in fajarquant Phase D post-c.1 hang | V30.TRACK4 "FS Roundtrip" — FajarOS Nova v3.7.0, ext2+FAT32 disk harness 9-invariant gate | V30.GEMMA3 "Foundation (Path D)" — v3.6.0 Gemma 3 1B audit-complete, pad-collapse deferred to V31 R3 | V29.P1 "Compiler Enhancement" — @noinline lexer + 5-layer prevention | V27.5 baseline — 7,626 lib + 2,575 integ + 16 V27.5 E2E + 14 doc tests | §6.8+§6.9+§6.10+§6.11 Rules*
-*Last Updated: 2026-04-22*
+*CLAUDE.md Version: 31.0+V31.C.TRACKB | v31.0.0 release "Phase D + Track B" 2026-04-23 consolidates 8-day catch-up across compiler+OS+quant | V31.C Track B "Training Interruption-Safety" 2026-04-22 — §6.11 rule + 5-layer defence (ckpt_every/--resume/StepWatchdog/HF timeout+retry/test-train-watchdog) in fajarquant Phase D post-c.1 hang | V30.TRACK4 "FS Roundtrip" — FajarOS Nova v3.7.0, ext2+FAT32 disk harness 9-invariant gate | V30.GEMMA3 "Foundation (Path D)" — v3.6.0 Gemma 3 1B audit-complete, pad-collapse deferred to V31 R3 | V29.P1 "Compiler Enhancement" — @noinline lexer + 5-layer prevention | V27.5 baseline — 7,626 lib + 2,575 integ + 16 V27.5 E2E + 14 doc tests | §6.8+§6.9+§6.10+§6.11 Rules*
+*Last Updated: 2026-04-23*
