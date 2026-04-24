@@ -18,7 +18,7 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 [![FajarQuant](https://img.shields.io/badge/FajarQuant-Phase_D_IntLLM_Base_PASS_PPL_54.1-orange)](https://github.com/fajarkraton/fajarquant)
 [![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
 
 ---
@@ -669,6 +669,10 @@ Fajar Lang adalah bahasa pemrograman sistem yang dibuat di Indonesia, dirancang 
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
 
-Copyright (c) 2025-2026 Muhamad Fajar Putranto (TaxPrime / PrimeCore.id)
+Copyright 2026 Muhamad Fajar Putranto
+
+Relicensed from MIT to Apache 2.0 on 2026-04-24 to add explicit patent grant
+clause (industry standard for ML/compiler/systems projects). Past commits
+remain MIT per their original terms; future commits are Apache 2.0.
