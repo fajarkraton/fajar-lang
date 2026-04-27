@@ -229,7 +229,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-coverage-
       - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin --locked
+        # Idempotent install: skip if cache restored a working binary
+        # (the `Cache cargo registry and build` step above includes
+        # `~/.cargo/bin`). Without the guard, `cargo install` exits 101
+        # with "binary already exists in destination" — see CI run
+        # 24936960952 + 24869110898 + 24855252863.
+        run: command -v cargo-tarpaulin >/dev/null 2>&1 || cargo install cargo-tarpaulin --locked
       - name: Generate coverage
         run: cargo tarpaulin --out xml --output-dir coverage/ --skip-clean --timeout 300
       - name: Upload coverage to Codecov
