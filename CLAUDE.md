@@ -753,5 +753,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 31.0 (V31.E2.PathA submission-ready) | Latest milestones (full detail → `CHANGELOG.md` + `MEMORY.md`): V31.E2.PathA arXiv tarball ready, founder actions pending; V31.E2.4 + E2.1 honest NEGATIVE results → demoted to F.5/F.6; V31.E1 bilingual corpus v1.0 (25.67 B tokens, 60:40 ID:EN); V31.C Track B interruption-safety (§6.11). Active rules: §6.1–§6.11.*
-*Last Updated: 2026-04-28*
+*CLAUDE.md Version: 31.1 (V32-prep F.11 chain landed at infrastructure-only state) | Latest milestones (full detail → `CHANGELOG.md` + `MEMORY.md`): V32-prep F.11 vendored microsoft/BitNet TL2 AVX2 kernel + cc-crate build + FFI binding + Python+Rust encoders + 60+ unit tests linked into FajarOS Nova kernel ELF (`docs/FJQ_PHASE_F_F11_CHAIN_CLOSURE.md` + `FJQ_PHASE_F_F11_BRANCH_X_ENCODER_LOCATION.md` + `FJQ_PHASE_F_F11_X7_HYPOTHESIS_FINDINGS.md`); magnitude byte encoding bit-exact, sign byte encoding 23× from naive guess but ~18 residual error per row — runtime activation BLOCKED on parity, paper v2 narratives DEFERRED. V31.E2.PathA arXiv tarball ready, founder actions pending; V31.E2.4 + E2.1 honest NEGATIVE results → demoted to F.5/F.6; V31.E1 bilingual corpus v1.0 (25.67 B tokens, 60:40 ID:EN); V31.C Track B interruption-safety (§6.11). Active rules: §6.1–§6.11.*
+*Last Updated: 2026-04-29*
