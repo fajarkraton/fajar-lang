@@ -99,14 +99,7 @@ Labeling: [x] = production (tested, works E2E)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 
-Numbers verified by runnable commands as of 2026-04-14 (V27 sync). CLAUDE.md no longer
-trusts inflated counts. Audit corrections in V26:
-  - prior 11,395 tests was inflated; real is 7,581 lib + 2,374 integ + 14 doc
-  - prior 285 examples was inflated; real is 231
-  - prior "0 unwraps" was aspirational; real before V26 was 3 (now 0)
-  - prior "5 [f] modules" was outdated; A3 closed all (now 0)
-  - prior "2 [s] modules" was outdated; V24+V20.8 closed all (now 0)
-  - prior "8 const_* modules" was inflated; real is 3
+Numbers verified by runnable commands as of 2026-04-14 (V27 sync). V26 audit corrections + drift history → `docs/HONEST_AUDIT_V26.md`.
 ```
 
 ### Version History (V18 → V26)
@@ -125,15 +118,8 @@ trusts inflated counts. Audit corrections in V26:
 | **V27.5** "Compiler Prep" | 2026-04-14 | AI scheduler builtins, @interrupt wrappers, @app/@host, refinement params, Cap<T>, fb_set_base, IPC stub generator. Note: shipped w/o @noinline lexer entry (silent compile failure), closed in V29.P1. |
 | **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError fix, version sync 27.0.0, FajarOS OOM hardening |
 | **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
-| V25 "Production" | 2026-04-07 | Hands-on re-audit, K8s deploy, FajarQuant Phase C real Gemma 4 E2B, @kernel transitive fix |
-| V24 "Quantum" | 2026-04-07 | CUDA RTX 4090 (9 PTX kernels, ~3x matmul), AVX2 + AES-NI inline asm, FajarQuant Phase 5-7 |
-| V23 "Boot" | 2026-04-06 | FajarOS boots to shell, 16 LLVM/runtime fixes, NVMe + GUI + ACPI working |
-| V22 "Hardened" | 2026-04-06 | 30 LLVM enhancements (E1-I6 batches), 690→0 codegen errors |
-| V21 "Production" | 2026-04-04 | Real threaded actors (std::thread + mpsc), 5 [sim]→[x], LLVM JIT/AOT runtime |
-| V20.8 "Cleanup" | 2026-04-04 | Rc→Arc migration, removed 21.4K LOC dead code (rtos/iot/rt_pipeline/etc) |
-| V20 "Completeness" | 2026-04-03 | Debugger v2 record/replay, package v2 build scripts, accelerator dispatch |
-| V19 "Precision" | 2026-04-03 | macro_rules! with $x metavar, async_sleep tokio, pattern match destructure E2E |
-| V18 "Integrity" | 2026-04-03 | http/tcp/dns, ffi_load, gen+yield, @requires, MultiHeadAttention, const fn |
+
+> V18-V25 entries trimmed to fit perf threshold; full detail in `CHANGELOG.md` + `git log --oneline --grep="V[12][0-9]"`. Highlights: V18 http/tcp/dns + ffi_load + const fn, V19 macro_rules!, V20 debugger record/replay, V20.8 Rc→Arc + 21.4K LOC dead-code rm, V21 real threaded actors, V22 30 LLVM enhancements, V23 FajarOS boots to shell + NVMe+GUI+ACPI, V24 CUDA RTX 4090 PTX kernels + AVX2+AES-NI, V25 hands-on re-audit + K8s + FajarQuant Phase C.
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
@@ -613,24 +599,9 @@ fn s1_1_eval_source_runs_analyzer() { ... }
 
 ## 11. Standard Library Overview
 
-> **Full API:** `docs/STDLIB_SPEC.md`. Discover dynamically via REPL `:help` or grep `src/interpreter/builtins.rs`.
+> **Full API:** `docs/STDLIB_SPEC.md`. Discover via REPL `:help` or grep `src/interpreter/builtins.rs`.
 
-- **`std::io`**: print, println, eprintln, read_file, write_file, append_file, file_exists
-- **`std::collections`**: `Array` (15+ methods), `HashMap` (8 builtins + 7 methods)
-- **`std::string`**: 15 methods (trim, split, replace, contains, starts_with, parse_int, parse_float, …)
-- **`std::math`**: PI, E, abs, sqrt, pow, sin/cos/tan, floor, ceil, round, clamp, min, max
-- **`std::convert`**: to_string, to_int, to_float, `as` cast
-- **`os::*`**: memory (alloc/free/read/write, page_map/unmap), irq (register/enable), syscall, io (port_read/write)
-- **`nn::tensor`**: zeros, ones, randn, eye, xavier, from_data, arange, linspace
-- **`nn::ops`**: add, sub, mul, div, matmul, transpose, reshape, flatten, squeeze, split, concat
-- **`nn::activation`**: relu, sigmoid, tanh, softmax, gelu, leaky_relu
-- **`nn::loss`**: mse_loss, cross_entropy, bce_loss, l1_loss
-- **`nn::layer`**: Dense, Conv2d, MultiHeadAttention, BatchNorm, Dropout, Embedding
-- **`nn::autograd`**: backward, grad, requires_grad, set_requires_grad
-- **`nn::optim`**: SGD (lr + momentum), Adam (lr), step, zero_grad
-- **`nn::metrics`**: accuracy, precision, recall, f1_score
-
-**Built-in:** `Some/None/Ok/Err` constructors; `print/println/len/type_of/assert/assert_eq/panic/todo/dbg` globals; `PI/E` constants.
+Modules: `std::{io,collections,string,math,convert}` + `os::{memory,irq,syscall,io}` + `nn::{tensor,ops,activation,loss,layer,autograd,optim,metrics}`. Built-in globals: `Some/None/Ok/Err` constructors; `print/println/len/type_of/assert/assert_eq/panic/todo/dbg`; `PI/E` constants.
 
 ---
 
@@ -650,17 +621,7 @@ Key features: ownership lite (no lifetime annotations), borrow rules (many &T OR
 
 ## 13. Performance Targets
 
-Priority: **CORRECTNESS > SAFETY > PERFORMANCE**
-
-| Benchmark | v0.1 (actual) | v1.0 (target) |
-|-----------|--------------|---------------|
-| Lex 3000 tokens | ~120us | < 50us |
-| Parse 300 stmts | ~190us | < 100us |
-| fibonacci(20) tree-walk | ~26ms | < 50ms (native) |
-| Loop 1000 iterations | ~293us | < 100us (native) |
-| String concat 100 | ~73us | < 30us |
-| fibonacci(30) | ~500ms | < 50ms (native) |
-| Binary size | N/A | < 10MB |
+Priority: **CORRECTNESS > SAFETY > PERFORMANCE**. Per-component v0.1→v1.0 targets in `docs/STDLIB_SPEC.md` + `benches/`. Binary size <10MB. Native fibonacci(30) <50ms.
 
 ---
 
@@ -740,18 +701,14 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 | Problem | Solution |
 |---------|----------|
-| `cargo build` fails: linker not found | `sudo apt-get install build-essential` |
+| Linker not found | `sudo apt-get install build-essential` |
 | Test timeout / infinite loop | MAX_RECURSION_DEPTH = 64 (debug) / 1024 (release) |
-| Token kind wrong | Use `dbg!(&tokens)` or `fj dump-tokens file.fj` |
-| Random test failures | Ensure each test creates fresh `Interpreter::new()` |
+| Random test failures | Each test must create fresh `Interpreter::new()` |
 | Gradient mismatch | Use epsilon `1e-4`, not exact equality |
-| eval_source returns Semantic error | Check that builtins are registered in type_check.rs |
-| Module path not found by analyzer | Check Expr::Path resolves qualified name (`mod::fn`) |
-| REPL variable not found | `eval_source()` uses `analyze_with_known()` for cross-call state |
-| Slow compilation | Use `cargo check` (no codegen) for quick validation |
-| Claude forgot context | Re-orient: "Read V1_TASKS.md and find next uncompleted task" |
+| Slow compilation | `cargo check` (no codegen) |
+| Claude forgot context | "Read HONEST_STATUS_V26.md and find next task" |
 
 ---
 
-*CLAUDE.md Version: 31.2 (V32-prep F.11 + F.13 + arXiv-prep chains; FajarOS plan V1) | Latest milestones (full detail → `CHANGELOG.md` + `MEMORY.md`): V32-prep F.13 Branch Z-narrow CPU-vs-GPU dispatch heuristic shipped (verdict 3/3 PASS = static rule "CPU default; GPU optional for batch ≥ 8"; `docs/FJQ_PHASE_F_F13_DISPATCH_DECISION.md` + paper v2 §6 LaTeX-ready snippet + prevention gate `make verify-f13-decision` 19/19 PASS); arXiv submission checklist bumped v1.0 → v1.1 (claim count 32→40, post-Week-4 trajectory addendum, founder v1-vs-v2 decision documented); v2 paper draft edits doc (3 paste-ready inserts §7.3/§7.5/§8.5) ready for founder editorial pass. F.11 chain still infrastructure-only with documented parity gap (vendored TL2 AVX2 kernel + FFI + Python+Rust encoders + 60+ tests, magnitude byte encoding bit-exact, sign byte ~18 residual error per row — runtime activation BLOCKED on parity, F.11.4 Path B continuation requires explicit kernel-disassembly budget grant). FajarOS Nova production plan V1 written 2026-04-30 (`fajaros-x86/docs/FAJAROS_PRODUCTION_PLAN_V1.md`, 12 critical gaps, 4-phase roadmap, 33/33 mechanical invariants verified). V31.E2.PathA arXiv tarball ready (40/40 verify gate PASS), founder external actions pending (ORCID + Zenodo + arxiv.org account + review + upload); V31.E2.4 + E2.1 honest NEGATIVE results → demoted to F.5/F.6; V31.E1 bilingual corpus v1.0 (25.67 B tokens, 60:40 ID:EN); V31.C Track B interruption-safety (§6.11). Active rules: §6.1–§6.11.*
-*Last Updated: 2026-04-30*
+*CLAUDE.md Version: 31.3 (V32-prep F.11 + F.13 + F.13.1 v1+v2 + arXiv-prep + Tier1+2 hygiene). Trimmed 39,962 → 37,333 bytes (70× more headroom). Latest (full detail → `CHANGELOG.md` + `MEMORY.md`): F.13 Z-narrow shipped + F.13.1 v1 live GPU calibration (cold-GPU artifact 19.7 corrected via v2 to warm-state 118.9) + F.13.1 v2 kvcache + torch.compile(default) = 202.6 tok/s best (1.70× over naive); verdict G3 cushion vanished in measurement BUT static-rule HOLDS for FajarOS per decision-doc §11 (3 reasons: GPU dispatch path not built, CPU-TL2 upper 400 still > 202.6, FajarOS workload batch=1 inside G1 envelope); prevention gate `make verify-f13-decision` 23/23 PASS strict (I1-I6 + completeness checks + acknowledgment pattern via `i6_above_floor_acknowledged`). arXiv checklist v1.1 + v2 paper draft edits doc (Edit A/B/C ready). F.11 still infrastructure-only with parity gap (kernel disassembly needs explicit budget grant). FajarOS Nova plan V1 (12 gaps, 33/33 invariants). V31.E1 bilingual corpus v1.0 (25.67 B tokens). V31.E2 negatives → F.5/F.6. V31.C Track B (§6.11). Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-01*
