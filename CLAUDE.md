@@ -137,7 +137,7 @@ trusts inflated counts. Audit corrections in V26:
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
-- **FajarOS Nova** (x86_64): 47,821 LOC, V26 LLM E2E (SmolLM-135M v5/v6), 14 LLM shell commands. Boot to `nova>` reliably in QEMU.
+- **FajarOS Nova** (x86_64): 56,822 LOC (V31 cycle growth; per `fajaros-x86/docs/FAJAROS_PRODUCTION_PLAN_V1.md` §2 hand-verified 2026-04-30), V26 LLM E2E (SmolLM-135M v5/v6) + V31 IntLLM Phase D + V30.GEMMA3 Gemma 3 1B in-kernel paths, 14 LLM shell commands. Boot to `nova>` reliably in QEMU.
 
 ### FajarQuant (separate repo since 2026-04-11)
 - **`fajarkraton/fajarquant`** (standalone) — extracted from `src/runtime/ml/fajarquant/` + `turboquant.rs` in V26 Phase A4 split. Algorithm + paper + data + reproducibility scripts now live there.
@@ -753,5 +753,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 31.1 (V32-prep F.11 chain landed at infrastructure-only state) | Latest milestones (full detail → `CHANGELOG.md` + `MEMORY.md`): V32-prep F.11 vendored microsoft/BitNet TL2 AVX2 kernel + cc-crate build + FFI binding + Python+Rust encoders + 60+ unit tests linked into FajarOS Nova kernel ELF (`docs/FJQ_PHASE_F_F11_CHAIN_CLOSURE.md` + `FJQ_PHASE_F_F11_BRANCH_X_ENCODER_LOCATION.md` + `FJQ_PHASE_F_F11_X7_HYPOTHESIS_FINDINGS.md`); magnitude byte encoding bit-exact, sign byte encoding 23× from naive guess but ~18 residual error per row — runtime activation BLOCKED on parity, paper v2 narratives DEFERRED. V31.E2.PathA arXiv tarball ready, founder actions pending; V31.E2.4 + E2.1 honest NEGATIVE results → demoted to F.5/F.6; V31.E1 bilingual corpus v1.0 (25.67 B tokens, 60:40 ID:EN); V31.C Track B interruption-safety (§6.11). Active rules: §6.1–§6.11.*
-*Last Updated: 2026-04-29*
+*CLAUDE.md Version: 31.2 (V32-prep F.11 + F.13 + arXiv-prep chains; FajarOS plan V1) | Latest milestones (full detail → `CHANGELOG.md` + `MEMORY.md`): V32-prep F.13 Branch Z-narrow CPU-vs-GPU dispatch heuristic shipped (verdict 3/3 PASS = static rule "CPU default; GPU optional for batch ≥ 8"; `docs/FJQ_PHASE_F_F13_DISPATCH_DECISION.md` + paper v2 §6 LaTeX-ready snippet + prevention gate `make verify-f13-decision` 19/19 PASS); arXiv submission checklist bumped v1.0 → v1.1 (claim count 32→40, post-Week-4 trajectory addendum, founder v1-vs-v2 decision documented); v2 paper draft edits doc (3 paste-ready inserts §7.3/§7.5/§8.5) ready for founder editorial pass. F.11 chain still infrastructure-only with documented parity gap (vendored TL2 AVX2 kernel + FFI + Python+Rust encoders + 60+ tests, magnitude byte encoding bit-exact, sign byte ~18 residual error per row — runtime activation BLOCKED on parity, F.11.4 Path B continuation requires explicit kernel-disassembly budget grant). FajarOS Nova production plan V1 written 2026-04-30 (`fajaros-x86/docs/FAJAROS_PRODUCTION_PLAN_V1.md`, 12 critical gaps, 4-phase roadmap, 33/33 mechanical invariants verified). V31.E2.PathA arXiv tarball ready (40/40 verify gate PASS), founder external actions pending (ORCID + Zenodo + arxiv.org account + review + upload); V31.E2.4 + E2.1 honest NEGATIVE results → demoted to F.5/F.6; V31.E1 bilingual corpus v1.0 (25.67 B tokens, 60:40 ID:EN); V31.C Track B interruption-safety (§6.11). Active rules: §6.1–§6.11.*
+*Last Updated: 2026-04-30*
