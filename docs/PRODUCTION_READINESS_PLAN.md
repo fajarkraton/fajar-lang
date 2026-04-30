@@ -1,7 +1,12 @@
 # Production Readiness Plan — Honest Path to v7.0.0
 
+> **ARCHIVED 2026-04-30** — superseded by [`docs/PRODUCTION_AUDIT_V1.md`](PRODUCTION_AUDIT_V1.md).
+> Live tracker is now PRODUCTION_AUDIT_V1.md. This v7.0.0-era plan (2026-03-26) is preserved
+> for historical reference; many items have been completed in V8-V31, and the V1 audit
+> consolidates remaining gaps with current verification commands.
+
 > **Date:** 2026-03-26
-> **Status:** Assessment + Plan
+> **Status:** Assessment + Plan (ARCHIVED)
 > **Goal:** Make Fajar Lang genuinely production-ready for target use cases
 > **Principle:** Quality > Speed. Every task verified before marked done.
 
