@@ -68,8 +68,8 @@ fn collect_fj(
             let p = entry.path();
             if p.is_dir() {
                 collect_fj(&p, files, main_file);
-            } else if p.extension().map_or(false, |e| e == "fj") {
-                if p.file_name().map_or(false, |n| n == "main.fj") {
+            } else if p.extension().is_some_and(|e| e == "fj") {
+                if p.file_name().is_some_and(|n| n == "main.fj") {
                     *main_file = Some(p);
                 } else {
                     files.push(p);

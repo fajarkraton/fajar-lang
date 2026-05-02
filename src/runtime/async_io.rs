@@ -2322,7 +2322,7 @@ mod tests {
         assert_eq!(d0, 103);
         // attempt 1: 100 * 2^1 + jitter(1) = 200 + 10%1=0 => 200 + 0
         let d1 = compute_delay(1, &policy);
-        assert_eq!(d1, 200 + (1 * 7 + 3) % 11);
+        assert_eq!(d1, 200 + (7 + 3));
         // attempt 2: 100 * 2^2 + jitter(2) = 400 + (2*7+3)%11 = 400 + 6
         let d2 = compute_delay(2, &policy);
         assert_eq!(d2, 406);

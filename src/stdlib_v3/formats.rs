@@ -1108,7 +1108,7 @@ mod tests {
     fn json_stringify_compact_primitives() {
         assert_eq!(json_stringify(&JsonValue::Null), "null");
         assert_eq!(json_stringify(&JsonValue::Bool(true)), "true");
-        assert_eq!(json_stringify(&JsonValue::Number(3.14)), "3.14");
+        assert_eq!(json_stringify(&JsonValue::Number(1.25)), "1.25");
         assert_eq!(json_stringify(&JsonValue::Number(42.0)), "42");
         assert_eq!(
             json_stringify(&JsonValue::String("hello".into())),
@@ -1183,8 +1183,8 @@ mod tests {
         assert_eq!(val.as_f64(), Some(-42.0));
         let val = json_parse("1.5e2").unwrap();
         assert_eq!(val.as_f64(), Some(150.0));
-        let val = json_parse("-3.14E-1").unwrap();
-        assert_eq!(val.as_f64(), Some(-0.314));
+        let val = json_parse("-1.25E-1").unwrap();
+        assert_eq!(val.as_f64(), Some(-0.125));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1250,10 +1250,10 @@ names = ["alpha", "beta", "gamma"]
 
     #[test]
     fn toml_parse_floats() {
-        let input = "pi = 3.14159\nrate = 1e-3\n";
+        let input = "pi = 1.5\nrate = 1e-3\n";
         let val = toml_parse(input).unwrap();
         let pi = val.get("pi").unwrap().as_f64().unwrap();
-        assert!((pi - 3.14159).abs() < 1e-10);
+        assert!((pi - 1.5).abs() < 1e-10);
         let rate = val.get("rate").unwrap().as_f64().unwrap();
         assert!((rate - 0.001).abs() < 1e-10);
     }

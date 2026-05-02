@@ -1550,7 +1550,10 @@ mod tests {
         let pe = SinusoidalPositionalEncoding::new(50, 16).unwrap();
         let data = pe.encoding.to_vec();
         for &v in &data {
-            assert!(v >= -1.0 && v <= 1.0, "PE value {v} should be in [-1, 1]");
+            assert!(
+                (-1.0..=1.0).contains(&v),
+                "PE value {v} should be in [-1, 1]"
+            );
         }
     }
 

@@ -2416,7 +2416,7 @@ mod tests {
 
     #[test]
     fn ipi_message_variants() {
-        let msgs = vec![
+        let msgs = [
             IpiMessage::Reschedule,
             IpiMessage::TlbFlush { address: 0xDEAD },
             IpiMessage::FunctionCall {

@@ -333,7 +333,7 @@ mod user_elf_structure {
         // Entry point should be in the 0x400000 range
         let entry = u64::from_le_bytes(data[24..32].try_into().unwrap());
         assert!(
-            entry >= 0x400000 && entry < 0x500000,
+            (0x400000..0x500000).contains(&entry),
             "entry point {:#x} not in 0x400000..0x500000 range",
             entry
         );

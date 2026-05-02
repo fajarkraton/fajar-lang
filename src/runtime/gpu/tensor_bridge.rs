@@ -274,7 +274,7 @@ mod tests {
         let result = gpu_relu(&dev, &gpu_t).expect("relu");
         let cpu_result = tensor_to_cpu(&dev, &result).expect("to_cpu");
 
-        let expected = vec![0.0, 0.0, 0.0, 3.0];
+        let expected = [0.0, 0.0, 0.0, 3.0];
         for (a, b) in cpu_result.data().iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5);
         }
@@ -303,7 +303,7 @@ mod tests {
         let result = gpu_add(&dev, &ga, &gb).expect("add");
         let cpu_result = tensor_to_cpu(&dev, &result).expect("to_cpu");
 
-        let expected = vec![11.0, 22.0, 33.0];
+        let expected = [11.0, 22.0, 33.0];
         for (a, b) in cpu_result.data().iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5);
         }

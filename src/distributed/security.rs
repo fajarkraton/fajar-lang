@@ -1091,8 +1091,10 @@ mod tests {
 
     #[test]
     fn d9_1_tls_config_missing_ca() {
-        let mut config = TlsConfig::default();
-        config.ca_cert_path = None;
+        let config = TlsConfig {
+            ca_cert_path: None,
+            ..Default::default()
+        };
         let errors = config.validate().unwrap_err();
         assert!(errors.iter().any(|e| e.contains("ca_cert_path")));
     }
@@ -1111,7 +1113,7 @@ mod tests {
         });
 
         // Day 1: no rotation needed
-        assert!(!rotator.needs_rotation(1 * 24 * 3600 * 1000));
+        assert!(!rotator.needs_rotation(24 * 3600 * 1000));
 
         // Day 25: within 7-day threshold -> needs rotation
         assert!(rotator.needs_rotation(25 * 24 * 3600 * 1000));

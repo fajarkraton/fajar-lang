@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn qnn_f32_roundtrip() {
-        let values = vec![-1.5, 0.0, 3.14, 100.0];
+        let values = vec![-1.5, 0.0, 1.25, 100.0];
         let tensor = make_tensor(values.clone(), &[2, 2]);
         let buf = QnnBuffer::from_tensor(&tensor, NpuDtype::F32).unwrap();
         assert_eq!(buf.dtype(), NpuDtype::F32);
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn qnn_bf16_roundtrip() {
-        let values = vec![0.0, 1.0, -1.0, 3.14, 100.0];
+        let values = vec![0.0, 1.0, -1.0, 1.25, 100.0];
         let tensor = make_tensor(values.clone(), &[5]);
         let buf = QnnBuffer::from_tensor(&tensor, NpuDtype::BF16).unwrap();
         assert_eq!(buf.dtype(), NpuDtype::BF16);

@@ -1004,7 +1004,7 @@ mod tests {
         let label = v.visit(|idx, val| format!("alt{idx}={val}"));
         assert_eq!(label, "alt0=7");
 
-        v.emplace(1, CppValue::Float(3.14)).unwrap();
+        v.emplace(1, CppValue::Float(1.25)).unwrap();
         assert_eq!(v.index(), 1);
         assert!(v.emplace(5, CppValue::Bool(true)).is_err());
     }

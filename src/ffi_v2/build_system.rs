@@ -1822,8 +1822,10 @@ lib_paths = ["/usr/lib"]
 
     #[test]
     fn e8_1_ffi_config_validate_catches_duplicates() {
-        let mut config = FfiConfig::default();
-        config.libs = vec!["ssl".into(), "ssl".into()];
+        let config = FfiConfig {
+            libs: vec!["ssl".into(), "ssl".into()],
+            ..Default::default()
+        };
         let errors = config.validate().unwrap_err();
         assert_eq!(errors.len(), 1);
         assert!(matches!(&errors[0], BuildError::DuplicateLib(n) if n == "ssl"));

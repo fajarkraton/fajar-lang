@@ -277,7 +277,7 @@ mod tests {
         mgr.execute(
             h,
             "INSERT INTO kv VALUES (?1, ?2)",
-            &[DbParam::Text("pi".into()), DbParam::Float(3.14)],
+            &[DbParam::Text("pi".into()), DbParam::Float(1.25)],
         )
         .unwrap();
         mgr.execute(
@@ -295,7 +295,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].get("val"), Some(&DbValue::Float(3.14)));
+        assert_eq!(rows[0].get("val"), Some(&DbValue::Float(1.25)));
         mgr.close(h).unwrap();
     }
 

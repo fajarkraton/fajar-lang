@@ -455,8 +455,8 @@ mod tests {
 
     #[test]
     fn display_scalar() {
-        let t = TensorValue::from_data(vec![3.14], &[]).unwrap();
-        assert_eq!(format!("{t}"), "tensor(3.14)");
+        let t = TensorValue::from_data(vec![1.25], &[]).unwrap();
+        assert_eq!(format!("{t}"), "tensor(1.25)");
     }
 
     #[test]

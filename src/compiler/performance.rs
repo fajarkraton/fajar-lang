@@ -2384,10 +2384,7 @@ mod tests {
 
         let total_pct: f64 = breakdown.iter().map(|(_, p)| p).sum();
         // Near-zero durations may cause rounding — allow generous tolerance
-        assert!(
-            total_pct >= 0.0 && total_pct <= 200.0,
-            "total_pct={total_pct}"
-        );
+        assert!((0.0..=200.0).contains(&total_pct), "total_pct={total_pct}");
 
         assert!(report.phase_duration(Phase::Lex).is_some());
         assert!(report.phase_duration(Phase::Codegen).is_none());
@@ -2497,8 +2494,8 @@ mod tests {
         assert_eq!(iv.as_float(), None);
         assert_eq!(iv.tag(), ValueTag::Int);
 
-        let fv = CompactValue::float(3.14);
-        assert!((fv.as_float().unwrap() - 3.14).abs() < f64::EPSILON);
+        let fv = CompactValue::float(1.25);
+        assert!((fv.as_float().unwrap() - 1.25).abs() < f64::EPSILON);
         assert_eq!(fv.as_int(), None);
         assert_eq!(fv.tag(), ValueTag::Float);
 

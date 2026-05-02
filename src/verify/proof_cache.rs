@@ -1102,7 +1102,7 @@ mod tests {
         assert_eq!(store.size(), 1);
         let loaded = store.load("f");
         assert!(loaded.is_some());
-        assert!(loaded.map_or(false, |s| s.contains("hash=42")));
+        assert!(loaded.is_some_and(|s| s.contains("hash=42")));
         assert!(store.load("nonexistent").is_none());
     }
 

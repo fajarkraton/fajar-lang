@@ -959,7 +959,7 @@ mod tests {
     fn v2_3_smt_value_display() {
         assert_eq!(format!("{}", SmtValue::Int(42)), "42");
         assert_eq!(format!("{}", SmtValue::Bool(true)), "true");
-        assert_eq!(format!("{}", SmtValue::Real(3.14)), "3.14");
+        assert_eq!(format!("{}", SmtValue::Real(1.25)), "1.25");
         assert_eq!(format!("{}", SmtValue::BitVec(0b1010, 4)), "#b1010");
     }
 

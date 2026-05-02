@@ -322,17 +322,18 @@ fn v14_n3_8_raft_log_entry() {
 
 #[test]
 fn v14_n3_9_log_replication() {
-    let mut log: Vec<fajar_lang::distributed::raft::LogEntry> = Vec::new();
-    log.push(fajar_lang::distributed::raft::LogEntry {
-        term: 1,
-        index: 1,
-        command: "set x 42".into(),
-    });
-    log.push(fajar_lang::distributed::raft::LogEntry {
-        term: 1,
-        index: 2,
-        command: "set y 100".into(),
-    });
+    let log: Vec<fajar_lang::distributed::raft::LogEntry> = vec![
+        fajar_lang::distributed::raft::LogEntry {
+            term: 1,
+            index: 1,
+            command: "set x 42".into(),
+        },
+        fajar_lang::distributed::raft::LogEntry {
+            term: 1,
+            index: 2,
+            command: "set y 100".into(),
+        },
+    ];
     assert_eq!(log.len(), 2);
 }
 
@@ -998,8 +999,9 @@ fn v14_n10_5_string_interpolation() {
 fn v14_n10_6_type_of_builtin() {
     let mut interp = Interpreter::new_capturing();
     let r = interp.eval_source("let t = type_of(42)\nassert_eq(t, \"i64\")");
-    // type_of returns the runtime type name
-    assert!(r.is_ok() || true, "type_of may return variant name");
+    // type_of returns the runtime type name; either ok or err is acceptable
+    // (variant name vs canonical type representation may differ)
+    let _ = r;
 }
 
 #[test]
@@ -1116,8 +1118,8 @@ fn v14_n11_3_kernel_hash_function() {
         assert_eq(h1, h2)
         "#,
     );
-    // May not work due to chars() method - that's OK, the test shows intent
-    assert!(r.is_ok() || true, "hash function: {r:?}");
+    // May not work due to chars() method — that's OK, the test shows intent
+    let _ = r;
 }
 
 #[test]

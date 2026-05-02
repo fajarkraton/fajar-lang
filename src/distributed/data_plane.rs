@@ -728,7 +728,7 @@ mod tests {
         let frame = serialize_frame(&data, (2, 3), false);
         let (header, decoded) = deserialize_frame(&frame).unwrap();
         assert_eq!(header.shape, (2, 3));
-        assert_eq!(header.compressed, false);
+        assert!(!header.compressed);
         assert_eq!(decoded, data);
     }
 

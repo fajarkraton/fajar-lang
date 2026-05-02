@@ -474,7 +474,7 @@ mod tests {
     fn encode_mrs_sctlr() {
         let word = encode_mrs(0, "sctlr_el1").unwrap();
         // Should be an MRS instruction
-        assert_eq!(word >> 20, 0xD53 >> 0); // Top bits
+        assert_eq!(word >> 20, 0xD53); // Top bits
         assert_eq!(word & 0x1F, 0); // Rd = x0
     }
 

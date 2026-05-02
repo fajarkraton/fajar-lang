@@ -46,6 +46,13 @@ jobs:
       - name: Clippy lints
         run: cargo clippy -- -D warnings
 
+      - name: Clippy lints (tests)
+        # Per FAJAR_LANG_PERFECTION_PLAN P1.A3 (commit landed 2026-05-02):
+        # explicit --tests scope catches lint regressions in tests/*.rs +
+        # src/ #[cfg(test)] mods that the default `cargo clippy -- -D warnings`
+        # silently passes. Closes a long-standing test-file lint backlog.
+        run: cargo clippy --tests -- -D warnings
+
       - name: Run tests
         run: cargo test --lib --bins --tests --examples
 

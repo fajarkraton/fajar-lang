@@ -418,9 +418,9 @@ mod tests {
 
     #[test]
     fn bf16_to_f64() {
-        let bf = Bf16::from_f64(3.14);
+        let bf = Bf16::from_f64(1.25);
         let back = bf.to_f64();
-        assert!((back - 3.14).abs() < 0.05);
+        assert!((back - 1.25).abs() < 0.05);
     }
 
     // ── S7.5: BF16 Tensor Ops ─────────────────────────────────────────

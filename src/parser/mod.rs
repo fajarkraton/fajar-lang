@@ -944,9 +944,9 @@ mod tests {
 
     #[test]
     fn parse_float_literal() {
-        let expr = parse_expr_ok("3.14");
+        let expr = parse_expr_ok("1.25");
         assert!(
-            matches!(expr, Expr::Literal { kind: LiteralKind::Float(v), .. } if (v - 3.14).abs() < f64::EPSILON)
+            matches!(expr, Expr::Literal { kind: LiteralKind::Float(v), .. } if (v - 1.25).abs() < f64::EPSILON)
         );
     }
 

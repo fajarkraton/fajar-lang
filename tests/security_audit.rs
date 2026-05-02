@@ -99,7 +99,7 @@ fn h4_1_deeply_nested_expressions_100_levels() {
 
 #[test]
 fn h4_1_very_long_identifier_10k_chars() {
-    let ident: String = std::iter::repeat('a').take(10_000).collect();
+    let ident: String = std::iter::repeat_n('a', 10_000).collect();
     let source = format!("let {} = 1", ident);
 
     let mut interp = Interpreter::new_capturing();
@@ -269,7 +269,7 @@ fn h4_4_null_byte_in_string() {
 #[test]
 fn h4_4_very_long_string_literal() {
     // A string with 100K characters.
-    let long_str: String = std::iter::repeat('x').take(100_000).collect();
+    let long_str: String = std::iter::repeat_n('x', 100_000).collect();
     let source = format!("let s = \"{}\"", long_str);
     let mut interp = Interpreter::new_capturing();
     let _result = interp.eval_source(&source);

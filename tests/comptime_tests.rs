@@ -390,7 +390,7 @@ fn comptime_eval_float_mul() {
 
 #[test]
 fn comptime_eval_float_comparison() {
-    let r = comptime_eval("comptime { 3.14 > 2.72 }").unwrap();
+    let r = comptime_eval("comptime { 3.5 > 2.72 }").unwrap();
     assert_eq!(r, ComptimeValue::Bool(true));
 }
 
@@ -488,12 +488,12 @@ fn comptime_value_as_int() {
     assert_eq!(ComptimeValue::Int(42).as_int(), Some(42));
     assert_eq!(ComptimeValue::Bool(true).as_int(), Some(1));
     assert_eq!(ComptimeValue::Bool(false).as_int(), Some(0));
-    assert_eq!(ComptimeValue::Float(3.14).as_int(), None);
+    assert_eq!(ComptimeValue::Float(1.25).as_int(), None);
 }
 
 #[test]
 fn comptime_value_as_float() {
-    assert_eq!(ComptimeValue::Float(3.14).as_float(), Some(3.14));
+    assert_eq!(ComptimeValue::Float(1.25).as_float(), Some(1.25));
     assert_eq!(ComptimeValue::Int(42).as_float(), Some(42.0));
     assert_eq!(ComptimeValue::Bool(true).as_float(), None);
 }
@@ -508,7 +508,7 @@ fn comptime_value_as_bool() {
 #[test]
 fn comptime_value_display() {
     assert_eq!(format!("{}", ComptimeValue::Int(42)), "42");
-    assert_eq!(format!("{}", ComptimeValue::Float(3.14)), "3.14");
+    assert_eq!(format!("{}", ComptimeValue::Float(1.25)), "1.25");
     assert_eq!(format!("{}", ComptimeValue::Bool(true)), "true");
     assert_eq!(format!("{}", ComptimeValue::Str("hi".into())), "hi");
     assert_eq!(format!("{}", ComptimeValue::Null), "null");

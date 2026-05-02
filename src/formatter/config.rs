@@ -465,8 +465,10 @@ mod tests {
         assert_eq!(cfg.indent_str(1), "    ");
         assert_eq!(cfg.indent_str(2), "        ");
 
-        let mut cfg2 = FormatterConfig::default();
-        cfg2.indent_size = 2;
+        let cfg2 = FormatterConfig {
+            indent_size: 2,
+            ..Default::default()
+        };
         assert_eq!(cfg2.indent_str(3), "      ");
     }
 

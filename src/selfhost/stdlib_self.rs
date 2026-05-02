@@ -955,7 +955,7 @@ mod tests {
     #[test]
     fn s6_6_math_abs_min_max() {
         assert_eq!(fj_math_abs(&FjValue::Int(-42)), FjValue::Int(42));
-        assert_eq!(fj_math_abs(&FjValue::Float(-3.14)), FjValue::Float(3.14));
+        assert_eq!(fj_math_abs(&FjValue::Float(-1.25)), FjValue::Float(1.25));
         assert_eq!(
             fj_math_min(&FjValue::Int(3), &FjValue::Int(7)),
             FjValue::Int(3)
@@ -1177,9 +1177,9 @@ mod tests {
         let bad_int = fj_parse_int(&FjValue::Str("abc".into()));
         assert!(fj_is_err(&bad_int));
 
-        let ok_float = fj_parse_float(&FjValue::Str("3.14".into()));
+        let ok_float = fj_parse_float(&FjValue::Str("1.25".into()));
         if let Ok(FjValue::Float(n)) = fj_result_unwrap(&ok_float) {
-            assert!((n - 3.14).abs() < 1e-10);
+            assert!((n - 1.25).abs() < 1e-10);
         }
     }
 

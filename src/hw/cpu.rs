@@ -737,7 +737,7 @@ mod tests {
         let cpu = CpuFeatures::detect();
         let width = cpu.best_simd_width();
         assert!(
-            width >= 64 && width <= 512,
+            (64..=512).contains(&width),
             "SIMD width should be 64-512, got: {}",
             width
         );

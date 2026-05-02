@@ -471,7 +471,7 @@ pub enum TokenKind {
     // ── Literals ───────────────────────────────────────────────────────
     /// Integer literal (e.g. `42`, `0xFF`, `0b1010`, `0o17`).
     IntLit(i64),
-    /// Float literal (e.g. `3.14`, `1.0e-4`).
+    /// Float literal (e.g. `1.25`, `1.0e-4`).
     FloatLit(f64),
     /// String literal (e.g. `"hello"`).
     StringLit(String),
@@ -957,7 +957,7 @@ mod tests {
     #[test]
     fn token_kind_display_literals() {
         assert_eq!(format!("{}", TokenKind::IntLit(42)), "42");
-        assert_eq!(format!("{}", TokenKind::FloatLit(3.14)), "3.14");
+        assert_eq!(format!("{}", TokenKind::FloatLit(1.25)), "1.25");
         assert_eq!(format!("{}", TokenKind::StringLit("hi".into())), "\"hi\"");
         assert_eq!(format!("{}", TokenKind::CharLit('a')), "'a'");
     }

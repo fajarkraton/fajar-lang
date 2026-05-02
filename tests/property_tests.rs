@@ -524,7 +524,7 @@ proptest! {
     #[test]
     fn lexer_always_has_eof(s in "[a-z0-9 +\\-*/]{0,100}") {
         if let Ok(tokens) = tokenize(&s) {
-            prop_assert!(tokens.len() >= 1);
+            prop_assert!(!tokens.is_empty());
         }
     }
 

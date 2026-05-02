@@ -1040,9 +1040,9 @@ mod tests {
 
     #[test]
     fn e2_2_shared_ptr_value_access() {
-        let sp = SharedPtr::new(3.14_f64, "double");
+        let sp = SharedPtr::new(1.25_f64, "double");
         let val = sp.get().unwrap();
-        assert!((*val.downcast_ref::<f64>().unwrap() - 3.14).abs() < f64::EPSILON);
+        assert!((*val.downcast_ref::<f64>().unwrap() - 1.25).abs() < f64::EPSILON);
         assert_eq!(sp.type_name(), "double");
     }
 

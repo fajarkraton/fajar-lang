@@ -366,7 +366,7 @@ mod tests {
     fn s16_2_capture_state() {
         let mut locals = HashMap::new();
         locals.insert(0, CapturedValue::Int(42));
-        locals.insert(1, CapturedValue::Float(3.14));
+        locals.insert(1, CapturedValue::Float(1.25));
         let state = capture_state("loop_fn", 0, locals, 50);
         assert_eq!(state.iteration, 50);
         assert_eq!(state.locals.len(), 2);

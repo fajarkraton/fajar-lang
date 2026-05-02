@@ -1365,7 +1365,7 @@ mod tests {
 
     #[test]
     fn tokenize_float_literal() {
-        assert_tokens!("3.14", TokenKind::FloatLit(3.14));
+        assert_tokens!("1.25", TokenKind::FloatLit(1.25));
     }
 
     #[test]

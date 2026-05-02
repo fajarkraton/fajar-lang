@@ -527,7 +527,7 @@ mod tests {
         assert!(result.is_success());
         // math.fj changed, utils.fj and main.fj depend on it
         assert!(result.compiled_files.contains(&"math.fj".to_string()));
-        assert!(result.compiled_files.len() >= 1);
+        assert!(!result.compiled_files.is_empty());
     }
 
     #[test]

@@ -1021,7 +1021,7 @@ mod tests {
                 default: None,
             },
         ];
-        let args: Vec<String> = vec!["--output", "out.fj", "-v", "input.fj"]
+        let args: Vec<String> = ["--output", "out.fj", "-v", "input.fj"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn s4_5_parse_args_help() {
-        let args: Vec<String> = vec!["--help"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["--help"].iter().map(|s| s.to_string()).collect();
         let parsed = parse_args(&args, &[]).unwrap();
         assert!(parsed.help_requested);
     }

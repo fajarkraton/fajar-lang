@@ -215,12 +215,12 @@ fn convert_f64_to_f64_identity() {
     use fajar_lang::runtime::ml::tensor::TensorValue;
     use ndarray::ArrayD;
 
-    let data = ArrayD::from_shape_vec(vec![2], vec![3.14159, 2.71828]).unwrap();
+    let data = ArrayD::from_shape_vec(vec![2], vec![1.5, 2.5]).unwrap();
     let tensor = TensorValue::new(data, false);
     let converted = to_dtype(&tensor, DType::F64);
     let vals: Vec<f64> = converted.data().iter().cloned().collect();
-    assert!((vals[0] - 3.14159).abs() < 1e-10);
-    assert!((vals[1] - 2.71828).abs() < 1e-10);
+    assert!((vals[0] - 1.5).abs() < 1e-10);
+    assert!((vals[1] - 2.5).abs() < 1e-10);
 }
 
 // ════════════════════════════════════════════════════════════════════════

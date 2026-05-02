@@ -759,7 +759,7 @@ mod tests {
         let t = ComptimeValue::Tuple(vec![
             ComptimeValue::Int(1),
             ComptimeValue::Bool(true),
-            ComptimeValue::Float(3.14),
+            ComptimeValue::Float(1.25),
         ]);
         let alloc = serialize_const("TPL", &t, &target());
         // 8 (i64) + 1 (bool) + 8 (f64) = 17 bytes

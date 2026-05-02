@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn v14_dt6_nat_match_arm() {
-        let arms = vec![
+        let arms = [
             NatMatchArm {
                 pattern: NatPattern::Literal(0),
                 result_type: "Empty".into(),

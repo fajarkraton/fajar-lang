@@ -655,17 +655,17 @@ mod tests {
         let classic = CanFrame::new_standard(0x100, &[1, 2, 3]);
         assert_eq!(classic.max_data_length(), 3);
 
-        let fd = CanFrame::new_fd(0x100, &vec![0u8; 48], false);
+        let fd = CanFrame::new_fd(0x100, &[0u8; 48], false);
         assert_eq!(fd.max_data_length(), 48); // DLC 14 = 48 bytes
     }
 
     #[test]
     fn can_frame_dlc_encoding() {
         // FD DLC encoding: 9=12, 10=16, 11=20, 12=24, 13=32, 14=48, 15=64
-        let frame_12 = CanFrame::new_fd(0x100, &vec![0u8; 12], false);
+        let frame_12 = CanFrame::new_fd(0x100, &[0u8; 12], false);
         assert_eq!(frame_12.dlc, 9);
 
-        let frame_64 = CanFrame::new_fd(0x100, &vec![0u8; 64], false);
+        let frame_64 = CanFrame::new_fd(0x100, &[0u8; 64], false);
         assert_eq!(frame_64.dlc, 15);
     }
 

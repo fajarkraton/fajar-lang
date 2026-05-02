@@ -923,8 +923,10 @@ mod tests {
 
     #[test]
     fn d8_3_config_tls_validation() {
-        let mut config = ClusterConfig::default();
-        config.tls_enabled = true;
+        let config = ClusterConfig {
+            tls_enabled: true,
+            ..Default::default()
+        };
         let errors = config.validate().unwrap_err();
         assert!(errors.iter().any(|e| e.contains("tls_cert_path")));
     }

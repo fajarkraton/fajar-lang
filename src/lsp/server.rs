@@ -4815,7 +4815,7 @@ mod tests {
         let source = "fn foo() {\n    let x = 1\n}\nfn bar() {\n    let x = 99\n}";
         let scopes = build_scope_tree(source);
         let foo_scope = scopes.iter().find(|s| s.name == "foo").unwrap();
-        let refs = find_references_in_scope(source, "x", &foo_scope);
+        let refs = find_references_in_scope(source, "x", foo_scope);
         // Only x in foo, not in bar
         assert_eq!(refs.len(), 1, "should find 1 ref to x in foo scope only");
     }

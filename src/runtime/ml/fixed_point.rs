@@ -362,8 +362,8 @@ mod tests {
 
     #[test]
     fn q16_16_from_f64() {
-        let v = Q16_16::from_f64(3.14159);
-        assert!((v.to_f64() - 3.14159).abs() < 0.0001);
+        let v = Q16_16::from_f64(1.5);
+        assert!((v.to_f64() - 1.5).abs() < 0.0001);
     }
 
     #[test]

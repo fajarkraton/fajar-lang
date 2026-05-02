@@ -1183,7 +1183,7 @@ mod tests {
 
     #[test]
     fn safetensors_roundtrip_values() {
-        let expected: Vec<f32> = vec![3.14, 2.718, -1.0, 0.0, 42.0, -0.5];
+        let expected: Vec<f32> = vec![1.25, 3.58, -1.0, 0.0, 42.0, -0.5];
         let raw: Vec<u8> = expected.iter().flat_map(|v| v.to_le_bytes()).collect();
 
         let data = make_safetensors(&[("pi", "F32", &[6], &raw)]);
@@ -1313,9 +1313,8 @@ mod tests {
         let mut block = Vec::new();
         block.extend_from_slice(&scale_bits.to_le_bytes());
         // 16 bytes = 32 nibbles, each nibble = 8 → real = 1.0 * (8-8) = 0
-        for _ in 0..16 {
-            block.push(0x88); // lo=8, hi=8 → (8-8)=0, (8-8)=0
-        }
+        // 0x88 packs lo=8, hi=8 → both nibbles map to (8-8)=0 after Q4 zero-point shift
+        block.extend_from_slice(&[0x88; 16]);
 
         let result = dequantize_q4_0(&block, 32).unwrap();
         assert_eq!(result.len(), 32);

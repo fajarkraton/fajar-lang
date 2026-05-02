@@ -831,7 +831,7 @@ mod tests {
         // BRR = (45 << 4) | 9 = 0x2D9
         assert!(brr > 0);
         let mantissa = brr >> 4;
-        assert!(mantissa >= 44 && mantissa <= 46); // ~45
+        assert!((44..=46).contains(&mantissa)); // ~45
     }
 
     #[test]

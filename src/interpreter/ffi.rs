@@ -288,9 +288,9 @@ mod tests {
 
     #[test]
     fn marshal_float_to_c() {
-        let raw = marshal_to_c(&Value::Float(3.14), &FfiType::F64).unwrap();
+        let raw = marshal_to_c(&Value::Float(1.25), &FfiType::F64).unwrap();
         let back = f64::from_bits(raw as u64);
-        assert!((back - 3.14).abs() < 1e-10);
+        assert!((back - 1.25).abs() < 1e-10);
     }
 
     #[test]

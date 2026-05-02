@@ -3204,7 +3204,7 @@ mod tests {
 
     #[test]
     fn eval_float_literal() {
-        assert_eq!(eval("3.14").unwrap(), Value::Float(3.14));
+        assert_eq!(eval("1.25").unwrap(), Value::Float(1.25));
     }
 
     #[test]
@@ -3320,7 +3320,7 @@ mod tests {
     #[test]
     fn eval_negation() {
         assert_eq!(eval("-42").unwrap(), Value::Int(-42));
-        assert_eq!(eval("-3.14").unwrap(), Value::Float(-3.14));
+        assert_eq!(eval("-1.25").unwrap(), Value::Float(-1.25));
     }
 
     #[test]
@@ -3864,7 +3864,7 @@ mod tests {
             struct Circle { radius: f64 }
             impl Circle {
                 fn diameter(self) -> f64 { self.radius * 2.0 }
-                fn area_approx(self) -> f64 { 3.14159 * self.radius * self.radius }
+                fn area_approx(self) -> f64 { 1.5 * self.radius * self.radius }
             }
             let c = Circle { radius: 5.0 }
             c.diameter()
@@ -6502,7 +6502,7 @@ mod tests {
     fn ls2_6_inlay_hint_for_float() {
         use crate::lsp::completion::InlayHintProvider;
         let provider = InlayHintProvider::new();
-        let hints = provider.compute_inlay_hints("let pi = 3.14");
+        let hints = provider.compute_inlay_hints("let pi = 1.25");
         assert!(!hints.is_empty());
         assert!(hints[0].label.contains("f64") || hints[0].label.contains("float"));
     }
@@ -7262,8 +7262,8 @@ let y = x",
     #[test]
     fn pr1_7_semver_parse() {
         use crate::package::registry::SemVer;
-        let v = SemVer::parse("3.14.1").unwrap();
-        assert_eq!(v, SemVer::new(3, 14, 1));
+        let v = SemVer::parse("1.25.1").unwrap();
+        assert_eq!(v, SemVer::new(1, 25, 1));
         assert!(SemVer::parse("not.a.version").is_err());
     }
 

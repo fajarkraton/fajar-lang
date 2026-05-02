@@ -1063,7 +1063,7 @@ mod tests {
     fn s4_2_constant_pool_types() {
         let mut pool = ConstantPool::new();
         pool.add(Constant::Int(1));
-        pool.add(Constant::Float(3.14));
+        pool.add(Constant::Float(1.25));
         pool.add(Constant::Bool(true));
         pool.add(Constant::Str("hello".into()));
         pool.add(Constant::Null);

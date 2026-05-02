@@ -1434,7 +1434,7 @@ mod tests {
         let cfg = H5UartConfig::new(115_200);
         let brr = cfg.brr_value(125_000_000);
         // BRR = 125_000_000 / 115_200 ≈ 1085
-        assert!(brr >= 1084 && brr <= 1086);
+        assert!((1084..=1086).contains(&brr));
     }
 
     #[test]

@@ -671,7 +671,7 @@ pub enum Stmt {
 /// all produce values.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    /// A literal value: `42`, `3.14`, `"hello"`, `true`, `null`.
+    /// A literal value: `42`, `1.25`, `"hello"`, `true`, `null`.
     Literal {
         /// The kind of literal.
         kind: LiteralKind,
@@ -1153,7 +1153,7 @@ impl Expr {
 pub enum LiteralKind {
     /// Integer literal (e.g., `42`, `0xFF`).
     Int(i64),
-    /// Float literal (e.g., `3.14`, `1.0e-4`).
+    /// Float literal (e.g., `1.25`, `1.0e-4`).
     Float(f64),
     /// String literal (e.g., `"hello"`).
     String(String),
@@ -2003,7 +2003,7 @@ mod tests {
     #[test]
     fn literal_kind_display() {
         assert_eq!(format!("{}", LiteralKind::Int(42)), "42");
-        assert_eq!(format!("{}", LiteralKind::Float(3.14)), "3.14");
+        assert_eq!(format!("{}", LiteralKind::Float(1.25)), "1.25");
         assert_eq!(format!("{}", LiteralKind::String("hi".into())), "\"hi\"");
         assert_eq!(
             format!("{}", LiteralKind::RawString("raw".into())),

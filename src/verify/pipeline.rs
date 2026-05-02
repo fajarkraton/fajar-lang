@@ -851,9 +851,11 @@ mod tests {
 
     #[test]
     fn v7_1_should_verify() {
-        let mut config = VerifyConfig::default();
-        config.enabled = true;
-        config.exclude = vec!["test_".to_string(), "vendor/".to_string()];
+        let config = VerifyConfig {
+            enabled: true,
+            exclude: vec!["test_".to_string(), "vendor/".to_string()],
+            ..Default::default()
+        };
 
         assert!(config.should_verify("src/main.fj"));
         assert!(!config.should_verify("test_helper.fj"));

@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn s16_6_warmup_data() {
         let data = generate_warmup_data(&[1, 3, 224, 224]);
-        assert_eq!(data.len(), 1 * 3 * 224 * 224);
+        assert_eq!(data.len(), 3 * 224 * 224);
     }
 
     // S16.7 — Health & Readiness

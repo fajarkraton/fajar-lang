@@ -517,8 +517,8 @@ fn safety_copy_bool_no_move() {
 #[test]
 fn safety_copy_float_no_move() {
     assert_eq!(
-        eval("let x = 3.14\nlet y = x\nx").unwrap(),
-        Value::Float(3.14)
+        eval("let x = 1.25\nlet y = x\nx").unwrap(),
+        Value::Float(1.25)
     );
 }
 
@@ -759,10 +759,7 @@ fn safety_tensor_div_by_zero() {
     // Tensor div by zero may produce Inf/NaN rather than error — verify it doesn't panic
     let result = eval(src);
     // Either succeeds (with Inf/NaN) or returns error — both are safe
-    match result {
-        Ok(_) => {}  // NaN/Inf is ok
-        Err(_) => {} // Error is also ok
-    }
+    let _ = result;
 }
 
 #[test]
@@ -1046,7 +1043,7 @@ fn strict_copy_bool_no_move() {
 fn strict_copy_float_no_move() {
     expect_strict_ok(
         r#"
-        let x: f64 = 3.14
+        let x: f64 = 1.25
         let y: f64 = x
         let z: f64 = x + y
         "#,

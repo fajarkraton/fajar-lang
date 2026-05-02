@@ -1117,7 +1117,7 @@ mod tests {
 
         let summary = cache.get("abs");
         assert!(summary.is_some());
-        assert!(summary.map_or(false, |s| s.is_pure));
+        assert!(summary.is_some_and(|s| s.is_pure));
         assert_eq!(cache.hits, 1);
 
         let miss = cache.get("unknown_fn");

@@ -581,12 +581,12 @@ mod tests {
         let key = make_key("replace_me");
 
         // Store 10-byte artifact
-        let art1 = make_artifact(key.clone(), &vec![0u8; 10], 100);
+        let art1 = make_artifact(key.clone(), &[0u8; 10], 100);
         cache.cache_store(key.clone(), art1).expect("store ok");
         assert_eq!(cache.stats().total_size, 10);
 
         // Replace with 20-byte artifact
-        let art2 = make_artifact(key.clone(), &vec![0u8; 20], 200);
+        let art2 = make_artifact(key.clone(), &[0u8; 20], 200);
         cache.cache_store(key, art2).expect("store ok");
         assert_eq!(cache.stats().total_size, 20);
         assert_eq!(cache.len(), 1);

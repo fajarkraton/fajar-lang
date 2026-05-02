@@ -1174,7 +1174,7 @@ mod tests {
     fn w7_6_dns_resolve_localhost() {
         let table = SocketTable::new();
         let addrs = table.resolve("localhost").unwrap();
-        assert!(addrs.len() >= 1);
+        assert!(!addrs.is_empty());
         assert!(addrs.contains(&IpAddress::localhost_v4()));
     }
 

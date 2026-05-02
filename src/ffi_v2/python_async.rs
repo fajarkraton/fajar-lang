@@ -1228,9 +1228,9 @@ mod tests {
     #[test]
     fn e4_3_awaitable_consume() {
         let mut aw = FajarAwaitable::new("compute");
-        aw.set_result(PyAsyncValue::Float(3.14));
+        aw.set_result(PyAsyncValue::Float(1.25));
         let val = aw.consume().unwrap();
-        assert_eq!(val, PyAsyncValue::Float(3.14));
+        assert_eq!(val, PyAsyncValue::Float(1.25));
         assert!(aw.is_consumed());
 
         // Second consume fails

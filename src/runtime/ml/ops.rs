@@ -2096,7 +2096,7 @@ mod tests {
         let a = TensorValue::from_data(vec![-100.0, -1.0, 0.0, 1.0, 100.0], &[5]).unwrap();
         let b = tanh_act(&a);
         for &v in b.to_vec().iter() {
-            assert!(v >= -1.0 && v <= 1.0, "tanh out of range: {v}");
+            assert!((-1.0..=1.0).contains(&v), "tanh out of range: {v}");
         }
     }
 

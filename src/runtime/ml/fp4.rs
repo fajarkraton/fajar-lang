@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn fp4_tensor_single_element() {
-        let tensor = TensorValue::from_data(vec![3.14], &[1]).unwrap();
+        let tensor = TensorValue::from_data(vec![1.25], &[1]).unwrap();
         let quantized = Fp4Tensor::quantize(&tensor, 32);
         assert_eq!(quantized.len(), 1);
         let back = quantized.dequantize();

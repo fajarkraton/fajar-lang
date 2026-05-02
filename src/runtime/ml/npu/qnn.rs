@@ -1169,12 +1169,12 @@ mod tests {
             "input_0",
             QnnDataType::UfixedPoint8,
             vec![1, 3, 224, 224],
-            vec![0u8; 1 * 3 * 224 * 224],
+            vec![0u8; 3 * 224 * 224],
         );
         assert_eq!(t.name, "input_0");
         assert_eq!(t.tensor_type, QnnTensorType::AppWrite);
-        assert_eq!(t.numel(), 1 * 3 * 224 * 224);
-        assert_eq!(t.byte_size(), 1 * 3 * 224 * 224); // UINT8 = 1 byte
+        assert_eq!(t.numel(), 3 * 224 * 224);
+        assert_eq!(t.byte_size(), 3 * 224 * 224); // UINT8 = 1 byte
     }
 
     #[test]

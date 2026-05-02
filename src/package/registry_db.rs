@@ -1620,6 +1620,7 @@ mod tests {
     }
 
     /// Helper: quick publish with positional args (avoids PublishRequest boilerplate in tests).
+    #[allow(clippy::too_many_arguments)]
     fn quick_publish(
         reg: &RegistryDb,
         auth: &AuthResult,

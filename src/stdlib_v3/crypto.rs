@@ -1388,7 +1388,7 @@ mod tests {
         // Should always be in [10, 20)
         for _ in 0..100 {
             let val = random_u64_range(10, 20);
-            assert!(val >= 10 && val < 20, "got {val}, expected [10, 20)");
+            assert!((10..20).contains(&val), "got {val}, expected [10, 20)");
         }
     }
 

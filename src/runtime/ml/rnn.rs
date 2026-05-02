@@ -868,7 +868,10 @@ mod tests {
         let (h_t, _c_t) = lstm.forward_step(&x, &h0, &c0).unwrap();
         // h_t = o_t * tanh(c_t), tanh bounds to [-1, 1], o_t in [0, 1]
         for &val in h_t.to_vec().iter() {
-            assert!(val >= -1.0 && val <= 1.0, "h_t value {val} out of [-1, 1]");
+            assert!(
+                (-1.0..=1.0).contains(&val),
+                "h_t value {val} out of [-1, 1]"
+            );
         }
     }
 
@@ -979,7 +982,7 @@ mod tests {
         // Starting from zero h0, values should be in [-1, 1]
         for &val in h_t.to_vec().iter() {
             assert!(
-                val >= -1.0 && val <= 1.0,
+                (-1.0..=1.0).contains(&val),
                 "GRU h_t value {val} out of [-1, 1]"
             );
         }

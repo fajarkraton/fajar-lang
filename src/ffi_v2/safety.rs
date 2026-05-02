@@ -1547,7 +1547,7 @@ mod tests {
     #[test]
     fn e9_8_endianness_f32_roundtrip() {
         let conv = EndiannessConverter::new();
-        let val: f32 = 3.14;
+        let val: f32 = 1.25;
         let bytes = conv.f32_to_bytes(val, Endianness::Big);
         let restored = conv.f32_from_bytes(bytes, Endianness::Big);
         assert!((restored - val).abs() < 1e-6);

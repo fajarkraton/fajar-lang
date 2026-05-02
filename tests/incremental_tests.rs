@@ -234,7 +234,7 @@ fn temp_path(name: &str) -> String {
 
 #[test]
 fn cache_store_and_lookup() {
-    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache"));
     let key = CacheKey::new("hash1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Object, vec![1, 2, 3], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
@@ -245,14 +245,14 @@ fn cache_store_and_lookup() {
 
 #[test]
 fn cache_miss_for_unknown_key() {
-    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache"));
     let key = CacheKey::new("unknown".into(), "v1".into(), "x86".into(), "O2".into());
     assert!(cache.cache_lookup(&key).is_none());
 }
 
 #[test]
 fn cache_invalidation() {
-    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache"));
     let key = CacheKey::new("h1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Ast, vec![42], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
@@ -263,7 +263,7 @@ fn cache_invalidation() {
 
 #[test]
 fn cache_stats_tracking() {
-    let mut cache = ArtifactCache::new(temp_path("fj-test-cache").into());
+    let mut cache = ArtifactCache::new(temp_path("fj-test-cache"));
     let key = CacheKey::new("h1".into(), "v1".into(), "x86".into(), "O2".into());
     let artifact = CachedArtifact::new(key.clone(), ArtifactType::Object, vec![1], 1);
     cache.cache_store(key.clone(), artifact).unwrap();
