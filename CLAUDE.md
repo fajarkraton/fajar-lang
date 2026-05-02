@@ -110,6 +110,7 @@ Numbers verified by runnable commands as of 2026-04-14 (V27 sync). V26 audit cor
 
 | Version | Date | Highlight |
 |---|---|---|
+| **V32** "Audit Complete" | 2026-05-02 | HONEST_AUDIT_V32 deep re-audit (commits `ecd265a2..96843ab7`). 0 module demotions; 7626 lib + 2498 integ + 14 doc tests all green; 5 gaps surfaced (G1 LLVM O2 deferred opportunistic; G2/G3/G4/G5 closed via F1-F4 followup). FAJAR_LANG_PERFECTION_PLAN v1.0 enumerates remaining 25 work-items across 10 phases. |
 | **V30.TRACK4** "FS Roundtrip" | 2026-04-20 | FajarOS Nova v3.7.0. ext2/FAT32 disk harness: `scripts/build_test_disk.py` + `make test-fs-roundtrip` (9-invariant gate). Fixed silent QEMU triple-fault via `-boot order=d`. Surfaced V31 latent bug: `ext2_create` returns -1 on freshly-mkfs'd disk. Rule: §6.10. |
 | **V30.GEMMA3** "Foundation (Path D)" | 2026-04-20 | FajarOS Nova v3.6.0. Gemma 3 1B 12 phases audit-PASS: GQA, dual-theta RoPE, SWA, gated FFN, 4-norm RMSNorm, 262K BPE @ LBA 1054705. Ship as research artifact; pad-collapse deferred to V31 R3. Gates: `make test-gemma3-{e2e,kernel-path}`. |
 | **V29.P3.P6** "NX Triple Closure" | 2026-04-16 | V26 B4.2 security triple 3/3 COMPLETE. Fix: `pd_idx=1→2` in `security.fj:236` (kernel `.text` straddles PD[0]+PD[1]). Gate: `make test-security-triple-regression`. |
@@ -302,13 +303,13 @@ Error codes:         PREFIX + NUMBER -> SE004, KE001, CE003
 
 ### 6.6 Documentation Integrity Rules (Non-Negotiable)
 
-These rules exist because of GAP_ANALYSIS_V2 findings. They prevent inflated claims.
+These rules exist because of GAP_ANALYSIS_V2 + HONEST_AUDIT_V32 findings. They prevent inflated claims.
 
 1. **[x] means END-TO-END working.** A task is only [x] if a user can actually USE the feature. Type definitions with passing unit tests are `[f]` (framework), not `[x]`.
 
 2. **Every task needs a verification method.** "Verify: send HTTP request and receive response" not "Verify: unit test passes".
 
-3. **No inflated statistics.** Documentation must match actual code capability. Reference GAP_ANALYSIS_V2.md for accurate LOC/status.
+3. **No inflated statistics.** Documentation must match actual code capability. Reference HONEST_AUDIT_V32.md (latest) or HONEST_AUDIT_V26.md / GAP_ANALYSIS_V2.md (historical) for accurate LOC/status.
 
 4. **No stub plans.** Every option in a plan must have full task tables. No `*(placeholder)*` lines.
 
@@ -677,8 +678,10 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 |---|---|
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 (54 [x], 0 [f], 0 [s]) |
 | **Current plan (V26)** | **`docs/V26_PRODUCTION_PLAN.md`** v1.2 — Phase A1+A2+A3+A4 done (FajarQuant split), B+C hardened with §10.5 |
-| **V26 audit trail** | **`docs/HONEST_AUDIT_V26.md`** — corrections to prior counts |
-| **Version history (V18-V26)** | **`CHANGELOG.md`** (root) — full Added/Changed/Fixed/Stats per version |
+| **Latest audit (V32)** | **`docs/HONEST_AUDIT_V32.md`** — deep re-audit 2026-05-02; 0 demotions, 5 gaps + 4-fix followup closeout |
+| **Perfection plan (in-progress)** | **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan to close ALL remaining gaps to "sempurna" |
+| **V26 audit trail** | `docs/HONEST_AUDIT_V26.md` — historical baseline corrections |
+| **Version history (V18-V32)** | **`CHANGELOG.md`** (root) — full Added/Changed/Fixed/Stats per version |
 | **FajarQuant standalone** | **`~/Documents/fajarquant/`** — extracted 2026-04-11. Algorithms, paper, data, scripts. fajar-lang depends via path/git Cargo dep + re-export shim |
 | **FajarQuant Phase E** (bilingual ID+EN ternary kernel-context LLM, Tier 1+2; Tier 3 → Phase F) | Plan: `~/Documents/fajarquant/docs/FJQ_PHASE_E_BILINGUAL_KERNEL_PRODUCTION_PLAN.md` v1.9. State: E0+E1+E2.0+E2.4+E2.1 CLOSED. Two honest NEGATIVE results (E2.4 balanced_calib, E2.1 Hadamard) demoted to F.5/F.6. Bilingual corpus v1.0 = 25.67 B tokens 60:40 ID:EN. Findings + decision docs in `~/Documents/fajarquant/docs/FJQ_PHASE_E_*`. Full per-sub-phase detail in `MEMORY.md`. |
 | **Honest codebase audit (older)** | `docs/HONEST_AUDIT_V17.md` (V17 baseline) |
@@ -710,5 +713,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 31.4 (V32-prep F.13 closure cycle + F.11 demotion to PERMANENT-DEFERRED). Latest (full detail → `CHANGELOG.md` + `MEMORY.md`): **F.11 chain DEMOTED 2026-05-01** after ~31h cumulative + Tier 2E + Branch X-real attempts hit upstream-encoder-shape blocker (`NotImplementedError` for K=256). Per F.13.3 dispatch verdict, FajarOS scalar Rust path (50-100 tok/s, F.11.3 production) is adequate; TL2 acceleration would be 3-5× but NOT critical-path. Vendored kernel + FFI + magnitude encoder + 60+ tests SHIP AS-IS as shipping-ready foundation; sign byte parity unresolved as known limitation. 4 mechanical re-entry conditions documented in roadmap §F.11. F.13 chain: Z-narrow + F.13.1 v1+v2 (cold-GPU 19.7 corrected to warm 118.9 naive / 158 kvcache / 202.6 best); verdict G3 cushion vanished but static-rule HOLDS per decision-doc §11. Prevention gate `make verify-f13-decision` 23/23 PASS. arXiv checklist v1.1 + v2 paper draft edits ready (Edit A/B/C founder editorial). FajarOS Nova plan V1 (12 gaps, 33/33 invariants verified). V31.E1 bilingual corpus v1.0 (25.67 B tokens). V31.E2 negatives → F.5/F.6. V31.C Track B (§6.11). Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-01*
+*CLAUDE.md Version: 32 (**V32-AUDIT-COMPLETE 2026-05-02**: zero module demotions across V27-V31 cycle, 4 of 5 surfaced gaps closed). HONEST_AUDIT_V32 deep re-audit (commits `ecd265a2..96843ab7`) hand-re-verified 7626 lib + 2498 integ + 14 doc tests, 0 fail / 0 flake / 0 clippy / 0 fmt drift / 0 production unwrap / 0 doc warning. V27.5 -97% effort variance debunked (work was real, 16 dedicated E2E tests pass). Followup F1-F4 closed: F1 §3 numerical drift sync, F2 G4 RETRACTED honestly post incomplete-grep, F3 call_main TypeError 3 unit tests, F4 @interrupt codegen IR-attribute E2E 2 tests (gated `--features llvm`). G1 LLVM O2 miscompile UNFIXED at root — opportunistic, quarantined via `@no_vectorize` + gcc C bypass + Phase D MatMul-Free architecture choice; M9 milestone open. **FAJAR_LANG_PERFECTION_PLAN v1.0** (commit `efad9ce3`) enumerates remaining 25-item gap inventory across 10 phases (~130-200h realistic Claude effort, 4-15 weeks calendar). Pre-V32 history compressed: F.11 demoted, F.13 dispatch verdict, V31.C Phase D scaling chain, F.5/F.6.4 ablations, arXiv submission ready. Detail → `CHANGELOG.md` + `MEMORY.md` + `docs/HONEST_AUDIT_V32.md`. Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-02*
