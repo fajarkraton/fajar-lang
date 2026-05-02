@@ -51,13 +51,96 @@ MatMul-Free architecture choice. M9 "Fajar Lang clean" milestone open.
 
 ---
 
+## [27.5.0] — 2026-04-14 "Compiler Prep" (back-filled 2026-05-02 from GitHub Release)
+
+> Deep audit found 6/10 reported gaps were already implemented. 4 real gaps + 7 enhancements addressed in 5.6h actual vs 196h estimated (-97% — variance debunked in HONEST_AUDIT_V32 §4: leverage of pre-existing infra + estimate inflation, work is real with 16 dedicated E2E tests).
+
+### Added (V28-V33 prep)
+
+- **`MAX_KERNEL_TENSOR_DIM`** raised 16 → 128 (Gemma 3 head_dim=256 unblocked)
+- **AI scheduler builtins:** `tensor_workload_hint(rows, cols)`, `schedule_ai_task(id, priority, deadline)`
+- **`@interrupt` ISR wrappers** — ARM64 + x86_64 + target dispatcher, wired to AOT pipeline (codegen at `src/codegen/llvm/mod.rs:3312-3325` adds `naked + noinline + .text.interrupt` section; E2E test added in V32 follow-up F4)
+- **VESA framebuffer extensions:** `fb_set_base(addr)`, `fb_scroll(lines)` + full MMIO stack
+- **IPC service stubs:** `ServiceStub::from_service_def()` generates dispatch fn names, sequential message IDs, client proxy names, ID constants
+- **`@app`** annotation (GUI application entry point, V30 Desktop)
+- **`@host`** annotation (Stage 1 self-hosting compiler context, V31)
+- **Refinement predicates** extended from let-binding to function parameters
+- **`Cap<T>`** capability type with linear semantics: `cap_new`, `cap_unwrap`, `cap_is_valid`
+
+### Quality & Prevention
+
+- **`tests/v27_5_compiler_prep.rs`** — 16 E2E integration tests covering AI scheduler, framebuffer, @app/@host, refinement params, Cap<T>, cross-feature integration
+- **`v27_5_regression` CI job** runs on every push (`.github/workflows/ci.yml`)
+- Version sync check added to pre-commit hook
+
+### Stats
+
+- 7,623 lib tests + 16 V27.5 integration = ~10,200 total tests
+- 0 failures, 0 clippy warnings, 0 fmt diffs
+- All 12 feature flags tested
+
+---
+
+## [27.0.0] — 2026-04-13 "Hardened" (back-filled 2026-05-02 from GitHub Release)
+
+> Deep re-audit found 5 gaps. All closed with prevention layers.
+
+### Added
+
+- **12 feature flag integration tests** in `tests/feature_flag_tests.rs` (22 actual `#[test]` fns gated on `#[cfg(feature = "...")]` for websocket, mqtt, ble, gui, https, cuda, smt, cpp-ffi, python-ffi, gpu, tls, playground-wasm)
+- **`scripts/check_version_sync.sh`** — Cargo.toml ↔ CLAUDE.md major-version sync check (V27 A4 prevention layer)
+
+### Changed
+
+- **`call_main()`** rejects non-Function `main` with `RuntimeError::TypeError` (was silent `Null`); test coverage added in V32 follow-up F3
+- **Cargo.toml version** 24.0.0 → 27.0.0; CLAUDE.md banner V27.0
+
+### Fixed
+
+- **10 cargo doc broken intra-doc links** — bracket escaping, HTML tag wrapping; `cargo doc` now emits 0 warnings
+
+### Stats
+
+- 7,611 lib + 2,553 integ + 14 doc = ~10,179 tests
+- 238 examples | 54 modules | ~448K LOC
+- 12 feature flags with integration tests
+
+---
+
+## [26.3.0] — 2026-04-13 "V26 Final" (back-filled 2026-05-02 from GitHub Release)
+
+> All three V26 phases complete. Phase A 100%, Phase B 100%, Phase C ~95%.
+
+### Added
+
+- **12 v3 tensor ops as interpreter builtins** for FajarQuant v3 profiler: `var_axis`, `std_axis`, `kurtosis`, `svd_ratio`, `select`, `per_channel_quant`, `residual_quant`, `asymmetric_quant`, `abs_max`, `topk`, `skewness`, `channel_cv`
+- **`docs/V26_FAJARQUANT_V3_PLAN.md`** — committed FajarQuant v3 plan
+
+### Changed
+
+- **CLAUDE.md** synced to v25.1 with verified numbers (7,611 tests, 238 examples)
+
+### Stats
+
+- 7,611 lib tests + 2,374 integ + 14 doc ≈ 10,000 total
+- 238 examples | 54 modules (0 framework, 0 stubs)
+- ~446K LOC Rust across 394 source files
+- 80/80 stress runs at `--test-threads=64`
+
+### Companion Releases
+
+- [FajarOS v3.1.0](https://github.com/fajarkraton/fajaros-x86/releases/tag/v3.1.0) — Security hardened
+- [FajarQuant v0.3.0](https://github.com/fajarkraton/fajarquant/releases/tag/v0.3.0-fajarquant-v3.1) — Adaptive per-head selection
+
+---
+
 ## [31.0.0] — 2026-04-23 "Phase D + Track B"
 
 > 8-day catch-up consolidating V28-V31 across compiler + OS + quant. Last
-> CHANGELOG entry was v26.2.0 (2026-04-13); this entry covers v26.3.0,
-> v27.0.0, v27.5.0, and v31.0.0 collectively. GitHub Releases preserve
-> the granular release notes for each intermediate tag. Granular CHANGELOG
-> back-fill for the 3 intermediate tags is a deferred follow-up.
+> CHANGELOG entry was v26.2.0 (2026-04-13); this entry retains the bulk
+> V28-V31 changes. v26.3.0, v27.0.0, v27.5.0 entries above are back-filled
+> 2026-05-02 from their GitHub Release pages (per FAJAR_LANG_PERFECTION_PLAN
+> P1.A5).
 
 ### Added
 
