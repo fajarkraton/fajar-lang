@@ -1,0 +1,31 @@
+// V32 Perfection Plan P2.A4 — @interrupt full E2E demo
+//
+// This file exercises the complete .fj source → LLVM IR pipeline for
+// @interrupt-annotated functions. The codegen at
+// src/codegen/llvm/mod.rs:3312-3325 attaches `naked + noinline`
+// attributes and places the function in the `.text.interrupt` ELF
+// section. P2.A4 verifies all three properties E2E from .fj source
+// (extending P1 followup F4's codegen-API direct test).
+//
+// Usage: covered by tests/llvm_e2e_tests.rs::at_interrupt_e2e_compiles_with_isr_attributes
+
+@interrupt
+fn timer_isr() -> i64 {
+    // Real ISRs would do hardware ack + state save/restore. This minimal
+    // body suffices to verify the codegen attribute path: empty function
+    // body still gets `naked + noinline + .text.interrupt`.
+    0
+}
+
+@interrupt
+fn syscall_handler() -> i64 {
+    // Two interrupts in one file confirms the codegen path is per-function,
+    // not a global flag.
+    42
+}
+
+fn main() -> i64 {
+    // Regular function — must NOT receive @interrupt attributes. Coexists
+    // in the same compilation unit as the ISRs.
+    99
+}

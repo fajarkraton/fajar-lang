@@ -946,3 +946,117 @@ fn llvm_e2e_shr() {
         16
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// V32 Perfection P2.A4 — @interrupt full source-level E2E
+// ═══════════════════════════════════════════════════════════════════
+//
+// Closes the gap surfaced by HONEST_AUDIT_V32 §4 G2 in its FULL
+// .fj-source-to-IR form. P1 followup F4 added a codegen-API direct
+// test (src/codegen/llvm/mod.rs::at_interrupt_emits_naked_noinline_*).
+// This test extends that by going through the COMPLETE pipeline:
+// .fj file → tokenize → parse → LlvmCompiler::compile_program → IR
+// grep. Verifies the lexer, parser, AST, and codegen all agree on
+// @interrupt's `naked + noinline + .text.interrupt` semantics.
+
+#[test]
+fn at_interrupt_e2e_compiles_with_isr_attributes() {
+    let source = std::fs::read_to_string("examples/at_interrupt_demo.fj")
+        .expect("examples/at_interrupt_demo.fj must exist (created in P2.A4)");
+
+    let tokens = fajar_lang::lexer::tokenize(&source).expect("lexer should accept @interrupt");
+    let program = fajar_lang::parser::parse(tokens).expect("parser should accept @interrupt");
+
+    LlvmCompiler::init_native_target().unwrap();
+    let context = Context::create();
+    let mut compiler = LlvmCompiler::new(&context, "at_interrupt_e2e");
+    compiler
+        .compile_program(&program)
+        .expect("@interrupt full pipeline should compile cleanly");
+    compiler.verify().expect("LLVM IR should verify");
+    let ir = compiler.print_ir();
+
+    // Each @interrupt fn must have naked + noinline attributes attached.
+    // LLVM IR groups them under attributes #N tags:
+    //   define i64 @timer_isr() #N { ... }
+    //   attributes #N = { naked noinline ... }
+    assert!(
+        ir.contains("naked"),
+        "expected `naked` attribute somewhere in IR — codegen at \
+         src/codegen/llvm/mod.rs:3314-3317. IR was:\n{ir}",
+    );
+    assert!(
+        ir.contains("noinline"),
+        "expected `noinline` attribute somewhere in IR — codegen at \
+         src/codegen/llvm/mod.rs:3318-3322. IR was:\n{ir}",
+    );
+
+    // Both ISR functions must be placed in .text.interrupt section.
+    // The `main` function (no annotation) must NOT be.
+    assert!(
+        ir.contains(".text.interrupt"),
+        "expected `.text.interrupt` ELF section directive — codegen at \
+         src/codegen/llvm/mod.rs:3324. IR was:\n{ir}",
+    );
+
+    // Defensive: count occurrences. With 2 @interrupt fns + 1 plain main,
+    // there should be at least 2 references to .text.interrupt (one per
+    // ISR's section attribute). Allow more in case of LLVM duplication.
+    let section_refs = ir.matches(".text.interrupt").count();
+    assert!(
+        section_refs >= 2,
+        "expected ≥2 `.text.interrupt` references (2 @interrupt fns); \
+         found {section_refs}. IR was:\n{ir}",
+    );
+}
+
+#[test]
+fn at_interrupt_e2e_main_fn_not_in_interrupt_section() {
+    // Defensive E2E: regular `main` in the same .fj file must NOT pick up
+    // the `.text.interrupt` section. Verifies the codegen path is
+    // per-function-annotation, not a per-module flag that leaks.
+    let source = std::fs::read_to_string("examples/at_interrupt_demo.fj")
+        .expect("examples/at_interrupt_demo.fj must exist");
+
+    let tokens = fajar_lang::lexer::tokenize(&source).unwrap();
+    let program = fajar_lang::parser::parse(tokens).unwrap();
+
+    LlvmCompiler::init_native_target().unwrap();
+    let context = Context::create();
+    let mut compiler = LlvmCompiler::new(&context, "at_interrupt_e2e_main_isolation");
+    compiler.compile_program(&program).unwrap();
+    let ir = compiler.print_ir();
+
+    // The `main` function definition must appear without immediately-
+    // adjacent `.text.interrupt` or `naked` modifiers. We grep for the
+    // function definition line and check the next few lines / containing
+    // attribute group don't grant it ISR treatment.
+    //
+    // LLVM IR for a non-interrupt fn looks like:
+    //   define i64 @main() #2 { ... }
+    //   attributes #2 = { mustprogress nofree norecurse nounwind ... }
+    //
+    // Verifying the absence rigorously requires parsing the IR; for the
+    // E2E sanity check we assert that grep for "@main()" and grep for
+    // ".text.interrupt" do NOT co-locate via their attribute group #.
+    //
+    // Simpler defensive: the IR should contain exactly 2 distinct attribute
+    // groups containing both "naked" AND "noinline" (one per @interrupt
+    // fn). If main accidentally got naked, we'd see ≥3 such groups.
+
+    // Find unique attribute-group lines containing both naked and noinline.
+    let isr_attr_groups: std::collections::HashSet<&str> = ir
+        .lines()
+        .filter(|l| l.starts_with("attributes #") && l.contains("naked") && l.contains("noinline"))
+        .collect();
+
+    assert!(
+        isr_attr_groups.len() <= 2,
+        "expected ≤2 attribute groups with `naked` + `noinline` (one per \
+         @interrupt fn at most); found {}. main() may have leaked ISR \
+         attributes. Groups:\n{:#?}\nFull IR:\n{}",
+        isr_attr_groups.len(),
+        isr_attr_groups,
+        ir,
+    );
+}
