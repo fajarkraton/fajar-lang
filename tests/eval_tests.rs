@@ -5,6 +5,7 @@
 
 use fajar_lang::analyzer::analyze;
 use fajar_lang::interpreter::Interpreter;
+use fajar_lang::interpreter::RuntimeError;
 use fajar_lang::interpreter::Value;
 use fajar_lang::lexer::tokenize;
 use fajar_lang::parser::parse;
@@ -16807,4 +16808,70 @@ fn actor_spawn_returns_map() {
         out[1].contains("Actor"),
         "actor type should be Actor: {out:?}"
     );
+}
+
+// ═══════════════════════════════════════════════════════════
+// V32 audit follow-up F3 (G3) — call_main rejects non-Function main
+// ═══════════════════════════════════════════════════════════
+//
+// Closes a test-coverage gap surfaced by HONEST_AUDIT_V32.md §4 G3.
+// V27.0 fixed `call_main()` to reject non-Function main with TypeError
+// (was silent Null) — see src/interpreter/eval/mod.rs:2041. This test
+// exercises that path explicitly.
+
+#[test]
+fn call_main_rejects_non_function_main_int() {
+    // `let main = 42` defines `main` as Int, not Function. call_main()
+    // must return RuntimeError::TypeError, not silently succeed.
+    let mut interp = Interpreter::new();
+    interp
+        .eval_source("let main = 42")
+        .expect("eval_source should succeed (declaring main as Int is legal)");
+    let result = interp.call_main();
+    assert!(
+        result.is_err(),
+        "call_main on Int main must return Err, got Ok({:?})",
+        result.ok()
+    );
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, RuntimeError::TypeError(_)),
+        "expected RuntimeError::TypeError, got: {err:?}"
+    );
+    if let RuntimeError::TypeError(msg) = &err {
+        assert!(
+            msg.contains("not a function"),
+            "expected 'not a function' in error message, got: {msg}"
+        );
+    }
+}
+
+#[test]
+fn call_main_rejects_non_function_main_string() {
+    // Same gate, with Str instead of Int — defends against any
+    // accidental special-casing on Int values.
+    let mut interp = Interpreter::new();
+    interp
+        .eval_source(r#"let main = "hello""#)
+        .expect("eval_source should succeed");
+    let result = interp.call_main();
+    assert!(result.is_err(), "call_main on Str main must return Err");
+    assert!(matches!(result.unwrap_err(), RuntimeError::TypeError(_)));
+}
+
+#[test]
+fn call_main_returns_null_when_no_main_defined() {
+    // Defensive: when main is undefined entirely, call_main() returns
+    // Ok(Value::Null) (not Err) — the V27.0 fix ONLY tightened the
+    // case where main IS defined but is not a function.
+    let mut interp = Interpreter::new();
+    interp
+        .eval_source("let other_var = 99")
+        .expect("eval_source should succeed");
+    let result = interp.call_main();
+    assert!(
+        result.is_ok(),
+        "call_main with no main defined should be Ok, got: {result:?}"
+    );
+    assert_eq!(result.unwrap(), Value::Null);
 }
