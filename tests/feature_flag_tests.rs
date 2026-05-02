@@ -261,6 +261,9 @@ mod feature_tls {
 mod feature_playground_wasm {
     #[test]
     fn playground_wasm_compiles() {
-        assert!(true);
+        // Compile-only smoke: the test file itself cfg-gates this mod
+        // on `feature = "playground-wasm"`. Reaching this point under
+        // that feature flag confirms the wasm-api code path compiles.
+        // No runtime assertion needed beyond presence.
     }
 }

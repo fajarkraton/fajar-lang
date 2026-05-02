@@ -747,6 +747,12 @@ pub struct WasmFuncBody {
     pub instructions: Vec<WasmInstruction>,
 }
 
+impl Default for WasmFuncBody {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmFuncBody {
     /// Creates a new empty function body.
     pub fn new() -> Self {
@@ -816,6 +822,12 @@ pub struct WasmModule {
     pub code: Vec<WasmFuncBody>,
     /// Data segments (data section).
     pub data: Vec<WasmDataSegment>,
+}
+
+impl Default for WasmModule {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WasmModule {
@@ -2253,6 +2265,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn float_lit(v: f64) -> Expr {
         Expr::Literal {
             kind: LiteralKind::Float(v),
@@ -2260,6 +2273,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn bool_lit(v: bool) -> Expr {
         Expr::Literal {
             kind: LiteralKind::Bool(v),
@@ -2267,6 +2281,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn string_lit(s: &str) -> Expr {
         Expr::Literal {
             kind: LiteralKind::String(s.to_string()),
@@ -2311,9 +2326,11 @@ mod tests {
             is_pub: false,
             is_const: false,
             is_async: false,
+            is_gen: false,
             is_test: false,
             should_panic: false,
             is_ignored: false,
+            no_inline: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
@@ -2325,6 +2342,7 @@ mod tests {
             requires: vec![],
             ensures: vec![],
             effects: vec![],
+            effect_row_var: None,
             body: Box::new(body),
             span: span(),
         }
@@ -2470,10 +2488,10 @@ mod tests {
         let mut compiler = WasmCompiler::new(WasmTarget::Wasi);
         let mut out = Vec::new();
         compiler
-            .compile_literal(&LiteralKind::Float(3.14), &mut out)
+            .compile_literal(&LiteralKind::Float(1.25), &mut out)
             .unwrap();
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0], WasmInstruction::F64Const(3.14));
+        assert_eq!(out[0], WasmInstruction::F64Const(1.25));
     }
 
     #[test]
@@ -2519,6 +2537,7 @@ mod tests {
         let mut out = Vec::new();
         let stmt = Stmt::Let {
             mutable: false,
+            linear: false,
             name: "x".to_string(),
             ty: Some(simple_ty("i64")),
             value: Box::new(int_lit(42)),
@@ -2540,6 +2559,7 @@ mod tests {
         // let x = 42; x
         let let_stmt = Stmt::Let {
             mutable: true,
+            linear: false,
             name: "x".to_string(),
             ty: Some(simple_ty("i64")),
             value: Box::new(int_lit(42)),
@@ -2574,7 +2594,7 @@ mod tests {
         let mut compiler = WasmCompiler::new(WasmTarget::Wasi);
         let mut out = Vec::new();
         let while_expr = Expr::While {
-            label: _,
+            label: None,
             condition: Box::new(int_lit(1)),
             body: Box::new(Expr::Block {
                 stmts: vec![],
@@ -2899,6 +2919,7 @@ mod tests {
                 Expr::Block {
                     stmts: vec![Stmt::Let {
                         mutable: false,
+                        linear: false,
                         name: "result".to_string(),
                         ty: Some(simple_ty("i64")),
                         value: Box::new(Expr::Call {

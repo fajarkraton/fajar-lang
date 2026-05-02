@@ -102,6 +102,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Features that need apt/pip system dependencies.
           - feature: llvm
             apt: llvm-18-dev libpolly-18-dev libzstd-dev
             pip: ""
@@ -114,10 +115,59 @@ jobs:
           - feature: python-ffi
             apt: python3-dev
             pip: numpy
+          # Pure-Cargo features (no external deps). Per V32 Perfection
+          # P3.CI (commit landed 2026-05-02): full matrix coverage so
+          # feature-gated test paths can't silently drift.
+          - feature: native
+            apt: ""
+            pip: ""
+          - feature: gui
+            apt: libxkbcommon-dev libwayland-dev
+            pip: ""
+          - feature: cuda
+            apt: ""
+            pip: ""
+          - feature: gpu
+            apt: ""
+            pip: ""
+          - feature: vulkan
+            apt: ""
+            pip: ""
+          - feature: tls
+            apt: ""
+            pip: ""
+          - feature: https
+            apt: ""
+            pip: ""
+          - feature: websocket
+            apt: ""
+            pip: ""
+          - feature: mqtt
+            apt: ""
+            pip: ""
+          - feature: ble
+            apt: libdbus-1-dev
+            pip: ""
+          - feature: wasm
+            apt: ""
+            pip: ""
+          - feature: playground-wasm
+            apt: ""
+            pip: ""
+          - feature: freertos
+            apt: ""
+            pip: ""
+          - feature: zephyr
+            apt: ""
+            pip: ""
+          - feature: esp32
+            apt: ""
+            pip: ""
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Install system dependencies
+        if: matrix.apt != ''
         run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt }}
       - name: Install Python packages
         if: matrix.pip != ''
@@ -126,6 +176,12 @@ jobs:
         run: cargo test --lib --features ${{ matrix.feature }}
       - name: Clippy with --features ${{ matrix.feature }}
         run: cargo clippy --features ${{ matrix.feature }} -- -D warnings
+      - name: Clippy --tests with --features ${{ matrix.feature }}
+        # Per FAJAR_LANG_PERFECTION_PLAN P3.CI — extend feature matrix
+        # to also lint test code under each feature. Closes a long-
+        # standing gap where feature-gated test paths (cuda/llvm/wasm/
+        # playground-wasm) accumulated lint debt invisibly.
+        run: cargo clippy --tests --features ${{ matrix.feature }} -- -D warnings
 
   fuzz:
     name: Fuzz Testing

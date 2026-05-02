@@ -82,13 +82,15 @@ pub fn format_source(code: &str) -> String {
         Ok(t) => t,
         Err(_) => return code.to_string(),
     };
-    let program = match crate::parser::parse(tokens) {
+    // V32 Perfection P3.PW: PrettyPrinter API was removed; use the
+    // public `formatter::format()` entry point which takes source
+    // directly. We re-validate parse above (return `code` on error),
+    // then format() handles the actual pretty-printing.
+    let _ = match crate::parser::parse(tokens) {
         Ok(p) => p,
         Err(_) => return code.to_string(),
     };
-    let mut formatter = crate::formatter::PrettyPrinter::new();
-    formatter.format_program(&program);
-    formatter.finish()
+    crate::formatter::format(code).unwrap_or_else(|_| code.to_string())
 }
 
 /// Type-checks source code and returns "OK" or error messages.
