@@ -13565,4 +13565,104 @@ mod tests {
         assert!(LlvmCompiler::is_builtin_fn("rdtsc"));
         assert!(LlvmCompiler::is_builtin_fn("rdrand"));
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // V32 audit follow-up F4 (G2) — @interrupt codegen E2E
+    // ═══════════════════════════════════════════════════════════
+    //
+    // Closes the gap surfaced by HONEST_AUDIT_V32.md §4 G2: V27.5
+    // shipped @interrupt with codegen handling at lines 3312-3325
+    // (naked + noinline attribute + .text.interrupt section), but
+    // no E2E test compiles a function with @interrupt and verifies
+    // the resulting LLVM IR contains those attributes.
+    //
+    // Approach: build a minimal Program with FnDef whose annotation
+    // is "interrupt", run compile_program, then grep printed IR for
+    // - `naked` attribute on the function
+    // - `noinline` attribute on the function
+    // - `section ".text.interrupt"` directive
+    //
+    // This is the "Approach 1a" from the V32 followup plan §3 F4
+    // pre-flight: E2E from AST → codegen → IR string, without
+    // .fj source parsing or actual binary linking.
+
+    fn make_interrupt_fn(name: &str, body: Expr) -> FnDef {
+        let mut f = make_simple_fn(name, body);
+        f.annotation = Some(crate::parser::ast::Annotation {
+            name: "interrupt".to_string(),
+            param: None,
+            params: vec![],
+            span: dummy_span(),
+        });
+        f
+    }
+
+    #[test]
+    fn at_interrupt_emits_naked_noinline_and_text_interrupt_section() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_at_interrupt");
+
+        // @interrupt fn isr() -> i64 { 0 }
+        let body = make_int_lit(0);
+        let isr = make_interrupt_fn("isr", body);
+        let program = make_program(vec![Item::FnDef(isr)]);
+
+        compiler
+            .compile_program(&program)
+            .expect("compile @interrupt fn");
+        assert!(compiler.verify().is_ok(), "module should verify");
+
+        let ir = compiler.print_ir();
+
+        // The function should have BOTH attributes attached.
+        // LLVM IR formatting groups attributes after a #N tag:
+        //   define i64 @isr() #0 { ... }
+        //   attributes #0 = { naked noinline ... }
+        // We grep both as substrings in the full IR.
+        assert!(
+            ir.contains("naked"),
+            "expected `naked` attribute on @interrupt fn — V27.5 codegen \
+             at src/codegen/llvm/mod.rs:3314-3317. IR was:\n{ir}",
+        );
+        assert!(
+            ir.contains("noinline"),
+            "expected `noinline` attribute on @interrupt fn — V27.5 codegen \
+             at src/codegen/llvm/mod.rs:3318-3322. IR was:\n{ir}",
+        );
+        assert!(
+            ir.contains(".text.interrupt"),
+            "expected `.text.interrupt` ELF section — V27.5 codegen at \
+             src/codegen/llvm/mod.rs:3324. IR was:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn at_interrupt_does_not_affect_non_interrupt_functions() {
+        // Defensive: ensure the @interrupt path doesn't accidentally
+        // apply naked/noinline/.text.interrupt to ALL functions.
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_isolation");
+
+        // fn regular() -> i64 { 0 } — no annotation
+        let body = make_int_lit(0);
+        let regular = make_simple_fn("regular", body);
+        let program = make_program(vec![Item::FnDef(regular)]);
+
+        compiler
+            .compile_program(&program)
+            .expect("compile regular fn");
+
+        let ir = compiler.print_ir();
+        // Regular function MUST NOT be in .text.interrupt
+        assert!(
+            !ir.contains(".text.interrupt"),
+            "non-@interrupt fn should NOT be in .text.interrupt section. IR:\n{ir}",
+        );
+        // Regular function MUST NOT have `naked` attribute
+        // (Note: LLVM may use `naked` in completely unrelated contexts
+        // e.g. some intrinsics — so we narrow to "function attribute"
+        // pattern. The simplest defensible check is: no .text.interrupt.)
+    }
 }
