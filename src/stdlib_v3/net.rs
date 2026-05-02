@@ -1386,7 +1386,7 @@ impl HttpSession {
 /// Requires the `tls` feature: `cargo build --features tls`
 #[cfg(feature = "tls")]
 pub fn https_get(url_str: &str) -> Result<HttpResponse, NetError> {
-    let url = Url::parse(url_str).map_err(|e| NetError::InvalidUrl(e))?;
+    let url = Url::parse(url_str).map_err(NetError::InvalidUrl)?;
 
     let host = url.host.clone();
     let port = if url.port == 80 && url.scheme == "https" {

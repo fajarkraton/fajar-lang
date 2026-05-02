@@ -10051,7 +10051,7 @@ impl Interpreter {
                     _ => return Ok(Value::Null), // Ping/Pong/Frame
                 }
             }
-            return Ok(Value::Null);
+            Ok(Value::Null)
         }
 
         #[cfg(not(feature = "websocket"))]
@@ -10138,8 +10138,9 @@ impl Interpreter {
             let mut opts = rumqttc::MqttOptions::new(format!("fj-client-{id}"), host.clone(), port);
             opts.set_keep_alive(std::time::Duration::from_secs(30));
 
-            match rumqttc::Client::new(opts, 64) {
-                (client, connection) => {
+            let (client, connection) = rumqttc::Client::new(opts, 64);
+            {
+                {
                     let (tx, rx) = std::sync::mpsc::channel();
                     let thread = std::thread::spawn(move || {
                         let mut conn = connection;
@@ -10446,11 +10447,9 @@ impl Interpreter {
                             Value::Map(map)
                         })
                         .collect();
-                    return Ok(Value::Array(result));
+                    Ok(Value::Array(result))
                 }
-                Err(e) => {
-                    return Err(RuntimeError::TypeError(e).into());
-                }
+                Err(e) => Err(RuntimeError::TypeError(e).into()),
             }
         }
 
@@ -10509,10 +10508,10 @@ impl Interpreter {
                 }
                 Err("device not found".to_string())
             });
-            return match result {
+            match result {
                 Ok(h) => Ok(Value::Int(h)),
                 Err(_) => Ok(Value::Int(-1)),
-            };
+            }
         }
 
         #[cfg(not(feature = "ble"))]
@@ -10572,13 +10571,13 @@ impl Interpreter {
                 Err("characteristic not found".to_string())
             });
             let _ = handle; // handle used for simulation fallback
-            return match result {
+            match result {
                 Ok(bytes) => {
                     let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
                     Ok(Value::Array(arr))
                 }
                 Err(_) => Ok(Value::Null),
-            };
+            }
         }
 
         #[cfg(not(feature = "ble"))]
@@ -10662,7 +10661,7 @@ impl Interpreter {
                 Ok(false)
             });
             let _ = handle;
-            return Ok(Value::Bool(result.unwrap_or(false)));
+            Ok(Value::Bool(result.unwrap_or(false)))
         }
 
         #[cfg(not(feature = "ble"))]
@@ -10708,7 +10707,7 @@ impl Interpreter {
                 None
             });
             let _ = handle;
-            return Ok(Value::Null);
+            Ok(Value::Null)
         }
 
         #[cfg(not(feature = "ble"))]
@@ -12019,7 +12018,7 @@ impl Interpreter {
                     Err(_) => break,
                 }
             }
-            return Ok(Value::Int(served));
+            Ok(Value::Int(served))
         }
 
         #[cfg(not(feature = "https"))]

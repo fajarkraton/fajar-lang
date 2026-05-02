@@ -9249,7 +9249,7 @@ mod tests {
             ensures: vec![],
             effects: vec![],
             effect_row_var: None,
-            body: Box::new(make_float_lit(3.14)),
+            body: Box::new(make_float_lit(1.25)),
             span: dummy_span(),
         };
         let program = make_program(vec![Item::FnDef(main_fn)]);
@@ -11591,7 +11591,7 @@ mod tests {
         assert_eq!(infer_type_from_expr(&make_int_lit(42)), "i64");
         assert_eq!(
             infer_type_from_expr(&Expr::Literal {
-                kind: LiteralKind::Float(3.14),
+                kind: LiteralKind::Float(1.25),
                 span: dummy_span()
             }),
             "f64"
@@ -13507,10 +13507,11 @@ mod tests {
 
     #[test]
     fn l10_total_llvm_test_count_over_150() {
-        // Meta-validation: LLVM backend has comprehensive coverage
-        // We started at 47 tests and added ~100+ across L1-L10
-        // This test is a marker — actual count verified by cargo test output
-        assert!(true, "LLVM backend has 150+ tests across 10 sprints");
+        // Meta-validation marker: LLVM backend has 150+ tests across 10
+        // sprints (started at 47, added ~100+ in L1-L10). Actual count
+        // verified by cargo test output, not by this assert. Kept as a
+        // documented placeholder so the test file boundary remains
+        // searchable by tooling.
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -1064,10 +1064,10 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn pq4_3_type_roundtrip_float() {
-        let val = PyValue::Float(3.14);
+        let val = PyValue::Float(1.25);
         let back = py_type_roundtrip(&val).unwrap();
         if let PyValue::Float(f) = back {
-            assert!((f - 3.14).abs() < 1e-10);
+            assert!((f - 1.25).abs() < 1e-10);
         } else {
             panic!("expected Float");
         }

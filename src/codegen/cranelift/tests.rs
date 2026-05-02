@@ -1,3 +1,10 @@
+// Test-only file: float literals like 3.14 / 6.28 are intentional approximations
+// used as Fajar Lang source code inside r#""# blocks (where Rust clippy lints
+// don't apply to the .fj DSL semantics) AND as matching Rust-side assertions
+// at literal precision. Using std::f64::consts::PI/TAU on the Rust side would
+// silently mismatch the .fj source's 3.14/6.28 literals.
+#![allow(clippy::approx_constant)]
+
 use super::*;
 use crate::codegen::target::TargetConfig;
 use crate::lexer::tokenize;
@@ -4711,7 +4718,7 @@ fn native_string_index_of_not_found() {
             s.index_of("xyz")
         }
     "#;
-    assert_eq!(compile_and_run(src), -1i64 as i64);
+    assert_eq!(compile_and_run(src), -1_i64);
 }
 
 #[test]

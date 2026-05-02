@@ -1213,13 +1213,13 @@ mod tests {
         // On systems without CUDA, enumerate_devices should return an error, never panic.
         let result = enumerate_devices();
         // Either Ok (CUDA present) or Err (CUDA absent) — both are valid.
-        match &result {
-            Ok(devices) => assert!(
+        if let Ok(devices) = &result {
+            assert!(
                 !devices.is_empty(),
                 "if Ok, should have at least one device"
-            ),
-            Err(_) => {} // Expected when CUDA is not installed
+            );
         }
+        // Err case expected when CUDA is not installed; no assertion needed.
     }
 
     #[test]

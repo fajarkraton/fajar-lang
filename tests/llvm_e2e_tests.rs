@@ -54,6 +54,7 @@ fn make_fn(name: &str, params: Vec<Param>, ret: Option<TypeExpr>, body: Expr) ->
         is_test: false,
         should_panic: false,
         is_ignored: false,
+        no_inline: false,
         doc_comment: None,
         annotation: None,
         name: name.to_string(),

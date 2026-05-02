@@ -1423,8 +1423,14 @@ pub extern "C" fn fj_rt_bare_sys_ram_free() -> i64 {
 // ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
+//
+// NOTE: this file has additional `pub extern "C" fn` items AFTER this
+// test module (FFI helper aliases for the bare-metal runtime). Moving
+// the test mod to the end would scatter related FFI definitions; we
+// prefer locality. Suppress `items_after_test_module` for this mod only.
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
