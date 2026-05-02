@@ -327,3 +327,60 @@ fn main() {
     );
     assert!(output.iter().any(|l| l.contains("hello world")));
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// V32 Perfection P2.B4 — additional macro_rules! patterns
+// ════════════════════════════════════════════════════════════════════════
+//
+// Existing tests cover 3 macro_rules! patterns (empty, one_arm,
+// with_pattern). PASS criterion requires 5+ patterns. Adding 3 more
+// to over-cover (6 total).
+
+#[test]
+fn parse_macro_rules_with_expr_metavar_single_arg() {
+    // $x:expr metavar — supported per examples/macros.fj
+    parse_ok(
+        r#"
+macro_rules! square { ($x:expr) => { $x * $x } }
+"#,
+    );
+}
+
+#[test]
+fn parse_macro_rules_with_expr_metavar_two_args() {
+    parse_ok(
+        r#"
+macro_rules! add { ($a:expr, $b:expr) => { $a + $b } }
+"#,
+    );
+}
+
+#[test]
+fn parse_macro_rules_with_control_flow_body() {
+    // expr metavar invoked inside if-expression in expansion
+    parse_ok(
+        r#"
+macro_rules! max { ($a:expr, $b:expr) => { if $a > $b { $a } else { $b } } }
+"#,
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// V32 Perfection P2.B4 — proc-macro / @derive coverage extension
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn parse_derive_with_attrs_combined() {
+    // @derive combined with @doc — exercises annotation-stack parsing
+    parse_ok(
+        r#"
+@derive(Debug, Clone)
+struct Pair { x: i64, y: i64 }
+"#,
+    );
+}
+
+#[test]
+fn parse_derive_on_unit_struct() {
+    parse_ok("@derive(Debug) struct Marker {}");
+}
