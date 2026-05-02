@@ -2,6 +2,55 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [Unreleased] — 2026-05-02 V32 audit + 4-fix follow-up
+
+### Changed
+
+**HONEST_AUDIT_V32 deep re-audit** (commits `ecd265a2..5c08f511`):
+6-phase deep re-audit of Fajar Lang post-V26 (V27/V27.5/V28.5/V29.P1-P3/
+V30/V30.SIM/V30.GEMMA3/V31.B.P2/V31.C/V31.D/V31.4 cycle, ~3 weeks).
+Verdict: **No demotions.** Module classification holds at 54 [x] / 0 [f]
+/ 0 [s]. All quality gates green: 7,626 lib + 2,498 integ + 14 doc tests
+(0 fail, 0 flake), 0 clippy/fmt/unwrap/doc warnings.
+
+V27.5 -97% effort variance DEBUNKED — the work is real with 16 dedicated
+E2E tests in `tests/v27_5_compiler_prep.rs`. 5 gaps surfaced (1 retracted,
+4 actionable, 1 deferred), all residual or doc-drift, none critical-path.
+
+Documents added:
+- `docs/HONEST_AUDIT_V32_PLAN.md` (audit plan v1.0)
+- `docs/HONEST_AUDIT_V32.md` (audit findings v1.0)
+- `docs/HONEST_AUDIT_V32_PHASE_{1,2,3,4,5}_FINDINGS.md` (per-phase intermediate)
+- `docs/HONEST_AUDIT_V32_FOLLOWUP_PLAN.md` (4-fix plan v1.0)
+
+**V32 audit follow-up: 4 of 5 surfaced gaps closed** (commits
+`bc0f7020..3f4aaeea`). Total ~90 min vs plan 145 min = -38%, under cap.
+
+- F1 (G5 numerical drift): synced CLAUDE.md §3 + §9.1 to hand-verified
+  actuals — lib tests 7,611 → 7,626; integ 2,553 → 2,498 in 52 → 55
+  files; examples 238 → 243; binary 14 → 18 MB; CLI 23 → 39 subcommands.
+- F2 (G4 TE001-TE009): RETRACTED. Initial Phase 5 finding was based on
+  incomplete grep scoped to a single file; wider grep found 7 actual
+  TE variants (TE001 + TE004-009) and docs/ERROR_CODES.md catalogs all
+  9 (TE001-TE009). CLAUDE.md §7 was correct against the catalog. No edit
+  needed; mistake documented in audit doc + Phase 5 findings for honesty.
+- F3 (G3 call_main TypeError): added 3 unit tests to `tests/eval_tests.rs`
+  exercising V27.0 fix (rejects non-Function `main` with `RuntimeError::TypeError`).
+  All 3 PASS.
+- F4 (G2 @interrupt codegen): added 2 unit tests to
+  `src/codegen/llvm/mod.rs` `#[cfg(test)] mod tests` (gated on
+  `--features llvm`) verifying that `@interrupt fn` produces LLVM IR
+  with `naked` + `noinline` attributes + `.text.interrupt` section.
+  Both PASS. Pre-flight pivot to "Approach 1a" (codegen-API direct test)
+  worked because no FJ_EMIT_IR test infrastructure existed in tests/.
+
+Item 5 (G1 LLVM O2 miscompile root-cause fix or upstream filing,
+~5-8 days) remains OPPORTUNISTIC. Currently quarantined via 3 layers:
+`@no_vectorize` workaround + gcc C bypass for kernel vecmat + Phase D
+MatMul-Free architecture choice. M9 "Fajar Lang clean" milestone open.
+
+---
+
 ## [31.0.0] — 2026-04-23 "Phase D + Track B"
 
 > 8-day catch-up consolidating V28-V31 across compiler + OS + quant. Last

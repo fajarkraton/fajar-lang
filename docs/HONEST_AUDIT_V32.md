@@ -171,18 +171,24 @@ Per §3 above: 5 numerical claims drift beyond ±5% tolerance:
 | (admin) | Granular CHANGELOG back-fill (v26.3, v27.0, v27.5) | DEFERRED | GitHub Releases preserve detail; back-fill is hygiene, not blocker |
 | (admin) | M9 "Fajar Lang clean" milestone open | DEFERRED via architecture choice | Same as G1; Phase D avoids large vecmat |
 
-## 6. Recommended actions (ranked by impact-vs-effort)
+## 6. Recommended actions (ranked by impact-vs-effort) — STATUS
 
-| # | Action | Effort | Benefit | Priority |
-|---|---|---|---|---|
-| 1 | Sync CLAUDE.md §3 numerical claims (G5) | ~10 min | Doc accuracy; closes 5 drift items at once | **DO NOW** |
-| 2 | ~~Update CLAUDE.md §7 TE-codes (G4)~~ | ~~~5 min~~ | **RETRACTED — finding was based on incomplete grep; no CLAUDE.md edit needed (see §4 G4 update)** | **N/A** |
-| 3 | Add unit test for `call_main` TypeError (G3) | ~10 min | Test coverage; closes residual gap from V27.0 fix | DO NEXT |
-| 4 | Add E2E test for `@interrupt` codegen (G2) | ~2h | Verify ARM64+x86_64+AOT integration claim from V27.5 | DO NEXT |
-| 5 | File LLVM O2 miscompile upstream OR root-cause-fix (G1) | 5-8 days | Closes M9 milestone; unblocks future large-matmul projects | OPPORTUNISTIC |
+| # | Action | Effort | Benefit | Priority | **Status** |
+|---|---|---|---|---|---|
+| 1 | Sync CLAUDE.md §3 numerical claims (G5) | ~10 min | Doc accuracy; closes 5 drift items at once | DO NOW | **✅ CLOSED commit `bc0f7020`** |
+| 2 | ~~Update CLAUDE.md §7 TE-codes (G4)~~ | ~~~5 min~~ | **RETRACTED — finding was based on incomplete grep; no CLAUDE.md edit needed (see §4 G4 update)** | N/A | **✅ RETRACTED commit `bc0f7020`** |
+| 3 | Add unit test for `call_main` TypeError (G3) | ~10 min | Test coverage; closes residual gap from V27.0 fix | DO NEXT | **✅ CLOSED commit `e421dc40` — 3 tests added to tests/eval_tests.rs** |
+| 4 | Add E2E test for `@interrupt` codegen (G2) | ~2h | Verify ARM64+x86_64+AOT integration claim from V27.5 | DO NEXT | **✅ CLOSED commit `3f4aaeea` — 2 tests added to src/codegen/llvm/mod.rs (gated on `--features llvm`)** |
+| 5 | File LLVM O2 miscompile upstream OR root-cause-fix (G1) | 5-8 days | Closes M9 milestone; unblocks future large-matmul projects | OPPORTUNISTIC | **STILL OPEN — deliberately deferred per V31_MASTER_PLAN B.P1; non-blocking** |
 
-**Items 1-4 = ~3 hours total**, can land in a single follow-up commit
-chain. Item 5 is the only multi-day commitment and is non-blocking.
+**4-fix follow-up COMPLETE 2026-05-02.** Items 1-4 closed; item 5
+remains opportunistic. Total follow-up effort ~90 min vs plan 145 min
+= -38%, well under 3h cap. See `docs/HONEST_AUDIT_V32_FOLLOWUP_PLAN.md`
+for the followup plan; commits chain from `bc0f7020` to `3f4aaeea`.
+
+**Items 1-4 = ~3 hours total** (actual: 90 min, -38% under estimate),
+landed across 3 follow-up commits (`bc0f7020`, `e421dc40`, `3f4aaeea`).
+Item 5 is the only multi-day commitment and is non-blocking.
 
 ## 7. Decision: V32 status update
 
