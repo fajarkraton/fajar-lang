@@ -26,9 +26,9 @@ effort variance (5.6h actual vs 196h est) was MISLEADING — the work
 shipped real with 16 dedicated E2E tests. Genuine residual gaps are
 narrower than the variance suggested.
 
-**Headline gaps surfaced:** 5 items, ranked by impact below. Nothing
-is critical-path; all are residual test coverage or documentation
-drift, not production bugs.
+**Headline gaps surfaced:** 5 items initially, **G4 retracted 2026-05-02
+upon re-verification** (4 actionable + 1 retracted). Nothing critical-path;
+all are residual test coverage or documentation drift, not production bugs.
 
 ## 2. Verified strengths (hand-tested today)
 
@@ -120,25 +120,36 @@ with `RuntimeError::TypeError` (was silent `Null`). Implementation at
 **Fix effort:** ~10 minutes to add 1 test in
 `tests/eval_tests.rs` or similar.
 
-### G4 — TE001-TE009 doc inflation (CLAUDE.md §7 drift)
+### G4 — TE001-TE009 (RETRACTED 2026-05-02 — finding was based on incomplete grep)
 
-**Background:** CLAUDE.md §7 lists "TE = Tensor Error (TE001-TE009) -
-9 shape/type problems." Hand-verification: there's only ONE
-`TensorError` variant declared in `src/analyzer/type_check/mod.rs:1010-1011`,
-which is TE001 with a `detail:` string parameter. The "9 problems"
-are 9 different SCENARIOS that all produce TE001 messages with
-different detail strings.
+**Original (incorrect) finding:** "Only TE001 exists; CLAUDE.md inflates
+9 codes from 1 variant."
 
-**Gap:** documentation inflates "1 variant, 9 scenarios" to "9 codes."
-Test coverage exists (TE001/2/3/7 mentioned in `safety_tests.rs`) but
-under the same single error-code variant.
+**Retraction.** Re-verification 2026-05-02 during F2 fix attempt found:
 
-**Fix options:**
-- (A) Update CLAUDE.md §7 to say "TE001 (9 scenarios)" — 5 min doc fix
-- (B) Expand `TensorError` enum to TE001..TE009 variants — invasive,
-  more breaks tests, ~2h
+- `docs/ERROR_CODES.md §6` documents TE001-TE009 with 9 distinct
+  user-facing codes (ShapeMismatch, InvalidReshape, DimOutOfRange,
+  EmptyTensor, DtypeMismatch, GradientError, QuantizationError,
+  DeviceError, CompileTimeShapeError)
+- `grep -rE "#\[error\(\"TE[0-9]+:" src/` finds 7 actual `#[error]`
+  variants: TE001, TE004, TE005, TE006, TE007, TE008, TE009. TE002 and
+  TE003 are not defined as separate variants but **may** be implemented
+  as detail-strings under TE001 or via other error paths I didn't
+  check.
+- My Phase 5 grep was scoped to `src/analyzer/type_check/mod.rs` only,
+  missing variants in other files (likely `src/runtime/`, `src/codegen/`).
 
-Recommend (A).
+**Verdict:** CLAUDE.md §7 claim "TE001-TE009 -- 9 shape/type problems"
+is consistent with docs/ERROR_CODES.md catalog (the canonical source per
+CLAUDE.md §7 line 522: "verified by grep on docs/ERROR_CODES.md"). Gap
+G4 is RETRACTED. **No CLAUDE.md edit needed.**
+
+**Latent secondary gap (not pursued in this audit):** docs/ERROR_CODES.md
+lists TE002, TE003 but src/ has no `#[error]` variants matching those
+codes. Either (a) they're implemented via detail-strings within other
+variants, (b) they're implemented in non-thiserror paths, or (c) they're
+catalog-only with no implementation. Resolving requires per-code tracing
+that's out of scope here. Track as future follow-up.
 
 ### G5 — CLAUDE.md §3 numerical drift (multi-line)
 
@@ -165,7 +176,7 @@ Per §3 above: 5 numerical claims drift beyond ±5% tolerance:
 | # | Action | Effort | Benefit | Priority |
 |---|---|---|---|---|
 | 1 | Sync CLAUDE.md §3 numerical claims (G5) | ~10 min | Doc accuracy; closes 5 drift items at once | **DO NOW** |
-| 2 | Update CLAUDE.md §7 TE-codes (G4) | ~5 min | Doc accuracy for tensor type-system claim | **DO NOW** |
+| 2 | ~~Update CLAUDE.md §7 TE-codes (G4)~~ | ~~~5 min~~ | **RETRACTED — finding was based on incomplete grep; no CLAUDE.md edit needed (see §4 G4 update)** | **N/A** |
 | 3 | Add unit test for `call_main` TypeError (G3) | ~10 min | Test coverage; closes residual gap from V27.0 fix | DO NEXT |
 | 4 | Add E2E test for `@interrupt` codegen (G2) | ~2h | Verify ARM64+x86_64+AOT integration claim from V27.5 | DO NEXT |
 | 5 | File LLVM O2 miscompile upstream OR root-cause-fix (G1) | 5-8 days | Closes M9 milestone; unblocks future large-matmul projects | OPPORTUNISTIC |

@@ -74,16 +74,16 @@ detailed entries.
 ### Current Totals (V26 "Final" partial, 2026-04-11)
 
 ```
-Tests:     7,611 lib + 2,553 integ (in 52 test files) + 14 doc + 1 ignored
-           ≈ 10,179 total | 0 failures, 0 flakes
-           Stress: 80/80 consecutive runs at `cargo test --lib -- --test-threads=64`
-LOC:       ~448,000 lines of Rust (394 files in src/)
-Examples:  238 .fj programs in examples/
-           Binary: 14 MB release | MSRV: Rust 1.87
+Tests:     7,626 lib + 2,498 integ (in 55 test files) + 14 doc + 1 ignored
+           ≈ 10,138 total | 0 failures, 0 flakes
+           Stress: 5/5 consecutive runs at `cargo test --lib -- --test-threads=64` (V32 audit hand-verified 2026-05-02)
+LOC:       ~449,000 lines of Rust (391 files in src/)
+Examples:  243 .fj programs in examples/
+           Binary: 18 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
-           Source of truth: docs/HONEST_STATUS_V26.md
+           Source of truth: docs/HONEST_STATUS_V26.md (HONEST_AUDIT_V32.md re-verified 2026-05-02; no demotions)
            V26 Phase A3 closed all 5 framework + 2 stub modules. 0 remaining.
-CLI:       23 subcommands declared in src/main.rs, all production
+CLI:       39 subcommands declared in src/main.rs, all production
 CI:        6 GitHub Actions workflows + new flake-stress job (V26 A1.4)
 Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
 Quality:   0 clippy warnings | 0 production .unwrap() (verified by scripts/audit_unwrap.py)
@@ -559,11 +559,11 @@ Key errors:
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: ~9,969 tests (7,581 lib + 2,374 integ in 46 files + 14 doc)
+### 9.1 Test Suite: ~10,138 tests (7,626 lib + 2,498 integ in 55 files + 14 doc + 1 ignored)
 
-> Numbers verified 2026-04-11 via `cargo test --lib`, `ls tests/*.rs | wc -l`,
-> `grep -h '^#\[test\]' tests/*.rs | wc -l`, `cargo test --doc`. Stress test
-> (V26 A1.4) runs `cargo test --lib -- --test-threads=64 × 5` per push.
+> Numbers re-verified 2026-05-02 via `cargo test --lib`, `cargo test --test '*'`,
+> `cargo test --doc` per HONEST_AUDIT_V32 §2. Stress test (V26 A1.4) runs
+> `cargo test --lib -- --test-threads=64 × 5` per push (5/5 PASS audit-day).
 
 ### 9.2 Test Naming Convention
 
@@ -644,7 +644,7 @@ Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (p
 ```bash
 # Build & test (mandatory before commit)
 cargo build [--release]
-cargo test --lib                                 # 7,581 lib tests
+cargo test --lib                                 # 7,626 lib tests
 cargo test --lib -- --test-threads=64            # stress (V26 §6.7 rule)
 cargo clippy --lib -- -D warnings                # MUST pass
 cargo fmt -- --check                             # MUST pass

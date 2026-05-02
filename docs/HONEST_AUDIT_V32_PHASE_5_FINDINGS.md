@@ -41,35 +41,34 @@ Hand-spot-checked test coverage rows from CLAUDE.md §5.3 enforcement matrix:
 Plus map_get/map_insert/map_remove (KE001 heap ops), push (KE001), adam
 (KE002), and many more. Coverage is comprehensive.
 
-## Tensor type-system enforcement (TE codes)
+## Tensor type-system enforcement (TE codes) — REVISED 2026-05-02
 
-CLAUDE.md §7 claims:
-> TE = Tensor Error (TE001-TE009) - 9 shape/type problems
+**Initial finding (INCORRECT):** "Only TE001 exists as variant; CLAUDE.md
+§7 inflates to TE001-TE009."
 
-**Hand-verified actual:** there is only ONE `TensorError` variant
-declared in the type-checker:
+**Retraction:** This finding was based on a grep scoped to ONLY
+`src/analyzer/type_check/mod.rs`, which contains TE001 alone. Wider
+grep across all of src/ during F2 fix attempt found 7 distinct `#[error]`
+variants for TE: TE001, TE004, TE005, TE006, TE007, TE008, TE009.
 
-```rust
-// src/analyzer/type_check/mod.rs:1010-1011
-/// TE001: Tensor shape mismatch.
-#[error("TE001: tensor shape mismatch: {detail}")]
-```
+**Reconciled view:**
+- `docs/ERROR_CODES.md §6` catalog: TE001-TE009 (9 codes nominal)
+- `grep -rE "#\[error\(\"TE[0-9]+:" src/`: 7 variants (TE001 + TE004-009)
+- `safety_tests.rs` references: TE001, TE002, TE003, TE007 (4 in
+  comments)
 
-The "9 problems" are 9 DIFFERENT scenarios that all trigger TE001 with
-different `detail:` strings. Test coverage in `safety_tests.rs`:
-- TE001 (line 644): element-wise add shape mismatch
-- TE002 (line 680): matmul inner-dim mismatch
-- TE003 (line 712): reshape size mismatch
-- TE007 (line 753): division by zero element
+TE002 + TE003 appear in the catalog AND test comments but not as
+`#[error]` variants in src/. They may be implemented via detail-strings
+under other variants or via non-thiserror paths.
 
-Plus `ml_tests.rs` (39 tests PASS) covers tensor operations broadly.
+**Verdict:** CLAUDE.md §7 claim "TE001-TE009 -- 9 shape/type problems"
+matches docs/ERROR_CODES.md catalog (the canonical source per CLAUDE.md
+§7 line 522). **No drift between CLAUDE.md and ERROR_CODES.md.**
+Possible gap between ERROR_CODES.md catalog (9 codes) and src/ variants
+(7 variants), but resolving that requires per-code tracing across
+runtime + codegen + analyzer which is out of scope.
 
-**Doc drift:** CLAUDE.md §7 inflates "9 codes" when there's only 1
-variant. The 9 SCENARIOS are real and exercised; the 9 CODES are not.
-
-**Recommendation (Phase 6):** Update CLAUDE.md §7 to say "TE001 (9
-scenarios)" or expand `TensorError` enum to actually have TE001..TE009
-variants (more invasive). Doc-side fix is cheaper.
+**G4 in audit doc V32 §6: RETRACTED. F2 fix not needed.**
 
 ## V29.P1 5-layer prevention chain — verification
 
