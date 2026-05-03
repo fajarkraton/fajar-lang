@@ -63,16 +63,17 @@ error[LE002]: unterminated string literal
 
 | Code | Nama | Deskripsi | Contoh Trigger |
 |------|------|-----------|----------------|
-| PE001 | UnexpectedToken | Token tidak sesuai grammar | `let = 42` (missing ident) |
-| PE002 | ExpectedExpression | Diharapkan expression | `let x = ;` (missing expr) |
+| PE001 | UnexpectedToken | Token tidak sesuai grammar | `let = 42` |
+| PE002 | ExpectedExpression | Diharapkan expression | `let x = ` (lalu EOF) |
 | PE003 | ExpectedType | Diharapkan type annotation | `fn f(x: ) { }` |
-| PE004 | ExpectedIdentifier | Diharapkan identifier | `let 42 = x` |
-| PE005 | ExpectedBlock | Diharapkan `{ ... }` | `if true return x` |
-| PE006 | UnmatchedParen | Bracket/paren tidak cocok | `(1 + 2` |
-| PE007 | InvalidPattern | Pattern matching invalid | `match x { 1 + 2 => }` |
+| PE004 | ExpectedPattern | Diharapkan pattern di binding | `match x { => 1 }` |
+| PE005 | ExpectedIdentifier | Diharapkan identifier | `fn 42() {}` |
+| PE006 | UnexpectedEof | Source berakhir di tengah konstruksi | `fn f() {` (EOF) |
+| PE007 | InvalidPattern | Pattern matching invalid | `match x { 1 + 2 => 3 }` |
 | PE008 | DuplicateField | Field struct duplikat | `Point { x: 1, x: 2 }` |
-| PE009 | InvalidAssignment | Invalid left-hand side assignment | `1 + 2 = x` |
-| PE010 | ExpectedSemicolon | Statement separator expected | Missing `;` or newline |
+| PE009 | TrailingSeparator | Trailing separator (warning-level) | `[1, 2, 3,,]` |
+| PE010 | InvalidAnnotation | Annotation tidak dikenal/struktur salah | `@@unknown` |
+| PE011 | ModuleFileNotFound | `mod foo` tapi `foo.fj` tidak ada | `mod nonexistent` |
 
 ---
 
@@ -92,11 +93,16 @@ error[LE002]: unterminated string literal
 | SE010 | UnreachableCode | Kode setelah return/break tidak bisa dijangkau (warning) |
 | SE011 | MissingReturn | Fungsi mungkin tidak mengembalikan value |
 | SE012 | InvalidContext | Operasi invalid di context saat ini |
-| SE017 | AsyncReturnType | Async function harus return `Future<T>` |
+| SE013 | FfiUnsafeType / CannotInferType | Tipe non-FFI-safe di `extern fn` ATAU type inference gagal |
+| SE014 | TraitBoundNotSatisfied | Generic bound tidak terpenuhi oleh argumen |
+| SE015 | UnknownTrait | Trait belum di-deklarasikan dipakai di bound |
+| SE016 | TraitMethodSignatureMismatch | `impl Trait` method signature tidak match deklarasi trait |
+| SE017 | AwaitOutsideAsync | `.await` digunakan di luar `async fn` |
+| SE018 | NotSendType | Tipe non-`Send` ditransfer ke thread lain |
 | SE019 | UnusedImport | Import yang tidak digunakan (warning) |
-| SE020 | UnreachablePattern | Match arm unreachable setelah wildcard (warning) |
-| SE021 | LifetimeMismatch | Lifetime annotation conflict |
-| SE022 | IndexOutOfBounds | Compile-time array index out of bounds |
+| SE020 | UnreachablePattern / HwAccessInSafe | Match arm unreachable ATAU hardware access di `@safe` |
+| SE021 | LifetimeMismatch / KernelCallFromSafe | Lifetime conflict ATAU `@kernel` dipanggil dari `@safe` |
+| SE022 | IndexOutOfBounds / DeviceCallFromSafe | Compile-time index OOB ATAU `@device` dipanggil dari `@safe` |
 | SE023 | QuantizedNotDequantized | `Quantized<T, B>` dipakai dimana `Tensor<T>` diharapkan — panggil `dequantize()` dulu |
 
 #### SE023 — QuantizedNotDequantized
@@ -129,6 +135,8 @@ matmul(d, d)
 | KE002 | TensorInKernel | Tensor operation di `@kernel` | `zeros()`, `relu()`, `.backward()` |
 | KE003 | DeviceCallInKernel | Calling `@device` function dari `@kernel` | `@device fn` dipanggil dalam `@kernel` |
 | KE004 | InvalidKernelOp | Operasi tidak diperbolehkan di `@kernel` | Operasi yang memerlukan heap |
+| KE005 | AsmInSafeContext | `asm!()` inline assembly di `@safe` | Inline asm tanpa `@unsafe` |
+| KE006 | AsmInDeviceContext | `asm!()` inline assembly di `@device` | Inline asm di kode device |
 
 #### Contoh Output KE001:
 
@@ -162,12 +170,13 @@ error[KE001]: heap allocation not allowed in @kernel context
 | TE001 | ShapeMismatch | Dimensi tensor tidak kompatibel untuk operasi |
 | TE002 | InvalidReshape | Cannot reshape — total elemen berbeda |
 | TE003 | DimOutOfRange | Dimension index melebihi rank tensor |
-| TE004 | EmptyTensor | Operasi pada tensor dengan 0 elemen |
-| TE005 | DtypeMismatch | Operasi antara tensor dengan tipe data berbeda |
-| TE006 | GradientError | Gradient computation gagal |
-| TE007 | QuantizationError | Quantization range error |
-| TE008 | DeviceError | Tensor device transfer gagal |
-| TE009 | CompileTimeShapeError | Compile-time shape verification gagal |
+| TE004 | RankMismatch | Tensor rank yang diharapkan tidak match |
+| TE005 | NonScalarBackward | `.backward()` butuh scalar tensor (numel=1) |
+| TE006 | NoGradient | Gradient tidak tersedia (`requires_grad=false` atau belum dihitung) |
+| TE007 | DivisionByZero | Pembagian dengan nol pada elemen tensor |
+| TE008 | TensorOpError | Operasi tensor generik gagal (catch-all) |
+| TE009 | GpuShapeMismatch | GPU tensor shape mismatch |
+| TE010 | GpuOutOfMemory | GPU memory exhausted (OOM) |
 
 ### Contoh Output TE001:
 
@@ -190,13 +199,15 @@ error[TE001]: tensor shape mismatch
 | Code | Nama | Deskripsi |
 |------|------|-----------|
 | RE001 | DivisionByZero | Pembagian dengan nol |
-| RE002 | IndexOutOfBounds | Akses array/slice di luar batas |
-| RE003 | StackOverflow | Rekursi terlalu dalam (> 1024 frames) |
-| RE004 | IntegerOverflow | Overflow pada arithmetic (debug mode) |
-| RE005 | NullDereference | Null pointer dereference |
-| RE006 | AssertionFailed | `assert` atau `assert_eq` gagal |
-| RE007 | Timeout | Execution time limit exceeded |
-| RE008 | OutOfMemory | Memory allocation gagal |
+| RE002 | TypeError | Runtime type error (e.g. invalid coercion) |
+| RE003 | StackOverflow | Rekursi terlalu dalam (max recursion depth) |
+| RE004 | UndefinedVariable | Variabel tidak dikenal saat eval (REPL/dynamic) |
+| RE005 | NotAFunction | Mencoba memanggil value yang bukan fungsi |
+| RE006 | ArgumentCountMismatch | Jumlah argumen runtime tidak sesuai |
+| RE007 | InvalidAssignment | Assignment ke target yang tidak valid (lvalue) |
+| RE008 | OtherRuntimeError | Catch-all runtime error (assert fail, panic, dll.) |
+| RE009 | IntegerOverflow | Overflow pada arithmetic |
+| RE010 | IndexOutOfBounds | Akses array/slice di luar batas |
 
 ---
 
@@ -205,15 +216,18 @@ error[TE001]: tensor shape mismatch
 | Code | Nama | Deskripsi |
 |------|------|-----------|
 | ME001 | UseAfterMove | Akses value setelah ownership berpindah |
-| ME002 | DoubleFree | Dealokasi memori yang sudah di-free |
+| ME002 | DoubleFree | Dealokasi memori yang sudah di-free (runtime/OS layer) |
 | ME003 | BorrowConflict | Simultaneous mutable + immutable borrow |
 | ME004 | DanglingReference | Reference ke value yang sudah di-drop |
 | ME005 | MoveInLoop | Value moved inside loop iteration |
-| ME006 | PartialMove | Partially moved struct accessed |
-| ME007 | BorrowInClosure | Closure captures conflicting borrow |
+| ME006 | AllocFailed | Heap/region allocation failed (OS runtime) |
+| ME007 | InvalidFree | Invalid free (addr tidak valid / sudah di-free) |
 | ME008 | MutableAliasing | Multiple mutable references ke data yang sama |
-| ME009 | LifetimeExpired | Borrowed reference outlives source |
-| ME010 | LifetimeConstraint | Lifetime constraint cannot be satisfied |
+| ME009 | LifetimeConflict | Lifetime '{name}' conflicts with another lifetime in scope |
+| ME010 | LinearNotConsumed | Linear value tidak consumed — must be used exactly once |
+| ME011 | TwoPhaseConflict | Two-phase borrow conflict (polonius solver) |
+| ME012 | ReborrowConflict | Reborrow conflict (polonius solver) |
+| ME013 | PlaceConflict | Place / path conflict (polonius solver) |
 
 ---
 
@@ -221,16 +235,26 @@ error[TE001]: tensor shape mismatch
 
 | Code | Nama | Deskripsi |
 |------|------|-----------|
-| CE001 | UnsupportedTarget | Target architecture tidak didukung |
-| CE002 | LinkError | Linker gagal |
-| CE003 | NotImplemented | Fitur belum ada di native codegen |
-| CE004 | FunctionError | Cranelift verification error |
-| CE005 | TypeCoercionError | Cannot coerce types di codegen |
-| CE006 | UndefinedFunction | Function tidak tersedia di native mode |
-| CE007 | SymbolConflict | Duplicate symbol name |
-| CE008 | AbiMismatch | ABI incompatibility |
-| CE009 | LlvmError | LLVM backend error |
-| CE010 | WasmError | WebAssembly backend error |
+| CE001 | UnsupportedExpr | Expression tidak didukung native codegen |
+| CE002 | UnsupportedStmt | Statement tidak didukung native codegen |
+| CE003 | UnsupportedType | Cannot lower type ke native representation |
+| CE004 | FunctionError | Cranelift function verification error |
+| CE005 | UndefinedVarInCodegen | Variabel undefined saat codegen |
+| CE006 | UndefinedFunctionInCodegen | Fungsi undefined saat codegen |
+| CE007 | AbiError | ABI/calling-convention error |
+| CE008 | ModuleError | Cranelift module / linkage error |
+| CE009 | InternalCodegenError | Internal codegen invariant violation |
+| CE010 | NotYetImplemented | Fitur belum diimplementasi di native codegen |
+| CE011 | ContextViolation | `@kernel`/`@device` context violated saat codegen |
+| CE013 | GpuNotAvailable | GPU compute tidak tersedia di sistem |
+
+> **Note:** CE012 sengaja di-skip untuk hindari konflik runtime tags.
+
+### 9.1 No-std Errors (NS)
+
+| Code | Nama | Deskripsi |
+|------|------|-----------|
+| NS001 | NoStdViolation | Operasi membutuhkan `std` di build `no_std` (kernel target) |
 
 ---
 
@@ -269,9 +293,16 @@ error[TE001]: tensor shape mismatch
 
 ---
 
-## 11. Linear Type Errors (LN)
+## 11. Linear Type Errors (LN) — *forward-compat / future-work*
 
-| Code | Nama | Deskripsi |
+> **Status (2026-05-03):** Tabel LN001-LN008 dipertahankan untuk forward
+> compatibility dengan rencana resource-typing terpisah. Implementasi
+> linear-type enforcement saat ini dijalankan oleh **`ME010
+> LinearNotConsumed`** (lihat §8). Tidak ada source-side `LN###`
+> emission di v32 codebase. Code akan diaktivasi ulang jika resource
+> tracking dipisahkan dari memory-error tree.
+
+| Code | Nama | Deskripsi (forward-compat) |
 |------|------|-----------|
 | LN001 | UseAfterConsume | Linear resource digunakan setelah consumption |
 | LN002 | ResourceNotConsumed | Linear resource di-drop tanpa consumption |
@@ -288,11 +319,18 @@ error[TE001]: tensor shape mismatch
 
 | Code | Nama | Deskripsi |
 |------|------|-----------|
-| GE001 | GatKindMismatch | Associated type kind tidak sesuai deklarasi |
-| GE002 | UnsatisfiedGatBound | GAT type parameter constraint tidak terpenuhi |
-| GE003 | ObjectUnsafe | Trait dengan GAT tidak bisa digunakan sebagai trait object |
+| GE000 | GatTopLevel | Top-level catch-all untuk GAT-related errors |
+| GE001 | ParamCountMismatch | Associated type param count tidak match trait deklarasi |
+| GE002 | BoundMismatch | GAT bound trait tidak match deklarasi |
+| GE003 | LifetimeCaptureError | Borrowed data tidak hidup cukup lama untuk GAT projection |
+| GE004 | AsyncTraitNotObjectSafe | Async trait method tidak object-safe tanpa `#[async_trait]` |
+| GE005 | NoAssocTypeOnTrait | Trait tidak punya associated type yang dirujuk |
+| GE006 | DuplicateAssocType | Duplicate associated type dalam trait |
+| GE007 | ParamKindMismatch | Param kind (lifetime/type/const) tidak sesuai |
+| GE008 | ImplMissingAssocType | `impl Trait` tidak menyediakan associated type yang required |
 
 ---
 
-*Error Codes Version: 3.0 | Total: 95 error codes across 12 categories*
-*Updated: 2026-03-12 (v3.0 — added CE, EE, LN, GE categories; updated SE, ME, TE codes)*
+*Error Codes Version: 4.0 | Total: 136 error codes across 13 categories
+(LE 8 + PE 11 + SE 23 + KE 6 + DE 3 + TE 10 + RE 10 + ME 13 + CE 12 + NS 1 + CT 13 + EE 8 + LN 8 forward-compat + GE 9 + extras).*
+*Updated: 2026-05-03 (v4.0 — reconciled with src/ emission per HONEST_AUDIT_V32 followup; PE descriptions corrected to actual variants; LN annotated forward-compat).*
