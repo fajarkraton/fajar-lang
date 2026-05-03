@@ -2,7 +2,39 @@
 
 All notable changes to Fajar Lang are documented here.
 
-## [Unreleased] — 2026-05-03 FAJAR_LANG_PERFECTION_PLAN P4 + P5 + P6 + P7 closed
+## [33.0.0] — 2026-05-03 FAJAR_LANG_PERFECTION_PLAN P4-P9 closed
+
+### Added (P9 — closeout synthesis)
+
+**P9** — final closeout. `docs/HONEST_AUDIT_V33.md` written as the
+exit scorecard for all 25 work-items in
+`docs/FAJAR_LANG_PERFECTION_PLAN.md` §2. CLAUDE.md banner synced
+V32 → V33. Cumulative perfection-plan effort: **~14h actual** vs
+~218-336h plan estimate (~95% under).
+
+**Final scorecard:** 22 of 25 items reach PASS engineering-side; 3
+items (F1 GitHub Releases verification, F3 fajarquant crates.io
+publish, A1 LLVM upstream filing) have engineering-side closure +
+prevention layers shipped, await founder external action.
+
+**Plan delivers what it set out to deliver: an engineering-side close
+on every actionable gap.** The remaining external steps are
+well-scoped, documented, regression-gated, and ready for founder
+execution.
+
+### Added (P8 — LLVM O2 miscompile)
+
+**P8** — LLVM O2 vecmat miscompile (~45min vs 40-60h plan, -99%
+under). `docs/LLVM_O2_VECMAT_MISCOMPILE_REPRO.md` documents 3
+quarantine layers (`@no_vectorize` + gcc C bypass + Phase D
+MatMul-Free architecture) + paste-ready upstream filing draft. 2
+new codegen regression tests in `src/codegen/llvm/mod.rs::tests`
+gated on `--features llvm`. Opportunistic side-fix:
+`llvm_compile_float_literal` had a stale assertion `contains("3.14")`
+on a body using `make_float_lit(1.25)` — leftover from P3 clippy
+fix. 162/162 LLVM tests now pass.
+
+Findings: `docs/FAJAR_LANG_PERFECTION_PHASE_8_FINDINGS.md`.
 
 ### Added (P7 — Distribution unblock)
 
