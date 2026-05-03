@@ -1,0 +1,44 @@
+// embedded-mnist — runs MNIST inference on a single image.
+//
+// Build: fj build
+// Run:   fj run -- path/to/image.bin path/to/weights.bin
+
+use model::forward
+use model::argmax
+
+fn load_weights(path: str) -> Result<([f32; 784 * 128], [f32; 128], [f32; 128 * 10], [f32; 10]), str> {
+    let raw = read_binary(path)?
+    let mut offset: i64 = 0
+    let w1 = read_f32_slice(raw, offset, 784 * 128)
+    offset = offset + 784 * 128 * 4
+    let b1 = read_f32_slice(raw, offset, 128)
+    offset = offset + 128 * 4
+    let w2 = read_f32_slice(raw, offset, 128 * 10)
+    offset = offset + 128 * 10 * 4
+    let b2 = read_f32_slice(raw, offset, 10)
+    Ok((w1, b1, w2, b2))
+}
+
+fn load_image(path: str) -> Result<[f32; 784], str> {
+    let raw = read_binary(path)?
+    let pixels = read_u8_slice(raw, 0, 784)
+    let mut floats: [f32; 784] = [0.0; 784]
+    for i in 0..784 {
+        floats[i] = (pixels[i] as f32) / 255.0
+    }
+    Ok(floats)
+}
+
+fn main() -> Result<(), str> {
+    let img_path = "data/digit_3.bin"
+    let weights_path = "data/mnist_weights.bin"
+
+    let image = load_image(img_path)?
+    let (w1, b1, w2, b2) = load_weights(weights_path)?
+
+    let logits = forward(image, w1, b1, w2, b2)
+    let predicted = argmax(logits)
+
+    println(f"prediction: {predicted}")
+    Ok(())
+}

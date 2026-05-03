@@ -1,0 +1,9 @@
+[package]
+name = "embedded-mnist"
+version = "1.0.0"
+entry = "src/main.fj"
+description = "Embedded MNIST inference using @device tensor ops — Fajar Lang example."
+authors = ["Fajar Lang examples"]
+license = "Apache-2.0"
+
+[dependencies]

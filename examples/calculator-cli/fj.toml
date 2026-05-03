@@ -1,0 +1,9 @@
+[package]
+name = "calculator-cli"
+version = "1.0.0"
+entry = "src/main.fj"
+description = "REPL calculator with operator precedence — Fajar Lang example project."
+authors = ["Fajar Lang examples"]
+license = "Apache-2.0"
+
+[dependencies]

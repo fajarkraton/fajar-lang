@@ -1,0 +1,48 @@
+// model.fj — minimal 2-layer MLP for MNIST classification.
+//
+// Architecture:
+//   input  : 28 * 28 = 784 pixels (f32, normalized to [0, 1])
+//   hidden : 128 units, ReLU activation
+//   output : 10 logits, softmax for argmax classification
+//
+// Pre-trained weights are loaded from disk by main.fj before inference.
+
+@device
+pub fn forward(
+    input: [f32; 784],
+    w1: [f32; 784 * 128], b1: [f32; 128],
+    w2: [f32; 128 * 10],  b2: [f32; 10]
+) -> [f32; 10] {
+    // Linear: hidden = relu(input @ w1 + b1)
+    let mut hidden: [f32; 128] = [0.0; 128]
+    for j in 0..128 {
+        let mut sum = b1[j]
+        for i in 0..784 {
+            sum = sum + input[i] * w1[i * 128 + j]
+        }
+        hidden[j] = if sum > 0.0 { sum } else { 0.0 }
+    }
+
+    // Linear: logits = hidden @ w2 + b2
+    let mut logits: [f32; 10] = [0.0; 10]
+    for k in 0..10 {
+        let mut sum = b2[k]
+        for j in 0..128 {
+            sum = sum + hidden[j] * w2[j * 10 + k]
+        }
+        logits[k] = sum
+    }
+    logits
+}
+
+pub fn argmax(logits: [f32; 10]) -> i64 {
+    let mut best_idx: i64 = 0
+    let mut best_val = logits[0]
+    for i in 1..10 {
+        if logits[i] > best_val {
+            best_val = logits[i]
+            best_idx = i as i64
+        }
+    }
+    best_idx
+}

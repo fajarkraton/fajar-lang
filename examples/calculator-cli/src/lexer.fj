@@ -1,0 +1,30 @@
+// lexer.fj — splits an arithmetic expression into tokens.
+// Recognizes integers, +, -, *, /, parens.
+
+pub fn tokenize(input: str) -> [str] {
+    let mut tokens = []
+    let mut current = ""
+    let parts = input.split("")
+
+    for ch in parts {
+        if len(ch) == 0 { continue }
+        if ch == " " {
+            if len(current) > 0 {
+                tokens = tokens + [current]
+                current = ""
+            }
+        } else if ch == "+" || ch == "-" || ch == "*" || ch == "/" || ch == "(" || ch == ")" {
+            if len(current) > 0 {
+                tokens = tokens + [current]
+                current = ""
+            }
+            tokens = tokens + [ch]
+        } else {
+            current = current + ch
+        }
+    }
+    if len(current) > 0 {
+        tokens = tokens + [current]
+    }
+    tokens
+}

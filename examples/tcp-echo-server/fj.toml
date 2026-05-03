@@ -1,0 +1,9 @@
+[package]
+name = "tcp-echo-server"
+version = "1.0.0"
+entry = "src/main.fj"
+description = "Async TCP echo server demonstrating async/await and effect handling — Fajar Lang example."
+authors = ["Fajar Lang examples"]
+license = "Apache-2.0"
+
+[dependencies]

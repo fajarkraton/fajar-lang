@@ -1,0 +1,26 @@
+// tcp-echo-server — accepts TCP connections on :8080 and echoes lines.
+//
+// Build: fj build
+// Run:   fj run
+
+use handler::echo_loop
+
+async fn run_server(port: i64) -> Result<i64, str> {
+    let listener = TcpListener::bind(f"0.0.0.0:{port}").await?
+    println(f"echo-server listening on :{port}")
+    let mut conns_handled: i64 = 0
+
+    loop {
+        let conn = listener.accept().await?
+        conns_handled = conns_handled + 1
+        // spawn one task per connection — concurrent handling.
+        spawn(echo_loop(conn))
+    }
+}
+
+fn main() {
+    match block_on(run_server(8080)) {
+        Ok(n) => println(f"served {n} connections"),
+        Err(e) => println(f"server error: {e}"),
+    }
+}

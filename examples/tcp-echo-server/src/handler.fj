@@ -1,0 +1,14 @@
+// handler.fj — per-connection echo handler.
+
+pub async fn echo_loop(conn: TcpConn) -> Result<i64, str> {
+    let mut total_bytes: i64 = 0
+    loop {
+        let line = conn.recv_line().await?
+        if len(line) == 0 {
+            break
+        }
+        conn.send(line).await?
+        total_bytes = total_bytes + len(line) as i64
+    }
+    Ok(total_bytes)
+}
