@@ -2,7 +2,87 @@
 
 All notable changes to Fajar Lang are documented here.
 
-## [Unreleased] — 2026-05-02 V32 audit + 4-fix follow-up
+## [Unreleased] — 2026-05-03 FAJAR_LANG_PERFECTION_PLAN P4 + P5 closed
+
+### Added
+
+**P4 — Soundness probes** (~4.5h actual vs 30-50h plan estimate, -85%
+under). Three sub-items:
+
+- **C1 polonius soundness probes** (commit `8d9a3768`) — 16 tests in
+  `tests/polonius_property_tests.rs`. 11 deterministic scenario probes
+  (many `&T` allowed, solo `&mut T` allowed, dangling-ref detection,
+  loop-CFG termination, killed-loan propagation, reborrow via subset,
+  disjoint loans, etc.) + 5 proptest properties (termination,
+  monotonic invalidation, determinism, no-loans-no-errors, killed-
+  loans-silenced). PASS criterion ≥10 → +60% over.
+- **C2 error-code coverage** (commits `cdc99219..4d3ad435`, 6 commits) —
+  103 tests in `tests/error_code_coverage.rs` covering 125 of 135
+  cataloged codes; 12 forward-compat per §6.6 R6 (catalog-only or
+  declared-but-never-emitted variants documented honestly with routing
+  fallback). Catalog reconciliation: `docs/ERROR_CODES.md` 91 → 135 codes;
+  PE/SE/TE/DE descriptions corrected to match source. New audit script
+  `scripts/audit_error_codes.py --strict` exits 0 with gap=0 (CI-gated
+  in `.github/workflows/ci.yml`).
+- **C3 fuzz +3 targets** (commit `cb6d7ce2`) — `fuzz_codegen`,
+  `fuzz_borrow`, `fuzz_async` registered in `fuzz/Cargo.toml`; CI runs
+  each at 60s in the `fuzz` job. Stable-Rust canary
+  (`tests/fuzz_target_canary.rs`, 6 tests) catches API drift without
+  needing nightly + cargo-fuzz.
+
+Findings: `docs/FAJAR_LANG_PERFECTION_PHASE_4_FINDINGS.md`.
+
+**P5 — LSP + IDE quality** (~1.5h actual vs 24-32h plan estimate, -94%
+under). Three sub-items:
+
+- **D1 5 editor packages** (commit `def30dc5`) — 10 tests in
+  `tests/editor_packages.rs` validating helix/jetbrains/neovim/vscode/
+  zed configs parse + reference `fj lsp` invocation + declare `.fj` file
+  extension. Plus `lsp::run_lsp` pub-surface check + main.rs `Command::Lsp`
+  dispatch regression gate. Honest scope: true E2E editor testing
+  requires graphical env beyond CI; tests validate launch pre-conditions.
+- **D2 lsp_v3 semantic tokens** (commit `f57f7992`) — 41 tests in
+  `tests/lsp_v3_semantic_tokens.rs` covering all 24 `SemanticTokenType`
+  variants + 8 `SemanticTokenModifier` variants + 4 meta-checks +
+  5 delta-encoding correctness tests. PASS ≥1 test per token kind.
+  Honest finding: pre-flight count was 25; actual 24 (corrected).
+- **D3 error display polish** (commit `9ebd6baf`) — 18 tests in
+  `tests/error_display_golden.rs` verifying miette render quality
+  (code + filename + source excerpt + help) across LE/PE/SE/KE/DE/RE
+  layers. Substring-invariant rather than byte-exact goldens (more
+  stable across miette upgrades + theme settings). Honest finding:
+  RuntimeError variants don't carry spans, so RE renders are sparse;
+  `from_runtime_error_with_span` exists for future tightening.
+
+Findings: `docs/FAJAR_LANG_PERFECTION_PHASE_5_FINDINGS.md`.
+
+### Stats
+
+- 11 commits across P4+P5
+- ~200 new tests (16 + 103 + 6 + 41 + 18 + 10 + 6 = 200)
+- 0 production code changes (test-only / docs-only)
+- Cumulative perfection-plan progress: **P0+P1+P2+P3+P4+P5 closed**
+  (6 of 10 phases). Remaining: P6 examples+docs, P7 distribution,
+  P8 LLVM O2 miscompile, P9 synthesis.
+
+### Quality gates (all green at session end)
+
+```
+cargo test --lib --release -- --test-threads=64       7626 PASS / 0 FAIL
+cargo test --release --test error_code_coverage        103 PASS / 0 FAIL
+cargo test --release --test polonius_property_tests     16 PASS / 0 FAIL
+cargo test --release --test fuzz_target_canary           6 PASS / 0 FAIL
+cargo test --release --test lsp_v3_semantic_tokens      41 PASS / 0 FAIL
+cargo test --release --test error_display_golden        18 PASS / 0 FAIL
+cargo test --release --test editor_packages             10 PASS / 0 FAIL
+cargo clippy --tests --release -- -D warnings           exit 0
+cargo fmt -- --check                                     exit 0
+python3 scripts/audit_error_codes.py --strict           exit 0; gap=0
+```
+
+---
+
+## [V32-AUDIT-COMPLETE] — 2026-05-02 V32 audit + 4-fix follow-up
 
 ### Changed
 
