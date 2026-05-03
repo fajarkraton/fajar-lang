@@ -5,6 +5,10 @@ edition = "2024"
 rust-version = "1.87"
 description = "Fajar Lang — Systems programming language for embedded ML + OS integration. FajarQuant, JIT compilation, GPU dispatch, algebraic effects, 10,400+ tests."
 license = "Apache-2.0"
+repository = "https://github.com/fajarkraton/fajar-lang"
+readme = "README.md"
+keywords = ["compiler", "language", "embedded", "ml", "os"]
+categories = ["compilers", "development-tools", "embedded", "no-std", "science"]
 
 [[bin]]
 name = "fj"

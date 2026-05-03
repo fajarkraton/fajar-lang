@@ -1,0 +1,41 @@
+// Fajar Lang baseline: 256×256 mandelbrot escape iteration.
+// Tests floating-point arithmetic + nested loops.
+
+fn iterations(cx: f64, cy: f64, max_iter: i64) -> i64 {
+    let mut x: f64 = 0.0
+    let mut y: f64 = 0.0
+    let mut i: i64 = 0
+    while i < max_iter {
+        let x2 = x * x
+        let y2 = y * y
+        if x2 + y2 > 4.0 {
+            return i
+        }
+        let new_x = x2 - y2 + cx
+        y = 2.0 * x * y + cy
+        x = new_x
+        i = i + 1
+    }
+    max_iter
+}
+
+fn main() {
+    let width: i64 = 256
+    let height: i64 = 256
+    let max_iter: i64 = 200
+
+    let mut checksum: i64 = 0
+    let mut py = 0
+    while py < height {
+        let mut px = 0
+        while px < width {
+            let cx = (px as f64) / (width as f64) * 3.5 - 2.5
+            let cy = (py as f64) / (height as f64) * 2.0 - 1.0
+            checksum = checksum + iterations(cx, cy, max_iter)
+            px = px + 1
+        }
+        py = py + 1
+    }
+
+    println(f"mandelbrot checksum = {checksum}")
+}
