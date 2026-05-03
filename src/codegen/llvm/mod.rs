@@ -9255,7 +9255,15 @@ mod tests {
         let program = make_program(vec![Item::FnDef(main_fn)]);
         compiler.compile_program(&program).unwrap();
         let ir = compiler.print_ir();
-        assert!(ir.contains("3.14"));
+        // Test body uses 1.25 (a power-of-two-clean float that LLVM
+        // prints exactly without rounding artifacts). The earlier
+        // assertion `contains("3.14")` was a stale post-sed mismatch
+        // (V32 P3 wave bumped the literal to dodge clippy
+        // approx_constant but the assertion was not updated).
+        assert!(
+            ir.contains("1.25") || ir.contains("0x3FF4"),
+            "expected float literal in IR, got:\n{ir}"
+        );
     }
 
     #[test]
@@ -13665,5 +13673,108 @@ mod tests {
         // (Note: LLVM may use `naked` in completely unrelated contexts
         // e.g. some intrinsics — so we narrow to "function attribute"
         // pattern. The simplest defensible check is: no .text.interrupt.)
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // P8.A1 — @no_vectorize codegen regression gate
+    // ═══════════════════════════════════════════════════════════
+    //
+    // Closes the gap surfaced by HONEST_AUDIT_V32.md G1: the
+    // `@no_vectorize` annotation is layer 1 of the 3-layer
+    // quarantine for the LLVM O2 vecmat miscompile (V30 Track 3
+    // P3.6). The codegen impl at src/codegen/llvm/mod.rs:3288-3315
+    // attaches two LLVM string attributes:
+    //   - `"no-implicit-float"="true"`
+    //   - `"target-features"="-avx,-avx2,-avx512f,-sse3,-ssse3,
+    //                          -sse4.1,-sse4.2,+popcnt"`
+    // Both must remain on the function or the quarantine breaks
+    // silently.
+    //
+    // These tests verify the codegen still emits both attributes
+    // for functions annotated with `@no_vectorize`. Tests run only
+    // under `--features llvm` since they import the LLVM context.
+
+    fn make_no_vectorize_fn(name: &str, body: Expr) -> FnDef {
+        let mut f = make_simple_fn(name, body);
+        f.annotation = Some(crate::parser::ast::Annotation {
+            name: "no_vectorize".to_string(),
+            param: None,
+            params: vec![],
+            span: dummy_span(),
+        });
+        f
+    }
+
+    #[test]
+    fn at_no_vectorize_emits_no_implicit_float_and_target_features() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_at_no_vectorize");
+
+        // @no_vectorize fn tight() -> i64 { 0 }
+        let body = make_int_lit(0);
+        let tight = make_no_vectorize_fn("tight", body);
+        let program = make_program(vec![Item::FnDef(tight)]);
+
+        compiler
+            .compile_program(&program)
+            .expect("compile @no_vectorize fn");
+        assert!(compiler.verify().is_ok(), "module should verify");
+
+        let ir = compiler.print_ir();
+
+        // Layer 1 of the M9 quarantine — no-implicit-float disables
+        // implicit FP/SIMD register use, suppressing the autovec
+        // patterns that miscompile under O2.
+        assert!(
+            ir.contains("no-implicit-float"),
+            "expected `no-implicit-float` attribute on @no_vectorize fn — \
+             V31.B.P2 codegen at src/codegen/llvm/mod.rs:3288-3300. IR:\n{ir}",
+        );
+        // Layer 1 also disables vector ISA target-features. We grep
+        // for the specific negative features that codegen sets.
+        assert!(
+            ir.contains("-avx") && ir.contains("-sse"),
+            "expected `target-features` to disable AVX + SSE on @no_vectorize \
+             fn — V31.B.P2 codegen at src/codegen/llvm/mod.rs:3306-3309. \
+             IR:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn at_no_vectorize_does_not_affect_regular_functions() {
+        // Defensive: regular functions must NOT receive the
+        // restrictive target-features. Otherwise the entire module
+        // would be no-vector even when it shouldn't be.
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_no_vec_isolation");
+
+        // fn regular() -> i64 { 0 } — no annotation
+        let body = make_int_lit(0);
+        let regular = make_simple_fn("regular", body);
+        let program = make_program(vec![Item::FnDef(regular)]);
+
+        compiler
+            .compile_program(&program)
+            .expect("compile regular fn");
+
+        let ir = compiler.print_ir();
+        // Regular function must NOT have no-implicit-float on its
+        // own attribute group. (The string can appear elsewhere in
+        // a host triple, but not as a function attribute group.)
+        // We use a structural anchor: the attribute group "= {"
+        // surrounded form should not contain no-implicit-float.
+        let attr_groups: Vec<&str> = ir
+            .lines()
+            .filter(|l| l.starts_with("attributes #"))
+            .collect();
+        for grp in &attr_groups {
+            assert!(
+                !grp.contains("no-implicit-float"),
+                "regular fn should NOT have no-implicit-float in attribute \
+                 group, found: {grp}\n--- full IR ---\n{ir}",
+            );
+        }
     }
 }
