@@ -63,17 +63,25 @@ error[LE002]: unterminated string literal
 
 | Code | Nama | Deskripsi | Contoh Trigger |
 |------|------|-----------|----------------|
-| PE001 | UnexpectedToken | Token tidak sesuai grammar | `let = 42` |
-| PE002 | ExpectedExpression | Diharapkan expression | `let x = ` (lalu EOF) |
+| PE001 | UnexpectedToken | Token tidak sesuai grammar | `let = 42`; `fn f() {` (EOF as `}`) |
+| PE002 | ExpectedExpression | Diharapkan expression | `let x = 1 +` (RHS missing) |
 | PE003 | ExpectedType | Diharapkan type annotation | `fn f(x: ) { }` |
-| PE004 | ExpectedPattern | Diharapkan pattern di binding | `match x { => 1 }` |
-| PE005 | ExpectedIdentifier | Diharapkan identifier | `fn 42() {}` |
-| PE006 | UnexpectedEof | Source berakhir di tengah konstruksi | `fn f() {` (EOF) |
-| PE007 | InvalidPattern | Pattern matching invalid | `match x { 1 + 2 => 3 }` |
-| PE008 | DuplicateField | Field struct duplikat | `Point { x: 1, x: 2 }` |
-| PE009 | TrailingSeparator | Trailing separator (warning-level) | `[1, 2, 3,,]` |
-| PE010 | InvalidAnnotation | Annotation tidak dikenal/struktur salah | `@@unknown` |
-| PE011 | ModuleFileNotFound | `mod foo` tapi `foo.fj` tidak ada | `mod nonexistent` |
+| PE004 | ExpectedPattern | Diharapkan pattern di binding/match | `match x { => 1 }` |
+| PE005 | ExpectedIdentifier | Diharapkan identifier | `let = 42` |
+| PE006 | UnexpectedEof | Source berakhir di tengah konstruksi | *(framework — saat ini di-route via PE001)* |
+| PE007 | InvalidPattern | Pattern matching invalid | *(framework — saat ini di-route via PE001/PE004)* |
+| PE008 | DuplicateField | Field struct duplikat | `P { x: 1, x: 2 }` |
+| PE009 | TrailingSeparator | Trailing separator (warning) | *(framework — parser saat ini menerima trailing separator silently)* |
+| PE010 | InvalidAnnotation | Annotation tidak dikenal/struktur salah | *(framework — saat ini di-route via PE001/PE002)* |
+| PE011 | ModuleFileNotFound | `mod foo` tapi `foo.fj` tidak ada | *(framework — file resolution belum di-wire ke parser-driver)* |
+
+> **PE006-PE007/PE009-PE011 framework status (2026-05-03):** Variants
+> dideklarasikan di `src/parser/mod.rs::ParseError` untuk forward
+> compatibility tetapi parser saat ini me-route kondisi-kondisi tersebut
+> via PE001/PE002/PE004. Format string variant masih divalidasi di
+> `tests/error_code_coverage.rs::coverage_pe00{6,7,9,a,b}_*_format` agar
+> Display impl tidak drift. Jika di masa depan grammar membutuhkan
+> diagnostic yang lebih halus, swap test ke parse-error trigger.
 
 ---
 
