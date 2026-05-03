@@ -2,7 +2,38 @@
 
 All notable changes to Fajar Lang are documented here.
 
-## [Unreleased] — 2026-05-03 FAJAR_LANG_PERFECTION_PLAN P4 + P5 + P6 closed
+## [Unreleased] — 2026-05-03 FAJAR_LANG_PERFECTION_PLAN P4 + P5 + P6 + P7 closed
+
+### Added (P7 — Distribution unblock)
+
+**P7 — Distribution unblock** (~1h actual vs 20-30h plan estimate, -97%
+under). Three sub-items, all reaching engineering-side PASS:
+
+- **F1 binary distribution** — `tests/release_workflow.rs` ships 8
+  structural tests validating `.github/workflows/release.yml` (5
+  platform matrix, action-gh-release publishing, llvm-check gating,
+  SHA-256 checksum emission, Cargo.toml MAJOR.MINOR.PATCH version
+  for tag-pattern match). v32.1.0 was tagged earlier; workflow
+  auto-triggered on push, binaries pending GitHub Actions runtime.
+
+- **F3 crates.io publish-blocker plan** — `docs/CRATES_IO_PUBLISH_PLAN.md`
+  documents the 2 mechanical blockers (fajarquant git dep,
+  cranelift-object `[patch.crates-io]`). `scripts/check_publish_ready.sh`
+  detects blockers + missing metadata mechanically. Cargo.toml gained
+  4 recommended fields (repository, readme, keywords, categories).
+  Full closure (cargo publish exit 0) requires founder coordination
+  on the separate fajarquant repo.
+
+- **F4 5+ baseline benchmarks vs Rust/Go/C** — `benches/baselines/`
+  now ships 5 distinct workloads: fibonacci, bubble_sort, sum_loop,
+  matrix_multiply (NEW), mandelbrot (NEW). NEW benchmarks have source
+  in fj+rs+c+go. `benches/baselines/run_baselines.sh` runner script
+  builds + runs each best-of-3, gracefully skipping missing toolchains.
+
+Findings: `docs/FAJAR_LANG_PERFECTION_PHASE_7_FINDINGS.md`.
+
+**Cumulative perfection-plan progress**: P0+P1+P2+P3+P4+P5+P6+P7
+closed (8 of 10 phases). Remaining: P8 LLVM O2 miscompile, P9 synthesis.
 
 ### Added (P6 — Examples + docs depth)
 
