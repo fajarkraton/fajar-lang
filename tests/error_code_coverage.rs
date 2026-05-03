@@ -463,6 +463,262 @@ fn coverage_se022_index_out_of_bounds_compile_time() {
     expect_semantic_error("fn main() { let _ = [1, 2, 3][99] }", "SE022");
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// KE — Kernel Context Errors (6 codes: KE001-KE006)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn coverage_ke001_heap_alloc_in_kernel() {
+    expect_semantic_error("@kernel fn k() { to_string(42) }", "KE001");
+}
+
+#[test]
+fn coverage_ke002_tensor_in_kernel() {
+    expect_semantic_error("@kernel fn k() { tensor_zeros(3, 4) }", "KE002");
+}
+
+#[test]
+fn coverage_ke003_device_call_in_kernel() {
+    expect_semantic_error(
+        "@device fn d() -> i64 { 0 }\n@kernel fn k() -> i64 { d() }",
+        "KE003",
+    );
+}
+
+// KE004 InvalidKernelOp: present in stability.rs catalog metadata
+// ("KE004") but no `InvalidKernelOp` variant exists in `SemanticError`.
+// Analyzer routes all violations through KE001/KE002/KE003. Reserved
+// for future fine-grained kernel-context diagnostics. Annotated in
+// docs/ERROR_CODES.md §5.1 as forward-compat.
+
+#[test]
+fn coverage_ke005_asm_in_safe_context_format() {
+    // KE005 AsmInSafeContext: variant wired but `asm!()` macro path in
+    // .fj source is feature-gated. Validate Display via direct construction.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::AsmInSafeContext {
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("KE005"), "got: {e}");
+}
+
+#[test]
+fn coverage_ke006_asm_in_device_context_format() {
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::AsmInDeviceContext {
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("KE006"), "got: {e}");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DE — Device Context Errors (3 codes: DE001-DE003)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn coverage_de001_raw_pointer_in_device() {
+    expect_semantic_error("@device fn d() { mem_alloc(4096) }", "DE001");
+}
+
+#[test]
+fn coverage_de002_kernel_call_in_device() {
+    expect_semantic_error(
+        "@kernel fn k() -> i64 { 0 }\n@device fn d() -> i64 { k() }",
+        "DE002",
+    );
+}
+
+// DE003 InvalidDeviceOp: same situation as KE004 — only present in
+// stability.rs catalog metadata; no `InvalidDeviceOp` variant exists.
+// Annotated forward-compat in docs/ERROR_CODES.md §5.2.
+
+// ════════════════════════════════════════════════════════════════════════
+// TE — Tensor Errors (10 codes: TE001-TE010)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn coverage_te001_shape_mismatch() {
+    expect_runtime_error(
+        "let a = tensor_from_data([1.0, 2.0, 3.0], [3])\nlet b = tensor_from_data([1.0, 2.0], [2])\ntensor_add(a, b)",
+        "TE001",
+    );
+}
+
+#[test]
+fn coverage_te002_matmul_shape_mismatch_format() {
+    // TE002 in src/runtime/ml/tensor.rs is `MatmulShapeMismatch` (matmul
+    // inner-dim conflict), NOT generic invalid-reshape (which is TE003).
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::MatmulShapeMismatch {
+        left: vec![2, 3],
+        right: vec![4, 2],
+        left_inner: 3,
+        right_inner: 4,
+    };
+    assert!(format!("{e}").contains("TE002"), "got: {e}");
+}
+
+#[test]
+fn coverage_te003_reshape_error_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::ReshapeError {
+        from: vec![6],
+        to: vec![2, 4],
+        from_count: 6,
+        to_count: 8,
+    };
+    assert!(format!("{e}").contains("TE003"), "got: {e}");
+}
+
+#[test]
+fn coverage_te004_rank_mismatch_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::RankMismatch {
+        expected: 2,
+        got: 3,
+    };
+    assert!(format!("{e}").contains("TE004"), "got: {e}");
+}
+
+#[test]
+fn coverage_te005_backward_non_scalar_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::BackwardNonScalar { shape: vec![2, 3] };
+    assert!(format!("{e}").contains("TE005"), "got: {e}");
+}
+
+#[test]
+fn coverage_te006_no_gradient_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::NoGradient;
+    assert!(format!("{e}").contains("TE006"), "got: {e}");
+}
+
+#[test]
+fn coverage_te007_division_by_zero_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::DivisionByZero;
+    assert!(format!("{e}").contains("TE007"), "got: {e}");
+}
+
+#[test]
+fn coverage_te008_invalid_data_format() {
+    use fajar_lang::runtime::ml::tensor::TensorError;
+    let e = TensorError::InvalidData {
+        reason: "generic tensor failure".into(),
+    };
+    assert!(format!("{e}").contains("TE008"), "got: {e}");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn coverage_te009_gpu_shape_mismatch_format() {
+    use fajar_lang::runtime::gpu::GpuError;
+    let e = GpuError::ShapeMismatch("3x4 vs 5x6".into());
+    assert!(format!("{e}").contains("TE009"), "got: {e}");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn coverage_te010_gpu_oom_format() {
+    use fajar_lang::runtime::gpu::GpuError;
+    let e = GpuError::MemoryExhausted {
+        requested: 1 << 30,
+        available: 1 << 20,
+    };
+    assert!(format!("{e}").contains("TE010"), "got: {e}");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RE — Runtime Errors (10 codes: RE001-RE010)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn coverage_re001_division_by_zero() {
+    expect_runtime_error("1 / 0", "RE001");
+}
+
+#[test]
+fn coverage_re002_type_error() {
+    // Adding incompatible runtime types — a string + int is a type error
+    // discoverable only at runtime if analyzer doesn't catch it first.
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::TypeError("add: int + string".into());
+    assert!(format!("{e}").contains("RE002"), "got: {e}");
+}
+
+#[test]
+fn coverage_re003_stack_overflow_format() {
+    // RE003 fires only after `MAX_RECURSION_DEPTH` is exceeded; expensive
+    // to drive end-to-end. Validate via direct construction.
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::StackOverflow {
+        depth: 1024,
+        backtrace: "frame 1\nframe 2\n...".into(),
+    };
+    assert!(format!("{e}").contains("RE003"), "got: {e}");
+}
+
+#[test]
+fn coverage_re004_undefined_variable_format() {
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::UndefinedVariable("zzz".into());
+    assert!(format!("{e}").contains("RE004"), "got: {e}");
+}
+
+#[test]
+fn coverage_re005_not_a_function_format() {
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::NotAFunction("42".into());
+    assert!(format!("{e}").contains("RE005"), "got: {e}");
+}
+
+#[test]
+fn coverage_re006_arity_mismatch_format() {
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::ArityMismatch {
+        expected: 2,
+        got: 1,
+    };
+    assert!(format!("{e}").contains("RE006"), "got: {e}");
+}
+
+#[test]
+fn coverage_re007_invalid_assign_target_format() {
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::InvalidAssignTarget;
+    assert!(format!("{e}").contains("RE007"), "got: {e}");
+}
+
+#[test]
+fn coverage_re008_unsupported_format() {
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::Unsupported("assertion failed".into());
+    assert!(format!("{e}").contains("RE008"), "got: {e}");
+}
+
+#[test]
+fn coverage_re009_integer_overflow() {
+    expect_runtime_error("9223372036854775807 + 1", "RE009");
+}
+
+#[test]
+fn coverage_re010_index_out_of_bounds_runtime_format() {
+    // Compile-time bounds check (SE022) catches direct array literals
+    // before runtime; RE010 fires for dynamic index. Validate via direct
+    // construction since the dynamic-index path requires a let-bound
+    // variable that escapes constant folding.
+    use fajar_lang::interpreter::RuntimeError;
+    let e = RuntimeError::IndexOutOfBounds {
+        index: 99,
+        collection: "array".into(),
+        length: 3,
+    };
+    assert!(format!("{e}").contains("RE010"), "got: {e}");
+}
+
 #[test]
 fn coverage_se023_quantized_not_dequantized() {
     expect_semantic_error(

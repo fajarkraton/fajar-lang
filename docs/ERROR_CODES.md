@@ -139,10 +139,10 @@ matmul(d, d)
 
 | Code | Nama | Deskripsi | Contoh |
 |------|------|-----------|--------|
-| KE001 | HeapAllocInKernel | Heap allocation di `@kernel` | `String::new()`, `Vec::new()` |
-| KE002 | TensorInKernel | Tensor operation di `@kernel` | `zeros()`, `relu()`, `.backward()` |
+| KE001 | HeapAllocInKernel | Heap allocation di `@kernel` | `String::new()`, `to_string()` |
+| KE002 | TensorInKernel | Tensor operation di `@kernel` | `tensor_zeros()`, `tensor_relu()` |
 | KE003 | DeviceCallInKernel | Calling `@device` function dari `@kernel` | `@device fn` dipanggil dalam `@kernel` |
-| KE004 | InvalidKernelOp | Operasi tidak diperbolehkan di `@kernel` | Operasi yang memerlukan heap |
+| KE004 | InvalidKernelOp | *(forward-compat — catalog metadata only; tidak di-emit oleh analyzer)* |
 | KE005 | AsmInSafeContext | `asm!()` inline assembly di `@safe` | Inline asm tanpa `@unsafe` |
 | KE006 | AsmInDeviceContext | `asm!()` inline assembly di `@device` | Inline asm di kode device |
 
@@ -165,9 +165,9 @@ error[KE001]: heap allocation not allowed in @kernel context
 
 | Code | Nama | Deskripsi | Contoh |
 |------|------|-----------|--------|
-| DE001 | RawPointerInDevice | Raw pointer di `@device` | `*mut T`, `*const T` |
-| DE002 | HardwareInDevice | Hardware access di `@device` | `irq_register!`, `port_write!`, `map_page!` |
-| DE003 | InvalidDeviceOp | Operasi tidak diperbolehkan di `@device` | `asm!()`, raw memory access |
+| DE001 | RawPointerInDevice | Raw pointer di `@device` | `mem_alloc`, `port_outb`, `volatile_read` |
+| DE002 | KernelCallInDevice | Calling `@kernel` function dari `@device` | `@kernel fn` dipanggil dari `@device` |
+| DE003 | InvalidDeviceOp | *(forward-compat — catalog metadata only; tidak di-emit oleh analyzer)* |
 
 ---
 
@@ -175,16 +175,16 @@ error[KE001]: heap allocation not allowed in @kernel context
 
 | Code | Nama | Deskripsi |
 |------|------|-----------|
-| TE001 | ShapeMismatch | Dimensi tensor tidak kompatibel untuk operasi |
-| TE002 | InvalidReshape | Cannot reshape — total elemen berbeda |
-| TE003 | DimOutOfRange | Dimension index melebihi rank tensor |
-| TE004 | RankMismatch | Tensor rank yang diharapkan tidak match |
-| TE005 | NonScalarBackward | `.backward()` butuh scalar tensor (numel=1) |
+| TE001 | ShapeMismatch | Element-wise op shape mismatch (`expected {expected:?}, got {got:?}`) |
+| TE002 | MatmulShapeMismatch | Matmul inner-dim mismatch (`{left} @ {right}`) |
+| TE003 | ReshapeError | Reshape element-count mismatch (`from {from} to {to}`) |
+| TE004 | RankMismatch | Operation requires specific rank (`expected {n}, got {m}`) |
+| TE005 | BackwardNonScalar | `.backward()` butuh scalar tensor (numel=1) |
 | TE006 | NoGradient | Gradient tidak tersedia (`requires_grad=false` atau belum dihitung) |
 | TE007 | DivisionByZero | Pembagian dengan nol pada elemen tensor |
-| TE008 | TensorOpError | Operasi tensor generik gagal (catch-all) |
-| TE009 | GpuShapeMismatch | GPU tensor shape mismatch |
-| TE010 | GpuOutOfMemory | GPU memory exhausted (OOM) |
+| TE008 | InvalidData | Invalid tensor data (catch-all `{reason}`) |
+| TE009 | GpuShapeMismatch | GPU tensor shape mismatch (feature-gated `cuda`) |
+| TE010 | GpuOutOfMemory | GPU memory exhausted (feature-gated `cuda`) |
 
 ### Contoh Output TE001:
 
