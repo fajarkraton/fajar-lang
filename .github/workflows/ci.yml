@@ -220,6 +220,12 @@ jobs:
         run: cd fuzz && cargo +nightly fuzz run fuzz_repl -- -max_total_time=30
       - name: Fuzz macro (30s)
         run: cd fuzz && cargo +nightly fuzz run fuzz_macro -- -max_total_time=30
+      - name: Fuzz codegen (60s — P4.C3)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_codegen -- -max_total_time=60
+      - name: Fuzz borrow / polonius (60s — P4.C3)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_borrow -- -max_total_time=60
+      - name: Fuzz async (60s — P4.C3)
+        run: cd fuzz && cargo +nightly fuzz run fuzz_async -- -max_total_time=60
 
   audit:
     name: Security Audit

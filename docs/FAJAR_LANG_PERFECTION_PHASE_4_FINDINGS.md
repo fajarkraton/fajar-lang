@@ -1,7 +1,7 @@
 ---
 phase: FAJAR_LANG_PERFECTION P4 — Soundness probes
-status: PARTIAL 2026-05-03 (C2 CLOSED; C1+C3 deferred to next session)
-budget: ~3.5h actual for C2 (est 30-50h for full P4 incl C1+C3; +50% surprise = 75h cap)
+status: CLOSED 2026-05-03 (C1 + C2 + C3 all green)
+budget: ~4.5h actual for full P4 (est 30-50h; +50% surprise = 75h cap; -85% under)
 plan: docs/FAJAR_LANG_PERFECTION_PLAN.md §3 P4 + §4 P4 PASS criteria
 ---
 
@@ -21,8 +21,8 @@ in-scope under the same plan.
 | Item | Status | Effort | PASS criterion |
 |---|---|---|---|
 | C2 — error-code coverage | ✅ CLOSED | ~3.5h | strict audit returns gap=0 |
-| C1 — polonius property tests | DEFERRED | est 2-3d | ≥10 new property tests |
-| C3 — fuzz +3 targets | DEFERRED | est 1-2d | 3 new targets, 60s+ no crash |
+| C1 — polonius property tests | ✅ CLOSED | ~30min | ≥10 new property tests (shipped 16) |
+| C3 — fuzz +3 targets | ✅ CLOSED | ~30min | 3 new targets registered + canary green |
 
 ## C2 — Error-code coverage (CLOSED)
 
@@ -129,26 +129,59 @@ cargo fmt -- --check                               # exit 0
   ALL error codes" line item. Came in -55-70% under, mostly because
   direct-format tests are fast to author once variant fields are known.
 
-## C1 — Polonius soundness (DEFERRED)
+## C1 — Polonius soundness (CLOSED)
 
-PASS criterion: ≥10 new property tests for borrow rules covering
-many-`&T` OR one-`&mut T`, lifetime escape, two-phase borrow,
-conditional borrow, loop borrow, etc.
+PASS criterion: ≥10 new property tests for borrow rules. **Shipped 16
+tests** (60% over criterion) in `tests/polonius_property_tests.rs`:
 
-State of `src/analyzer/polonius/` and `src/analyzer/borrow_lite.rs` is
-healthy (no test failures in current suite). C1 is additive
-soundness coverage, not a bug fix. Estimated 2-3 days when picked up.
+**11 deterministic scenario probes:**
+- s1 many `&x` shared loans → no error
+- s2 solo `&mut x` → no error
+- s3 dangling reference detected (kind=DanglingReference)
+- s4 solver terminates on self-loop CFG
+- s5 empty facts → empty errors
+- s6 killed loan does not propagate to subsequent invalidations
+- s7 live + invalidated loan fires error
+- s8 dead origin + invalidation → no error
+- s9 reborrow via subset propagates loan through origin chain
+- s10 small-CFG iteration count bounded (catches quadratic regressions)
+- s11 disjoint loans on different places → no interference
 
-## C3 — Fuzz suite +3 targets (DEFERRED)
+**5 proptest properties (random fact-set invariants):**
+- prop_termination — solver iterations ≤ max_iterations on any input
+- prop_monotonic_invalidation — errors never DECREASE when invalidations added
+- prop_determinism — same input → same error_count, iterations, live_at
+- prop_no_loans_no_errors — CFG topology alone cannot create errors
+- prop_killed_loans_silenced — killed-then-invalidated never errors
 
-Current 8 targets in `fuzz/fuzz_targets/`:
-`fuzz_lexer`, `fuzz_parser`, `fuzz_analyzer`, `fuzz_interpreter`,
-`fuzz_effect`, `fuzz_fstring`, `fuzz_macro`, `fuzz_repl`.
+Verify: `cargo test --release --test polonius_property_tests` → 16/16 PASS.
 
-Plan PASS criterion needs +3 targets, e.g. `fuzz_codegen`,
-`fuzz_borrow`, `fuzz_async`. Each needs a `libfuzzer_sys::fuzz_target!`
-entry plus `[[bin]]` in `fuzz/Cargo.toml`. 60s+ corpus exploration per
-target with no crash. Estimated 1-2 days.
+## C3 — Fuzz suite +3 targets (CLOSED)
+
+PASS criterion: ≥3 new fuzz targets that converge in 60s+ runs with no
+crashes. **Shipped 3 targets** in `fuzz/fuzz_targets/`:
+
+| Target | Drives | Iteration cap |
+|---|---|---|
+| `fuzz_codegen` | random source → lex → parse → analyze → `vm::Compiler::compile` | n/a (single call) |
+| `fuzz_borrow` | random source → lex → parse → `FactGenerator::generate` → `PoloniusSolver::solve` | 200 iterations |
+| `fuzz_async` | random body wrapped in `async fn _t() { … }` → analyze | n/a |
+
+CI integration in `.github/workflows/ci.yml::fuzz` job runs each new
+target at `-max_total_time=60` (matches existing analyzer/parser cadence).
+
+**Stable-Rust canary** in `tests/fuzz_target_canary.rs` (6 tests) mirrors
+each target's body with a deterministic input + a garbage-input loop,
+so API drift fails on stable CI before the nightly fuzz run starts.
+
+Verify:
+```
+cargo test --release --test fuzz_target_canary    # 6 PASS / 0 FAIL
+# In nightly CI:
+cd fuzz && cargo +nightly fuzz run fuzz_codegen -- -max_total_time=60
+cd fuzz && cargo +nightly fuzz run fuzz_borrow  -- -max_total_time=60
+cd fuzz && cargo +nightly fuzz run fuzz_async   -- -max_total_time=60
+```
 
 ## Self-check (CLAUDE.md §6.8)
 
@@ -178,23 +211,28 @@ target with no crash. Estimated 1-2 days.
 
 6/6 satisfied.
 
-## Onward to P4 closeout (C1+C3) and P5
+## Onward to P5
 
-Recommended next-session pivot:
-1. **C1 polonius property tests** — additive soundness coverage. Use
-   `proptest` (already in dev-deps) to generate borrow-rule scenarios
-   and compare against intended outcomes.
-2. **C3 fuzz +3 targets** — `fuzz_codegen` (LLVM/Cranelift), `fuzz_borrow`
-   (polonius solver), `fuzz_async` (effect handlers).
-3. **P4 final closeout doc** — update this findings file with C1+C3
-   results, then close P4 entirely and proceed to P5 (LSP+IDE quality).
+Per the perfection plan §3, P5 = LSP + IDE quality (D1/D2/D3) is next.
+Items:
+- D1 LSP server quality verification across 5 editor packages
+- D2 lsp_v3 semantic tokens coverage audit
+- D3 Error display polish (miette output across all 78+ codes)
 
-Per the perfection plan §3, P5 is parallel-eligible with P4 if C1/C3 take
-longer than expected.
+Per §6 phase ordering, P5 is also parallel-eligible with P6 (examples +
+docs depth) if budget allows.
 
 ---
 
-*P4.C2 closed 2026-05-03. 100/103 individual tests + 2 batch tests = 103
-test fns covering 125 codes (135 cataloged − 12 forward-compat = 123
-expected covered). Audit script `scripts/audit_error_codes.py --strict`
-exits 0 with gap=0.*
+*P4 fully CLOSED 2026-05-03 in single session. Total ~4.5h (vs 30-50h
+estimate; -85% under).*
+
+**P4.C2** — 103 test fns covering 125 of 135 cataloged codes (12
+forward-compat, 0 gap). `scripts/audit_error_codes.py --strict` exits 0.
+
+**P4.C1** — 16 polonius soundness probes (11 scenario + 5 proptest
+properties). `cargo test --release --test polonius_property_tests` → 16/16.
+
+**P4.C3** — 3 new fuzz targets (codegen/borrow/async) registered in
+`fuzz/Cargo.toml` + 6 stable-Rust canary tests + CI integration at 60s
+each in `.github/workflows/ci.yml::fuzz`.

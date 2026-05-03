@@ -59,3 +59,18 @@ doc = false
 name = "fuzz_macro"
 path = "fuzz_targets/fuzz_macro.rs"
 doc = false
+
+[[bin]]
+name = "fuzz_codegen"
+path = "fuzz_targets/fuzz_codegen.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_borrow"
+path = "fuzz_targets/fuzz_borrow.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_async"
+path = "fuzz_targets/fuzz_async.rs"
+doc = false
