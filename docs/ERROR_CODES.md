@@ -94,13 +94,13 @@ error[LE002]: unterminated string literal
 | SE003 | UndefinedType | Tipe belum dideklarasikan |
 | SE004 | TypeMismatch | Tipe tidak cocok (expected vs actual) |
 | SE005 | ArgumentCountMismatch | Jumlah argumen fungsi tidak sesuai |
-| SE006 | ImmutableAssignment | Assignment ke variabel immutable (tanpa `mut`) |
-| SE007 | DuplicateDefinition | Nama sudah didefinisikan di scope yang sama |
-| SE008 | ReturnOutsideFunction | `return` di luar function body |
-| SE009 | UnusedVariable | Variabel dideklarasikan tapi tidak dipakai (warning) |
-| SE010 | UnreachableCode | Kode setelah return/break tidak bisa dijangkau (warning) |
-| SE011 | MissingReturn | Fungsi mungkin tidak mengembalikan value |
-| SE012 | InvalidContext | Operasi invalid di context saat ini |
+| SE006 | DuplicateDefinition | `'{name}' is already defined in this scope` |
+| SE007 | ImmutableAssignment | Assignment ke variabel immutable (tanpa `mut`) |
+| SE008 | MissingReturn | Function must return value but path doesn't (`function '{name}' must return {expected}`) |
+| SE009 | UnusedVariable | Variabel dideklarasikan tapi tidak dipakai (strict-mode error) |
+| SE010 | UnreachableCode | Kode setelah return/break tidak bisa dijangkau (strict-mode error) |
+| SE011 | NonExhaustiveMatch | Match tidak meng-cover semua varian — tambah `_` wildcard |
+| SE012 | MissingField | Missing field in struct initialization (`missing field '{field}'`) |
 | SE013 | FfiUnsafeType / CannotInferType | Tipe non-FFI-safe di `extern fn` ATAU type inference gagal |
 | SE014 | TraitBoundNotSatisfied | Generic bound tidak terpenuhi oleh argumen |
 | SE015 | UnknownTrait | Trait belum di-deklarasikan dipakai di bound |

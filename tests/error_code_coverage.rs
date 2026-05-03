@@ -21,6 +21,7 @@
 
 use fajar_lang::FjError;
 use fajar_lang::analyzer;
+use fajar_lang::analyzer::type_check::TypeChecker;
 use fajar_lang::interpreter::Interpreter;
 use fajar_lang::lexer;
 use fajar_lang::parser;
@@ -57,7 +58,6 @@ fn expect_parse_error(src: &str, code: &str) {
 }
 
 /// Assert that the analyzer rejects `src` with a default-mode error containing `code`.
-#[allow(dead_code)]
 fn expect_semantic_error(src: &str, code: &str) {
     let tokens = lexer::tokenize(src).expect("lex");
     let program = parser::parse(tokens).expect("parse");
@@ -72,9 +72,26 @@ fn expect_semantic_error(src: &str, code: &str) {
     );
 }
 
+/// Assert that any diagnostic (error OR warning) emitted during analysis
+/// contains `code`. Use for warning-level codes (SE009/SE010/SE019/SE020)
+/// that `analyzer::analyze` filters out of its Result.
+fn expect_diagnostic(src: &str, code: &str) {
+    let tokens = lexer::tokenize(src).expect("lex");
+    let program = parser::parse(tokens).expect("parse");
+    let mut tc = TypeChecker::new();
+    let _ = tc.analyze(&program);
+    let diags = tc.diagnostics();
+    let any = diags.iter().any(|e| format!("{e}").contains(code));
+    assert!(
+        any,
+        "expected diagnostic containing '{code}', got: {:#?}",
+        diags.iter().map(|e| format!("{e}")).collect::<Vec<_>>()
+    );
+}
+
 /// Assert that the strict analyzer rejects `src` with an error containing `code`.
-/// Used for warning-level codes (SE009, SE010, etc.) that only fire under
-/// `analyze_strict`.
+/// Strict mode (`analyze_strict`) flips Move-semantic errors on for non-Copy
+/// types (ME001/ME003 etc.); it does NOT promote warnings to errors.
 #[allow(dead_code)]
 fn expect_strict_error(src: &str, code: &str) {
     let tokens = lexer::tokenize(src).expect("lex");
@@ -270,4 +287,186 @@ fn coverage_pe011_module_file_not_found_format() {
         span: Span::new(0, 0),
     };
     assert!(format!("{e}").contains("PE011"), "got: {e}");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// SE — Semantic Errors (SE001-SE023, with overloaded codes)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn coverage_se001_undefined_variable() {
+    expect_semantic_error("fn main() { let _ = undefined_var }", "SE001");
+}
+
+#[test]
+fn coverage_se002_undefined_function() {
+    // SE002 fires when calling a value whose resolved type isn't function-like.
+    expect_semantic_error("fn main() { let x = 42\nx() }", "SE002");
+}
+
+#[test]
+fn coverage_se003_undefined_type_format() {
+    // SE003 UndefinedType: declared in SemanticError but the analyzer
+    // currently silently treats unknown type names as Type::Unknown
+    // rather than emitting SE003. Variant is reserved; we validate
+    // its Display impl by direct construction so it cannot drift.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::UndefinedType {
+        name: "NoSuchType".into(),
+        span: Span::new(0, 0),
+        suggestion: None,
+    };
+    assert!(format!("{e}").contains("SE003"), "got: {e}");
+}
+
+#[test]
+fn coverage_se004_type_mismatch() {
+    expect_semantic_error("fn main() { let x: i64 = \"not int\" }", "SE004");
+}
+
+#[test]
+fn coverage_se005_argument_count_mismatch() {
+    expect_semantic_error(
+        "fn add(a: i64, b: i64) -> i64 { a + b }\nfn main() { add(1) }",
+        "SE005",
+    );
+}
+
+#[test]
+fn coverage_se006_duplicate_definition() {
+    // SE006 DuplicateDefinition fires for duplicate trait methods.
+    expect_semantic_error(
+        "trait Dup { fn foo(self) -> i64\nfn foo(self) -> i64 }",
+        "SE006",
+    );
+}
+
+#[test]
+fn coverage_se007_immutable_assignment() {
+    expect_semantic_error("fn main() { let x = 1\nx = 2 }", "SE007");
+}
+
+#[test]
+fn coverage_se008_missing_return_format() {
+    // SE008 MissingReturn: declared but the analyzer currently uses
+    // SE004 TypeMismatch when the inferred body type doesn't match
+    // the declared return type. Reserved for richer diagnostic.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::MissingReturn {
+        name: "f".into(),
+        expected: "i64".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE008"), "got: {e}");
+}
+
+#[test]
+fn coverage_se009_unused_variable_diag() {
+    // SE009 is filtered out of analyze() Result (warning-level);
+    // surfaces via TypeChecker::diagnostics().
+    expect_diagnostic("fn main() { let unused_local = 42 }", "SE009");
+}
+
+#[test]
+fn coverage_se010_unreachable_code_diag() {
+    expect_diagnostic("fn f() -> i64 { return 1\n42 }", "SE010");
+}
+
+#[test]
+fn coverage_se011_non_exhaustive_match() {
+    // Match on bool with only `true` branch — missing `false`.
+    expect_semantic_error("fn main() { let _ = match true { true => 1 } }", "SE011");
+}
+
+#[test]
+fn coverage_se012_missing_field() {
+    expect_semantic_error(
+        "struct P { x: i64, y: i64 }\nfn main() { let _ = P { x: 1 } }",
+        "SE012",
+    );
+}
+
+#[test]
+fn coverage_se013_ffi_unsafe_type() {
+    // SE013 fires for non-FFI-safe types in `extern fn`. `String` is
+    // not FFI-safe (heap-managed; opaque ABI).
+    expect_semantic_error("extern fn bad(s: String) -> i64", "SE013");
+}
+
+#[test]
+fn coverage_se014_trait_bound_not_satisfied_format() {
+    // SE014 TraitBoundNotSatisfied: declared but the current analyzer
+    // routes generic-bound failures through SE015 UnknownTrait or
+    // SE004 TypeMismatch depending on path. Variant validated via
+    // direct construction.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::TraitBoundNotSatisfied {
+        concrete_type: "Bar".into(),
+        trait_name: "Foo".into(),
+        param_name: "T".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE014"), "got: {e}");
+}
+
+#[test]
+fn coverage_se015_unknown_trait() {
+    expect_semantic_error(
+        "fn use_unknown<T: NoSuchTrait>(t: T) -> i64 { 0 }\nfn main() { let _ = use_unknown(1) }",
+        "SE015",
+    );
+}
+
+#[test]
+fn coverage_se017_await_outside_async_format() {
+    // SE017 AwaitOutsideAsync: declared but the parser/analyzer
+    // currently allows .await syntactically and resolves the awaited
+    // expression first (often emitting SE001/SE004). Variant validated
+    // via direct construction.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::AwaitOutsideAsync {
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE017"), "got: {e}");
+}
+
+#[test]
+fn coverage_se019_unused_import_format() {
+    // SE019 UnusedImport: declared but `use` paths are not currently
+    // checked for live usage; reserved.
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::UnusedImport {
+        name: "HashMap".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE019"), "got: {e}");
+}
+
+#[test]
+fn coverage_se020_unreachable_pattern_diag() {
+    // SE020 fires when match arms are listed AFTER a catch-all wildcard.
+    expect_diagnostic(
+        "fn main() { let x = 1\nlet _ = match x { _ => 0, 1 => 2 } }",
+        "SE020",
+    );
+}
+
+#[test]
+fn coverage_se022_index_out_of_bounds_compile_time() {
+    // SE022 needs both array length AND index to be const-resolvable.
+    // Direct array literal indexed by integer literal triggers it.
+    expect_semantic_error("fn main() { let _ = [1, 2, 3][99] }", "SE022");
+}
+
+#[test]
+fn coverage_se023_quantized_not_dequantized() {
+    expect_semantic_error(
+        "fn main() { let t = from_data([1.0, -0.5], [2])\nlet q = quantize(t, 4)\nlet _ = matmul(q, q) }",
+        "SE023",
+    );
 }
