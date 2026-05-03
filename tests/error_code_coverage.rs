@@ -457,6 +457,43 @@ fn coverage_se020_unreachable_pattern_diag() {
 }
 
 #[test]
+fn coverage_se016_trait_method_sig_mismatch_format() {
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::TraitMethodSignatureMismatch {
+        method: "to_s".into(),
+        trait_name: "Stringify".into(),
+        target_type: "i64".into(),
+        detail: "return type".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE016"), "got: {e}");
+}
+
+#[test]
+fn coverage_se018_not_send_type_format() {
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::NotSendType {
+        ty: "Rc<i64>".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE018"), "got: {e}");
+}
+
+#[test]
+fn coverage_se021_lifetime_mismatch_format() {
+    use fajar_lang::analyzer::type_check::SemanticError;
+    use fajar_lang::lexer::token::Span;
+    let e = SemanticError::LifetimeMismatch {
+        expected: "a".into(),
+        found: "b".into(),
+        span: Span::new(0, 0),
+    };
+    assert!(format!("{e}").contains("SE021"), "got: {e}");
+}
+
+#[test]
 fn coverage_se022_index_out_of_bounds_compile_time() {
     // SE022 needs both array length AND index to be const-resolvable.
     // Direct array literal indexed by integer literal triggers it.

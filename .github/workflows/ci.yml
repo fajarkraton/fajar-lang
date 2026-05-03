@@ -63,6 +63,10 @@ jobs:
         if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
         run: cargo bench --no-run
 
+      - name: Error-code coverage audit (P4.C2)
+        if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
+        run: python3 scripts/audit_error_codes.py --strict
+
   # Stress test: run lib tests under thread oversubscription to catch
   # wall-clock timing flakes early. V26 A1.4 prevention measure.
   # Background: tests that assert `elapsed < threshold` on microsecond-scale

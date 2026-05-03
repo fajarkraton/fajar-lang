@@ -230,7 +230,7 @@ error[TE001]: tensor shape mismatch
 | ME005 | MoveInLoop | Value moved inside loop iteration |
 | ME006 | AllocFailed | Heap/region allocation failed (OS runtime) |
 | ME007 | InvalidFree | Invalid free (addr tidak valid / sudah di-free) |
-| ME008 | MutableAliasing | Multiple mutable references ke data yang sama |
+| ME008 | MutableAliasing | *(forward-compat — analyzer routes via ME004 MutBorrowConflict)* |
 | ME009 | LifetimeConflict | Lifetime '{name}' conflicts with another lifetime in scope |
 | ME010 | LinearNotConsumed | Linear value tidak consumed — must be used exactly once |
 | ME011 | TwoPhaseConflict | Two-phase borrow conflict (polonius solver) |
