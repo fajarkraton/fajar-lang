@@ -589,7 +589,7 @@ type DispatchFn = fn(i64, i64) -> DispatchResult;
 /// assert_eq!(result, fajar_lang::compiler::performance::DispatchResult::IntResult(7));
 /// ```
 pub struct DispatchTable {
-    /// 3D table: [op][lhs_type][rhs_type] → handler function.
+    /// 3D table: `[op][lhs_type][rhs_type]` → handler function.
     table: Vec<Vec<Vec<Option<DispatchFn>>>>,
 }
 

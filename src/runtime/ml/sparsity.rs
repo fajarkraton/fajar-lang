@@ -50,7 +50,7 @@ pub struct Structured4x2Tensor {
     /// Non-zero values (2 per group of 4).
     values: Vec<f64>,
     /// Metadata: 2-bit index pairs per group. Each byte encodes one group:
-    /// bits [1:0] = index of first non-zero, bits [3:2] = index of second.
+    /// bits `[1:0]` = index of first non-zero, bits `[3:2]` = index of second.
     metadata: Vec<u8>,
     /// Original dense shape.
     shape: Vec<usize>,

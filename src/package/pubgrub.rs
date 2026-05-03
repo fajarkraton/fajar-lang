@@ -120,7 +120,7 @@ pub trait PackageSource {
 /// In-memory package source for testing.
 #[derive(Debug, Clone, Default)]
 pub struct MemorySource {
-    /// packages[name][version] = dependencies
+    /// `packages[name][version]` = dependencies
     packages: HashMap<String, BTreeMap<String, Vec<Requirement>>>,
 }
 

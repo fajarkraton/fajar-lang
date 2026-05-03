@@ -686,7 +686,7 @@ pub struct Interpreter {
     /// V20: Event log for debug recording (None = recording disabled).
     pub record_log: Option<crate::debugger_v2::recording::EventLog>,
     /// V20.5: Set of simulated builtins that have already printed a warning.
-    /// Currently empty (all builtins are [x] as of V21.1) but kept for future use.
+    /// Currently empty (all builtins are `[x]` as of V21.1) but kept for future use.
     #[allow(dead_code)]
     sim_warned: HashSet<String>,
     /// V20.5: Source span from the last runtime error (for diagnostic display).

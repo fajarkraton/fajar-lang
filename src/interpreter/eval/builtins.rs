@@ -4112,7 +4112,7 @@ impl Interpreter {
         Ok(Value::Null)
     }
 
-    /// Convert a Value::Array of params to Vec<DbParam>.
+    /// Convert a `Value::Array` of params to `Vec<DbParam>`.
     fn value_to_db_params(
         val: &Value,
     ) -> Result<Vec<crate::stdlib_v3::database::DbParam>, EvalError> {
@@ -5385,7 +5385,7 @@ impl Interpreter {
 
     // ── ML runtime builtins ──
 
-    /// Helper: extract a shape (Vec<usize>) from a Value::Array of ints.
+    /// Helper: extract a shape (`Vec<usize>`) from a `Value::Array` of ints.
     fn extract_shape(args: &[Value], idx: usize) -> Result<Vec<usize>, EvalError> {
         match &args[idx] {
             Value::Array(arr) => {
@@ -6955,7 +6955,7 @@ impl Interpreter {
     // ═══════════════════════════════════════════════════════════════════
 
     /// `gpu_fq_codebook_dot(query_tensor, indices_tensor, codebook_tensor, n_tokens, dim)` -> tensor
-    /// Runs codebook dot product on RTX 4090: score[i] = sum_j q[j] * cb[idx[i*dim+j]]
+    /// Runs codebook dot product on RTX 4090: `score[i] = sum_j q[j] * cb[idx[i*dim+j]]`
     fn builtin_gpu_fq_codebook_dot(&mut self, args: Vec<Value>) -> EvalResult {
         if args.len() != 5 {
             return Err(RuntimeError::ArityMismatch {
@@ -9874,7 +9874,7 @@ impl Interpreter {
         }
     }
 
-    /// Extract single i64 from args[0].
+    /// Extract single i64 from `args[0]`.
     #[allow(dead_code)]
     fn extract_i64(&self, args: &[Value], fn_name: &str) -> Result<i64, EvalError> {
         match args.first() {
@@ -11412,7 +11412,7 @@ impl Interpreter {
         Ok(Value::Int(task_id as i64))
     }
 
-    /// async_join(task_id_or_futures...) -> result or [results]
+    /// `async_join(task_id_or_futures...) -> result or [results]`
     ///
     /// V19: Waits for task(s) to complete. Accepts:
     /// - Single Int task_id → returns the task result directly

@@ -468,7 +468,7 @@ impl CHeaderParser {
         })
     }
 
-    /// Parse a C parameter list: `"int a, float b"` -> Vec<ForeignParam>.
+    /// Parse a C parameter list: `"int a, float b"` -> `Vec<ForeignParam>`.
     fn parse_c_params(&self, params_str: &str) -> Vec<ForeignParam> {
         let params_str = params_str.trim();
         if params_str.is_empty() || params_str == "void" {
