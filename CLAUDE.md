@@ -27,21 +27,27 @@
 
 ## 2. Mandatory Session Protocol
 
-Every session: **READ** `CLAUDE.md` + `docs/HONEST_STATUS_V26.md` → **ORIENT**
+Every session: **READ** `CLAUDE.md` + `docs/HONEST_AUDIT_V33.md` → **ORIENT**
 on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIFY**
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (V26, 2026-04-11)
+### Completion Status (V33, 2026-05-03 — Perfection-Plan Complete)
 
 **54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs.
-Every public mod has a callable surface from `.fj` or `fj` CLI. 23 CLI subcommands,
-all production.
+Every public mod has a callable surface from `.fj` or `fj` CLI. 39 CLI
+subcommands, all production. **FAJAR_LANG_PERFECTION_PLAN P0-P9 closed
+engineering-side; 22/25 work-items PASS** (3 await founder external action:
+F1 v32.1.0 binary backfill optional, F3 fajarquant crates.io publish, A1
+LLVM upstream filing — all regression-gated).
 
-> **Source of truth:** `docs/HONEST_STATUS_V26.md` — current per-module status.
-> Audit trail: `docs/HONEST_AUDIT_V26.md`. Older snapshots: `HONEST_STATUS_V20_5.md`,
-> `HONEST_AUDIT_V17.md`. Historical V13-V15 "100% production" claims were inflated
-> 40-55% per V17 re-audit; V26 closed the remaining gap.
+> **Source of truth:** `docs/HONEST_AUDIT_V33.md` — exit scorecard for all 25
+> perfection-plan work-items, written 2026-05-03. Predecessor audits:
+> `HONEST_AUDIT_V32.md` (V32 re-audit), `HONEST_STATUS_V26.md` (V26 module
+> status), `HONEST_AUDIT_V26.md` (V26 baseline corrections), `HONEST_AUDIT_V17.md`
+> (historical baseline). Historical V13-V15 "100% production" claims were
+> inflated 40-55% per V17 re-audit; V26 closed the remaining gap; V33 added
+> ~280 tests + 5 audit/prevention scripts on top.
 
 **Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
 lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
@@ -54,12 +60,13 @@ detailed entries.
 
 ### Key Documents
 
-- **`docs/HONEST_STATUS_V26.md`** — read every session, source of truth for module status
-- **`docs/V26_PRODUCTION_PLAN.md`** — current 6-week plan (v1.1 with §10.5 Plan Hygiene)
-- **`docs/HONEST_AUDIT_V26.md`** — V26 hands-on verification, corrections to prior counts
-- `docs/HONEST_AUDIT_V17.md` — historical baseline re-audit
+- **`docs/HONEST_AUDIT_V33.md`** — read every session, exit scorecard for all 25 perfection-plan items (2026-05-03)
+- **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan (now CLOSED engineering-side; useful for context on prevention layers)
+- **`docs/HONEST_AUDIT_V32.md`** — V32 deep re-audit (2026-05-02), predecessor to V33
+- **`docs/TUTORIAL.md`** — 10-chapter language tutorial (P6.E3)
+- `docs/HONEST_STATUS_V26.md` — V26 per-module status snapshot (still authoritative for module classification)
+- `docs/HONEST_AUDIT_V26.md` / `V17.md` — historical audit trail
 - `docs/V1_RULES.md` — coding conventions (mostly subsumed by §6 below)
-- `docs/V0{1..5}_*.md`, `docs/V1_TASKS.md` — completed task plans (reference only)
 - See §18 for full document index.
 
 ---
@@ -71,46 +78,59 @@ detailed entries.
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (V26 "Final" partial, 2026-04-11)
+### Current Totals (V33 "Perfection-Plan Complete", 2026-05-03)
 
 ```
-Tests:     7,626 lib + 2,498 integ (in 55 test files) + 14 doc + 1 ignored
-           ≈ 10,138 total | 0 failures, 0 flakes
-           Stress: 5/5 consecutive runs at `cargo test --lib -- --test-threads=64` (V32 audit hand-verified 2026-05-02)
-LOC:       ~449,000 lines of Rust (391 files in src/)
-Examples:  243 .fj programs in examples/
+Tests:     7,626 lib + 2,498+ integ (in 60+ test files) + 14 doc + 1 ignored
+           ≈ 10,138+ total | 0 failures, 0 flakes
+           Stress: 5/5 consecutive runs at `cargo test --lib -- --test-threads=64` (V33 hand-verified 2026-05-03)
+           LLVM: 162 tests pass under --features llvm
+LOC:       ~449,000 lines of Rust (391+ files in src/)
+Examples:  243 .fj programs + 6 multi-file real-project folders
            Binary: 18 MB release | MSRV: Rust 1.87
 Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
-           Source of truth: docs/HONEST_STATUS_V26.md (HONEST_AUDIT_V32.md re-verified 2026-05-02; no demotions)
+           Source of truth: docs/HONEST_AUDIT_V33.md (P0-P9 closed; no demotions)
            V26 Phase A3 closed all 5 framework + 2 stub modules. 0 remaining.
 CLI:       39 subcommands declared in src/main.rs, all production
-CI:        6 GitHub Actions workflows + new flake-stress job (V26 A1.4)
-Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm (30 enhancements), registry, cuda
-Quality:   0 clippy warnings | 0 production .unwrap() (verified by scripts/audit_unwrap.py)
-           0 fmt diffs | 0 test failures (7,552/7,552) | 0 flakes (80 stress runs)
+CI:        7 GitHub Actions workflows (CI, Embedded, Docs, Release, nightly,
+           release.yml, fuzz job) — release.yml triggers on v*.*.* tags
+Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry, cuda, wasm, playground-wasm
+Quality:   0 clippy warnings (all 20 features) | 0 production .unwrap()
+           0 rustdoc warnings (incl. --document-private-items)
+           0 fmt diffs | 0 test failures | 0 flakes
+           95.79% pub-item doc coverage (scripts/check_doc_coverage.sh)
+           100% stdlib_v3 doc coverage (scripts/check_stdlib_docs.sh)
+           0 error-code coverage gap (135 cataloged, 125 covered, 12 forward-compat;
+             scripts/audit_error_codes.py --strict gap=0)
 FajarQuant: extracted to standalone repo `fajarkraton/fajarquant` (V26 A4)
             wire-up via Cargo path dep + re-export shim, 16 integ tests pass
 Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, async streams, 3x speedup)
 Hooks:     Pre-commit rejects fmt drift (scripts/git-hooks/pre-commit, V26 A1.2)
+Tags:      v32.1.0 (P0-P6 milestone, tag-only — release.yml failed) +
+           v33.0.0 (Perfection-Complete, Latest on GitHub Releases with 5
+           platform binaries + SHA256SUMS)
 
 Labeling: [x] = production (tested, works E2E)
           [sim] = simulated — NONE REMAINING (all upgraded to [x] in V21)
           [f] = framework (code exists, not callable from .fj)
           [s] = stub (near-empty placeholder)
 
-Numbers verified by runnable commands as of 2026-04-14 (V27 sync). V26 audit corrections + drift history → `docs/HONEST_AUDIT_V26.md`.
+Numbers verified by runnable commands as of 2026-05-03 (V33 sync).
+Drift history → `docs/HONEST_AUDIT_V33.md`.
 ```
 
-### Version History (V18 → V26)
+### Version History (V18 → V33)
 
-> **Detailed entries:** `CHANGELOG.md` (root) — has V20.8 → V26 with full
+> **Detailed entries:** `CHANGELOG.md` (root) — has V20.8 → V33 with full
 > Added/Changed/Fixed/Removed/Stats sections. V18-V20 history lives in
 > git log (`git log --oneline --grep="V1[89]\|V20"`).
 
 | Version | Date | Highlight |
 |---|---|---|
-| **V32** "Audit Complete" | 2026-05-02 | HONEST_AUDIT_V32 deep re-audit (commits `ecd265a2..96843ab7`). 0 module demotions; 7626 lib + 2498 integ + 14 doc tests all green; 5 gaps surfaced (G1 LLVM O2 deferred opportunistic; G2/G3/G4/G5 closed via F1-F4 followup). FAJAR_LANG_PERFECTION_PLAN v1.0 enumerates remaining 25 work-items across 10 phases. |
+| **V33 / v33.0.0** "Perfection-Plan Complete" | 2026-05-03 | PERFECTION_PLAN P0-P9 all closed engineering-side. 22/25 PASS; 3 await founder external action (F1/F3/A1, regression-gated). Adds: ~280 tests, 5 audit scripts, 13 docs (incl. HONEST_AUDIT_V33, TUTORIAL.md, CRATES_IO_PUBLISH_PLAN), 3 example folders, 2 benchmarks. v33.0.0 GitHub Release LIVE w/ 5 binaries. ~14h vs 218-336h estimate (-95%). Source: `docs/HONEST_AUDIT_V33.md`. |
+| **v32.1.0** "P0-P6 milestone" | 2026-05-03 | Tag-only; release.yml failed on `llvm_compile_float_literal` stale assertion (fixed in v33.0.0). Use v33.0.0 for binaries. |
+| **V32** "Audit Complete" | 2026-05-02 | HONEST_AUDIT_V32 deep re-audit (commits `ecd265a2..96843ab7`). 0 module demotions; 7626 lib + 2498 integ + 14 doc tests all green; 5 gaps surfaced (G1 LLVM O2 deferred opportunistic; G2/G3/G4/G5 closed via F1-F4 followup). FAJAR_LANG_PERFECTION_PLAN v1.0 enumerates remaining 25 work-items across 10 phases — closed in V33. |
 | **V30.TRACK4** "FS Roundtrip" | 2026-04-20 | FajarOS Nova v3.7.0. ext2/FAT32 disk harness: `scripts/build_test_disk.py` + `make test-fs-roundtrip` (9-invariant gate). Fixed silent QEMU triple-fault via `-boot order=d`. Surfaced V31 latent bug: `ext2_create` returns -1 on freshly-mkfs'd disk. Rule: §6.10. |
 | **V30.GEMMA3** "Foundation (Path D)" | 2026-04-20 | FajarOS Nova v3.6.0. Gemma 3 1B 12 phases audit-PASS: GQA, dual-theta RoPE, SWA, gated FFN, 4-norm RMSNorm, 262K BPE @ LBA 1054705. Ship as research artifact; pad-collapse deferred to V31 R3. Gates: `make test-gemma3-{e2e,kernel-path}`. |
 | **V29.P3.P6** "NX Triple Closure" | 2026-04-16 | V26 B4.2 security triple 3/3 COMPLETE. Fix: `pd_idx=1→2` in `security.fj:236` (kernel `.text` straddles PD[0]+PD[1]). Gate: `make test-security-triple-regression`. |
@@ -120,7 +140,7 @@ Numbers verified by runnable commands as of 2026-04-14 (V27 sync). V26 audit cor
 | **V27** "Hardened" | 2026-04-14 | 0 doc warnings, call_main TypeError fix, version sync 27.0.0, FajarOS OOM hardening |
 | **V26** "Final" (Phase A) | 2026-04-11 | 80/80 stress, 0 unwraps, 0 [f], 0 [s], pre-commit hook, §6.7 rule |
 
-> V18-V25 entries trimmed to fit perf threshold; full detail in `CHANGELOG.md` + `git log --oneline --grep="V[12][0-9]"`. Highlights: V18 http/tcp/dns + ffi_load + const fn, V19 macro_rules!, V20 debugger record/replay, V20.8 Rc→Arc + 21.4K LOC dead-code rm, V21 real threaded actors, V22 30 LLVM enhancements, V23 FajarOS boots to shell + NVMe+GUI+ACPI, V24 CUDA RTX 4090 PTX kernels + AVX2+AES-NI, V25 hands-on re-audit + K8s + FajarQuant Phase C.
+> V18-V25 entries: full detail in `CHANGELOG.md` + `git log --oneline --grep="V[12][0-9]"`.
 
 ### FajarOS (two platforms)
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
@@ -676,12 +696,15 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 | When You Need... | Read This |
 |---|---|
-| **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 (54 [x], 0 [f], 0 [s]) |
-| **Current plan (V26)** | **`docs/V26_PRODUCTION_PLAN.md`** v1.2 — Phase A1+A2+A3+A4 done (FajarQuant split), B+C hardened with §10.5 |
-| **Latest audit (V32)** | **`docs/HONEST_AUDIT_V32.md`** — deep re-audit 2026-05-02; 0 demotions, 5 gaps + 4-fix followup closeout |
-| **Perfection plan (in-progress)** | **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan to close ALL remaining gaps to "sempurna" |
-| **V26 audit trail** | `docs/HONEST_AUDIT_V26.md` — historical baseline corrections |
-| **Version history (V18-V32)** | **`CHANGELOG.md`** (root) — full Added/Changed/Fixed/Stats per version |
+| **Latest audit (V33)** — current source of truth | **`docs/HONEST_AUDIT_V33.md`** — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
+| **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 module classification (still authoritative; V33 added no demotions) |
+| **Perfection plan (CLOSED engineering-side)** | **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan; per-phase findings in `docs/FAJAR_LANG_PERFECTION_PHASE_{1..8}_FINDINGS.md` |
+| **Tutorial / book** | **`docs/TUTORIAL.md`** — 10 chapters basics → robot control loop (P6.E3) |
+| **crates.io publish unblock** | `docs/CRATES_IO_PUBLISH_PLAN.md` — F3 closure sequence |
+| **LLVM O2 miscompile filing draft** | `docs/LLVM_O2_VECMAT_MISCOMPILE_REPRO.md` — A1 paste-ready upstream filing |
+| **Audit predecessor (V32)** | `docs/HONEST_AUDIT_V32.md` — deep re-audit 2026-05-02 |
+| **V26 audit trail** | `docs/HONEST_AUDIT_V26.md` / `docs/V26_PRODUCTION_PLAN.md` — V26 baseline + plan |
+| **Version history (V18-V33)** | **`CHANGELOG.md`** (root) — full Added/Changed/Fixed/Stats per version |
 | **FajarQuant standalone** | **`~/Documents/fajarquant/`** — extracted 2026-04-11. Algorithms, paper, data, scripts. fajar-lang depends via path/git Cargo dep + re-export shim |
 | **FajarQuant Phase E** (bilingual ID+EN ternary kernel-context LLM, Tier 1+2; Tier 3 → Phase F) | Plan: `~/Documents/fajarquant/docs/FJQ_PHASE_E_BILINGUAL_KERNEL_PRODUCTION_PLAN.md` v1.9. State: E0+E1+E2.0+E2.4+E2.1 CLOSED. Two honest NEGATIVE results (E2.4 balanced_calib, E2.1 Hadamard) demoted to F.5/F.6. Bilingual corpus v1.0 = 25.67 B tokens 60:40 ID:EN. Findings + decision docs in `~/Documents/fajarquant/docs/FJQ_PHASE_E_*`. Full per-sub-phase detail in `MEMORY.md`. |
 | **Honest codebase audit (older)** | `docs/HONEST_AUDIT_V17.md` (V17 baseline) |
@@ -709,9 +732,9 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 | Random test failures | Each test must create fresh `Interpreter::new()` |
 | Gradient mismatch | Use epsilon `1e-4`, not exact equality |
 | Slow compilation | `cargo check` (no codegen) |
-| Claude forgot context | "Read HONEST_STATUS_V26.md and find next task" |
+| Claude forgot context | "Read HONEST_AUDIT_V33.md exit scorecard + MEMORY.md resume protocol" |
 
 ---
 
-*CLAUDE.md Version: 33 (**V33-PERFECTION-COMPLETE 2026-05-03**: FAJAR_LANG_PERFECTION_PLAN P0-P9 closed engineering-side; 22/25 work-items PASS, 3 await founder external action — F1 binary-release verification, F3 fajarquant crates.io coordination, A1 LLVM upstream filing). All defended in depth: regression scripts, prevention layers, and paste-ready filing drafts. Quality gates at close: 7626 lib + 2498+ integ tests (0 fail / 0 flake), 162 LLVM tests, 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warning, 95.79% pub-item doc coverage, 100% stdlib_v3 doc coverage, 0 error-code coverage gap (125/135 covered + 12 forward-compat). Tag `v32.1.0` published 2026-05-03. **HONEST_AUDIT_V33** (`docs/HONEST_AUDIT_V33.md`) is the exit scorecard for all 25 work-items. Cumulative effort ~14h actual vs 218-336h plan estimate (~95% under) because most items had deeper existing scaffolding than the plan-doc reflected; closure was largely measurement + prevention-layer work. Pre-V33 history compressed: V32 audit + 4-fix follow-up, V27.5 effort-variance debunked, F.11 demoted, F.13 dispatch verdict, V31.C Phase D scaling chain, arXiv submission ready. Detail → `CHANGELOG.md` + `MEMORY.md` + `docs/HONEST_AUDIT_V32.md` + `docs/HONEST_AUDIT_V33.md`. Active rules: §6.1–§6.11.*
+*CLAUDE.md Version: 33 (**V33-PERFECTION-COMPLETE 2026-05-03**: FAJAR_LANG_PERFECTION_PLAN P0-P9 closed engineering-side; 22/25 work-items PASS, 3 await founder external action — F1 binary-release verification, F3 fajarquant crates.io coordination, A1 LLVM upstream filing). All defended in depth: regression scripts, prevention layers, and paste-ready filing drafts. Quality gates at close: 7626 lib + 2498+ integ tests (0 fail / 0 flake), 162 LLVM tests, 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warning, 95.79% pub-item doc coverage, 100% stdlib_v3 doc coverage, 0 error-code coverage gap (125/135 covered + 12 forward-compat). Tags `v32.1.0` (P0-P6 milestone, tag-only) + `v33.0.0` (Latest GitHub Release with 5 platform binaries) published 2026-05-03. **HONEST_AUDIT_V33** (`docs/HONEST_AUDIT_V33.md`) is the exit scorecard for all 25 work-items. Cumulative effort ~14h actual vs 218-336h plan estimate (~95% under) because most items had deeper existing scaffolding than the plan-doc reflected; closure was largely measurement + prevention-layer work. Pre-V33 history compressed: V32 audit + 4-fix follow-up, V27.5 effort-variance debunked, F.11 demoted, F.13 dispatch verdict, V31.C Phase D scaling chain, arXiv submission ready. Detail → `CHANGELOG.md` + `MEMORY.md` + `docs/HONEST_AUDIT_V32.md` + `docs/HONEST_AUDIT_V33.md`. Active rules: §6.1–§6.11.*
 *Last Updated: 2026-05-03*
