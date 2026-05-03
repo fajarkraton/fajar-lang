@@ -5,6 +5,8 @@
 //! - Records (W1.4), Variants (W1.5), Flags (W1.6), Resources (W1.7)
 //! - Tuple/Option/Result (W1.8), Use imports (W1.9)
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use super::wit_lexer::{WitToken, WitTokenKind, tokenize_wit};
 use std::fmt;
 

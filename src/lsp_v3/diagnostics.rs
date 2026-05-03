@@ -4,6 +4,8 @@
 //! imports, type annotations, typos, mutability, struct fields, trait
 //! implementations, ownership issues, and deprecation warnings.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════

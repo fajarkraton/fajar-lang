@@ -5,6 +5,8 @@
 //! self-hosted AST (`ast_tree` module). Includes multi-error collection,
 //! error recovery, and module/import parsing.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::fmt;
 
 use super::ast_tree::{

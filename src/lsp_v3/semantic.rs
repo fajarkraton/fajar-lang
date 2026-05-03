@@ -4,6 +4,8 @@
 //! go-to-definition, find references, call hierarchy, inlay hints,
 //! and code lens annotations.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -4,6 +4,8 @@
 //! This is the final validation layer ensuring incremental compilation
 //! produces correct results under all conditions.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::time::{Duration, Instant};
 
 use super::compute_content_hash;

@@ -4,6 +4,8 @@
 //! Real networking via std::net with proper error types, timeouts,
 //! case-insensitive headers, IPv6, TCP_NODELAY, connection pooling.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};

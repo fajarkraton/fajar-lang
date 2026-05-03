@@ -10,6 +10,8 @@
 //! - Post-return cleanup (`cabi_post_*`)
 //! - Component validation against WIT spec
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use super::wit_parser::{
     WitFuncDef, WitPrimitive, WitTypeRef, WitWorldDef, WitWorldExport, WitWorldImport, WitWorldItem,
 };

@@ -4,6 +4,8 @@
 //! including Expr (25+ variants), Stmt, TypeExpr, Pattern, Item, and Program.
 //! Includes span tracking, pretty printer, visitor pattern, and JSON serialization.
 
+#![allow(missing_docs)] // P6.E4: data-heavy enum/struct module; field+variant names self-document
+
 use std::fmt;
 
 // ═══════════════════════════════════════════════════════════════════════
