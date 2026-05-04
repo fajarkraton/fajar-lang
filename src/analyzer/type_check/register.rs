@@ -332,6 +332,21 @@ impl TypeChecker {
             ("volatile_write_u32", vec![Type::I64, Type::I64], Type::Void),
             ("volatile_read_u64", vec![Type::I64], Type::I64),
             ("volatile_write_u64", vec![Type::I64, Type::I64], Type::Void),
+            // Phase 5 (Gap G-A): SMP-correct atomic ops with SeqCst ordering.
+            // atomic_cas returns previous value at *addr (caller checks
+            // prev == expected for success). atomic_fetch_add returns prev.
+            ("atomic_load_u64", vec![Type::I64], Type::I64),
+            ("atomic_store_u64", vec![Type::I64, Type::I64], Type::Void),
+            (
+                "atomic_cas_u64",
+                vec![Type::I64, Type::I64, Type::I64],
+                Type::I64,
+            ),
+            (
+                "atomic_fetch_add_u64",
+                vec![Type::I64, Type::I64],
+                Type::I64,
+            ),
             // Memory fence
             ("memory_fence", vec![], Type::Void),
             // Function address intrinsic (returns address of named function)

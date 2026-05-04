@@ -800,6 +800,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
                 | "volatile_read_u64"
                 | "volatile_write_u64"
                 | "volatile_write_u32_le"
+                // Phase 5: SMP-correct atomic ops (Gap G-A closure).
+                // SeqCst ordering — strongest available; matches what
+                // x86 LOCK prefix instructions provide naturally.
+                | "atomic_load_u64"
+                | "atomic_store_u64"
+                | "atomic_cas_u64"
+                | "atomic_fetch_add_u64"
                 // Phase 2: CPU control + CR/MSR + CPUID
                 | "pause"
                 | "memory_fence"
@@ -1783,6 +1790,86 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     .into_int_value();
                 self.compile_volatile_store(addr, val)?;
                 Ok(Some(zero.into()))
+            }
+
+            // ── Phase 5: SMP-correct atomic ops (Gap G-A closure) ──────
+            // All 4 ops use AtomicOrdering::SequentiallyConsistent — strongest
+            // ordering, matches x86 LOCK prefix natural semantics, simpler
+            // mental model than Acquire/Release split. Future enhancement
+            // could add ordering parameter; for now SeqCst-only is honest.
+            "atomic_load_u64" => {
+                if args.is_empty() {
+                    return Err(CodegenError::Internal(
+                        "atomic_load_u64 requires 1 arg".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal("atomic_load_u64 addr no value".into()))?
+                    .into_int_value();
+                let val = self.compile_atomic_load_u64(addr)?;
+                Ok(Some(val))
+            }
+            "atomic_store_u64" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "atomic_store_u64 requires 2 args".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal("atomic_store_u64 addr no value".into()))?
+                    .into_int_value();
+                let val = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| CodegenError::Internal("atomic_store_u64 val no value".into()))?
+                    .into_int_value();
+                self.compile_atomic_store_u64(addr, val)?;
+                Ok(Some(zero.into()))
+            }
+            "atomic_cas_u64" => {
+                if args.len() < 3 {
+                    return Err(CodegenError::Internal(
+                        "atomic_cas_u64 requires 3 args (addr, expected, new)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| CodegenError::Internal("atomic_cas_u64 addr no value".into()))?
+                    .into_int_value();
+                let expected = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("atomic_cas_u64 expected no value".into())
+                    })?
+                    .into_int_value();
+                let new_val = self
+                    .compile_expr(&args[2].value)?
+                    .ok_or_else(|| CodegenError::Internal("atomic_cas_u64 new no value".into()))?
+                    .into_int_value();
+                let prev = self.compile_atomic_cas_u64(addr, expected, new_val)?;
+                Ok(Some(prev))
+            }
+            "atomic_fetch_add_u64" => {
+                if args.len() < 2 {
+                    return Err(CodegenError::Internal(
+                        "atomic_fetch_add_u64 requires 2 args (addr, delta)".into(),
+                    ));
+                }
+                let addr = self
+                    .compile_expr(&args[0].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("atomic_fetch_add_u64 addr no value".into())
+                    })?
+                    .into_int_value();
+                let delta = self
+                    .compile_expr(&args[1].value)?
+                    .ok_or_else(|| {
+                        CodegenError::Internal("atomic_fetch_add_u64 delta no value".into())
+                    })?
+                    .into_int_value();
+                let prev = self.compile_atomic_fetch_add_u64(addr, delta)?;
+                Ok(Some(prev))
             }
 
             "volatile_write_u32_le" => {
@@ -7824,6 +7911,113 @@ impl<'ctx> LlvmCompiler<'ctx> {
         Ok(())
     }
 
+    /// Phase 5 (Gap G-A): atomic load u64 with SeqCst ordering.
+    /// LLVM lowers this to `MOV` (x86_64 — aligned 64-bit loads are
+    /// atomic by hardware) plus an `MFENCE` for SeqCst, or to a `LOCK CMPXCHG16B`
+    /// equivalent on weaker architectures. fjaros @kernel context only.
+    fn compile_atomic_load_u64(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let i64_ty = self.context.i64_type();
+        let ptr = self
+            .builder
+            .build_int_to_ptr(addr, ptr_ty, "atomic_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let load = self
+            .builder
+            .build_load(i64_ty, ptr, "atomic_load")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        if let Some(inst) = load.as_instruction_value() {
+            inst.set_atomic_ordering(inkwell::AtomicOrdering::SequentiallyConsistent)
+                .ok();
+            // Atomic ops require natural alignment.
+            inst.set_alignment(8).ok();
+        }
+        Ok(load)
+    }
+
+    /// Phase 5 (Gap G-A): atomic store u64 with SeqCst ordering.
+    fn compile_atomic_store_u64(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> Result<(), CodegenError> {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let ptr = self
+            .builder
+            .build_int_to_ptr(addr, ptr_ty, "atomic_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let store = self
+            .builder
+            .build_store(ptr, value)
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        store
+            .set_atomic_ordering(inkwell::AtomicOrdering::SequentiallyConsistent)
+            .ok();
+        store.set_alignment(8).ok();
+        Ok(())
+    }
+
+    /// Phase 5 (Gap G-A): atomic compare-and-swap u64.
+    /// Returns the previous value at *addr (NOT a (value, success) pair —
+    /// caller checks `prev == expected` to determine success). Lowers to
+    /// `LOCK CMPXCHG` on x86_64.
+    fn compile_atomic_cas_u64(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+        expected: inkwell::values::IntValue<'ctx>,
+        new_val: inkwell::values::IntValue<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let ptr = self
+            .builder
+            .build_int_to_ptr(addr, ptr_ty, "atomic_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let cas = self
+            .builder
+            .build_cmpxchg(
+                ptr,
+                expected,
+                new_val,
+                inkwell::AtomicOrdering::SequentiallyConsistent,
+                inkwell::AtomicOrdering::SequentiallyConsistent,
+            )
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        // cmpxchg returns { iN, i1 } — extract field 0 (previous value)
+        let prev = self
+            .builder
+            .build_extract_value(cas, 0, "cas_prev")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(prev)
+    }
+
+    /// Phase 5 (Gap G-A): atomic fetch-and-add u64.
+    /// Returns the previous value at *addr; the value at *addr becomes
+    /// `prev + delta`. Lowers to `LOCK XADD` on x86_64.
+    fn compile_atomic_fetch_add_u64(
+        &mut self,
+        addr: inkwell::values::IntValue<'ctx>,
+        delta: inkwell::values::IntValue<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let ptr = self
+            .builder
+            .build_int_to_ptr(addr, ptr_ty, "atomic_ptr")
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        let prev = self
+            .builder
+            .build_atomicrmw(
+                inkwell::AtomicRMWBinOp::Add,
+                ptr,
+                delta,
+                inkwell::AtomicOrdering::SequentiallyConsistent,
+            )
+            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+        Ok(prev.into())
+    }
+
     /// Compiles a spinlock acquire: volatile busy-wait loop.
     ///
     /// ```text
@@ -13839,6 +14033,86 @@ mod tests {
         assert!(
             !ir.contains("module asm"),
             "module without global_asm! should NOT have `module asm` line. IR:\n{ir}",
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Phase 5 (Gap G-A): atomic builtins emission gate
+    // ═══════════════════════════════════════════════════════════
+    //
+    // Native LLVM atomic instructions (cmpxchg, atomicrmw, atomic load/store
+    // with ordering) are required for SMP-correct sync primitives in
+    // bare-metal kernels (FajarOS spinlock specifically).
+    //
+    // These tests verify (a) compile_atomic_cas_u64 emits cmpxchg
+    // instruction, (b) compile_atomic_fetch_add_u64 emits atomicrmw add,
+    // (c) compile_atomic_load_u64 sets atomic ordering on the load.
+
+    #[test]
+    fn atomic_cas_emits_cmpxchg_instruction() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_atomic_cas");
+
+        let src = r#"
+            @unsafe fn main() -> i64 {
+                atomic_cas_u64(0xDEAD0000, 0, 42)
+            }
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("cmpxchg"),
+            "atomic_cas_u64 should emit cmpxchg instruction. IR:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn atomic_fetch_add_emits_atomicrmw_add() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_atomic_fetch_add");
+
+        let src = r#"
+            @unsafe fn main() -> i64 {
+                atomic_fetch_add_u64(0xDEAD0000, 1)
+            }
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("atomicrmw") && ir.contains("add"),
+            "atomic_fetch_add_u64 should emit `atomicrmw add`. IR:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn atomic_load_store_set_ordering() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_atomic_load_store");
+
+        let src = r#"
+            @unsafe fn main() -> i64 {
+                atomic_store_u64(0xDEAD0000, 42)
+                atomic_load_u64(0xDEAD0000)
+            }
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // SeqCst ordering on atomic load/store appears as `seq_cst` in IR.
+        assert!(
+            ir.contains("seq_cst"),
+            "atomic_load/store should have SeqCst ordering in IR. IR:\n{ir}",
         );
     }
 
