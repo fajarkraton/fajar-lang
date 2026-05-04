@@ -102,6 +102,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),

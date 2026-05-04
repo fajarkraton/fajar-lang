@@ -219,6 +219,13 @@ pub struct FnDef {
     /// emitted un-mangled — `@no_mangle` is the explicit opt-out
     /// attribute that survives if a real mangling scheme lands.
     pub no_mangle: bool,
+    /// V33.P4.D (Gap G-K closure): the function carried the
+    /// `@no_vectorize` modifier annotation. Promoted from primary
+    /// annotation to modifier so it can stack with `@kernel`/`@unsafe`
+    /// primaries (canonical Phase 4.1 recipe `@no_vectorize @kernel fn`).
+    /// LLVM codegen emits `no-implicit-float` + `target-features` that
+    /// negate AVX/SSE/AVX-512 vector ISA, forcing scalar emission.
+    pub no_vectorize: bool,
     /// Doc comment lines (from `///` comments preceding the function).
     pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `@kernel`, `@device`).
@@ -2345,6 +2352,7 @@ mod tests {
             no_inline: false,
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: Some(Annotation {
                 name: "kernel".into(),

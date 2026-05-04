@@ -3407,30 +3407,6 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     let attr = self.context.create_enum_attribute(attr_kind, 0);
                     function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
                 }
-                "no_vectorize" => {
-                    // V31.B.P2: disable LLVM loop auto-vectorization for this
-                    // function. Uses string attribute `"no-implicit-float"` +
-                    // target-feature override to prevent SSE/AVX vectorized
-                    // loop codegen. Written as a STRING attribute so future
-                    // LLVM versions that rename/remove the enum are forward-
-                    // compatible. Pairs with @noinline for hot paths where
-                    // V30 Track 3 P3.6 observed O2 miscompile.
-                    let noimpfp = self
-                        .context
-                        .create_string_attribute("no-implicit-float", "true");
-                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, noimpfp);
-                    // Also disable the loop-vectorize pass via function-level
-                    // `"disable-tail-calls"` adjacent pragma analog. The
-                    // canonical LLVM way is per-loop `!llvm.loop.vectorize.enable`
-                    // metadata, but we approximate at function granularity
-                    // by disabling the LoopVectorize pass contribution via
-                    // the target-features attribute.
-                    let tf = self.context.create_string_attribute(
-                        "target-features",
-                        "-avx,-avx2,-avx512f,-sse3,-ssse3,-sse4.1,-sse4.2,+popcnt",
-                    );
-                    function.add_attribute(inkwell::attributes::AttributeLoc::Function, tf);
-                }
                 "interrupt" => {
                     // @interrupt → naked + noinline (handler needs manual prologue/epilogue)
                     let naked_kind =
@@ -3477,6 +3453,25 @@ impl<'ctx> LlvmCompiler<'ctx> {
             let naked_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("naked");
             let naked_attr = self.context.create_enum_attribute(naked_kind, 0);
             function.add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
+        }
+
+        // ── V33.P4.D: @no_vectorize modifier (Gap G-K closure) ──────────
+        // Promoted from primary annotation to modifier so it can stack
+        // with @kernel/@unsafe primaries (canonical Phase 4.1 recipe).
+        // Same emission as the prior primary-annotation path: string
+        // attribute `no-implicit-float` + `target-features` negating
+        // AVX/SSE/AVX-512 vector ISA. Written as STRING attributes so
+        // future LLVM renames stay forward-compatible.
+        if fndef.no_vectorize {
+            let noimpfp = self
+                .context
+                .create_string_attribute("no-implicit-float", "true");
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, noimpfp);
+            let tf = self.context.create_string_attribute(
+                "target-features",
+                "-avx,-avx2,-avx512f,-sse3,-ssse3,-sse4.1,-sse4.2,+popcnt",
+            );
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, tf);
         }
 
         // ── Parameter-based attributes ─────────────────────────────────
@@ -9258,6 +9253,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
@@ -9378,6 +9374,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -9490,6 +9487,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9558,6 +9556,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9702,6 +9701,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -10188,6 +10188,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "fib".to_string(),
@@ -10251,6 +10252,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "add3".to_string(),
@@ -10362,6 +10364,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "is_even".to_string(),
@@ -10416,6 +10419,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "is_odd".to_string(),
@@ -11243,6 +11247,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation,
             name: name.to_string(),
@@ -11564,6 +11569,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -11809,6 +11815,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "add".to_string(),
@@ -11926,6 +11933,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "distance".to_string(),
@@ -12052,6 +12060,7 @@ mod tests {
 
                         naked: false,
                         no_mangle: false,
+                        no_vectorize: false,
                         doc_comment: None,
                         annotation: None,
                         name: "get".to_string(),
@@ -12085,6 +12094,7 @@ mod tests {
 
                     naked: false,
                     no_mangle: false,
+                    no_vectorize: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -12130,6 +12140,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "pair".to_string(),
@@ -12345,6 +12356,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12473,6 +12485,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12554,6 +12567,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12627,6 +12641,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -12673,6 +12688,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -12729,6 +12745,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12772,6 +12789,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12831,6 +12849,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12887,6 +12906,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12945,6 +12965,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13005,6 +13026,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13220,6 +13242,7 @@ mod tests {
 
                     naked: false,
                     no_mangle: false,
+                    no_vectorize: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fetch".to_string(),
@@ -13251,6 +13274,7 @@ mod tests {
 
                     naked: false,
                     no_mangle: false,
+                    no_vectorize: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -13413,6 +13437,7 @@ mod tests {
 
                 naked: false,
                 no_mangle: false,
+                no_vectorize: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13518,6 +13543,7 @@ mod tests {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -13599,6 +13625,7 @@ mod tests {
 
                     naked: false,
                     no_mangle: false,
+                    no_vectorize: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fib".to_string(),
@@ -13636,6 +13663,7 @@ mod tests {
 
                     naked: false,
                     no_mangle: false,
+                    no_vectorize: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -14041,13 +14069,12 @@ mod tests {
     // under `--features llvm` since they import the LLVM context.
 
     fn make_no_vectorize_fn(name: &str, body: Expr) -> FnDef {
+        // V33.P4.D: @no_vectorize is now a MODIFIER flag, not a primary
+        // annotation. Set fndef.no_vectorize = true instead of stamping
+        // an annotation. (Gap G-K closure — modifier can now stack with
+        // @kernel/@unsafe primaries.)
         let mut f = make_simple_fn(name, body);
-        f.annotation = Some(crate::parser::ast::Annotation {
-            name: "no_vectorize".to_string(),
-            param: None,
-            params: vec![],
-            span: dummy_span(),
-        });
+        f.no_vectorize = true;
         f
     }
 
@@ -14302,6 +14329,49 @@ mod tests {
         assert!(
             !plain_def_line.contains("naked"),
             "regular fn must not have `naked` attr inline. line: {plain_def_line}",
+        );
+    }
+
+    // ── V33.P4.D: @no_vectorize as modifier (Gap G-K closure) ──────────
+    //
+    // Verifies the canonical Phase 4.1 recipe `@no_vectorize @kernel fn ...`
+    // parses + codegens correctly. Pre-Phase-4.D, @no_vectorize was a
+    // primary annotation that conflicted with @kernel (PE001 on parse).
+    // Now that @no_vectorize is a modifier, stacking is legal.
+
+    #[test]
+    fn at_no_vectorize_stacks_with_kernel() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_no_vec_plus_kernel");
+
+        let src = r#"
+            @no_vectorize
+            @kernel fn tight(m: i64) -> i64 {
+                let mut s: i64 = 0
+                let mut k: i64 = 0
+                while k < m {
+                    s = s + k * 37
+                    k = k + 1
+                }
+                s
+            }
+            fn main() {}
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // Both attributes must appear on `tight`. We grep for the
+        // string-attribute fragments codegen emits.
+        assert!(
+            ir.contains("no-implicit-float"),
+            "@no_vectorize @kernel stack should still emit no-implicit-float. IR:\n{ir}",
+        );
+        assert!(
+            ir.contains("-avx"),
+            "@no_vectorize @kernel stack should still negate AVX. IR:\n{ir}",
         );
     }
 

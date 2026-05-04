@@ -81,6 +81,7 @@ impl Parser {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation,
             name,
@@ -867,11 +868,13 @@ impl Parser {
             } else {
                 false
             };
-            // V33.P7: accumulate modifier flags (@noinline, @naked, @no_mangle)
-            // before the primary annotation, mirroring parse_item_or_stmt.
+            // V33.P7+P4.D: accumulate modifier flags (@noinline, @naked,
+            // @no_mangle, @no_vectorize) before the primary annotation,
+            // mirroring parse_item_or_stmt.
             let mut method_no_inline = false;
             let mut method_naked = false;
             let mut method_no_mangle = false;
+            let mut method_no_vectorize = false;
             let ann = loop {
                 match self.peek_kind() {
                     TokenKind::AtNoInline => {
@@ -886,6 +889,10 @@ impl Parser {
                         self.advance();
                         method_no_mangle = true;
                     }
+                    TokenKind::AtNoVectorize => {
+                        self.advance();
+                        method_no_vectorize = true;
+                    }
                     _ => break self.try_parse_annotation(),
                 }
             };
@@ -893,6 +900,7 @@ impl Parser {
             method.no_inline = method_no_inline;
             method.naked = method_naked;
             method.no_mangle = method_no_mangle;
+            method.no_vectorize = method_no_vectorize;
             methods.push(method);
         }
         let end_tok = self.expect(&TokenKind::RBrace)?;
@@ -996,6 +1004,7 @@ impl Parser {
 
             naked: false,
             no_mangle: false,
+            no_vectorize: false,
             doc_comment: None,
             annotation,
             name,

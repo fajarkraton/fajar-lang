@@ -469,6 +469,7 @@ impl Parser {
         let mut no_inline = false;
         let mut naked = false;
         let mut no_mangle = false;
+        let mut no_vectorize = false;
         let annotation;
         loop {
             match self.peek_kind() {
@@ -507,6 +508,16 @@ impl Parser {
                     self.advance();
                     no_mangle = true;
                 }
+                TokenKind::AtNoVectorize => {
+                    // FAJAROS_100PCT_FJ_PLAN Phase 4.D follow-up
+                    // (Gap G-K closure): @no_vectorize promoted from
+                    // primary annotation to modifier so it can stack
+                    // with @kernel/@unsafe primaries (the canonical
+                    // Phase 4.1 recipe). Codegen reads fndef.no_vectorize
+                    // and emits no-implicit-float + target-features=-avx,-sse.
+                    self.advance();
+                    no_vectorize = true;
+                }
                 _ => {
                     // Try non-modifier annotation (only one allowed)
                     annotation = self.try_parse_annotation();
@@ -524,6 +535,7 @@ impl Parser {
                 fndef.no_inline = no_inline;
                 fndef.naked = naked;
                 fndef.no_mangle = no_mangle;
+                fndef.no_vectorize = no_vectorize;
                 fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }
@@ -758,8 +770,7 @@ impl Parser {
             | TokenKind::AtApp
             | TokenKind::AtHost
             | TokenKind::AtInline
-            | TokenKind::AtCold
-            | TokenKind::AtNoVectorize => {
+            | TokenKind::AtCold => {
                 let token = self.advance().clone();
                 let (name, param) = match &token.kind {
                     TokenKind::AtKernel => ("kernel", None),
@@ -854,7 +865,6 @@ impl Parser {
                         ("inline", inline_param)
                     }
                     TokenKind::AtCold => ("cold", None),
-                    TokenKind::AtNoVectorize => ("no_vectorize", None),
                     TokenKind::AtDerive => {
                         // Parse @derive(Trait1, Trait2, ...)
                         let mut derive_params = Vec::new();

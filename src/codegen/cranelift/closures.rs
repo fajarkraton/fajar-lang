@@ -248,6 +248,7 @@ fn build_closure_info(
 
         naked: false,
         no_mangle: false,
+        no_vectorize: false,
         doc_comment: None,
         annotation: None,
         name: fn_name.clone(),

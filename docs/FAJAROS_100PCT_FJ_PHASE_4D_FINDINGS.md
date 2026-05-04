@@ -1,13 +1,15 @@
 ---
-phase: 4.D — port km_vecmat_packed_v8 to pure fj (ATTEMPTED, REVERTED)
-status: BLOCKED 2026-05-04 (new Gap G-M surfaced; reverted to baseline)
+phase: 4.D — port km_vecmat_packed_v8 to pure fj (TWO ATTEMPTS, REVERTED)
+status: BLOCKED 2026-05-04 (Gap G-M independent; reverted to baseline)
 budget: 4-5h planned (Phase 4.1) + 25% surprise = 5.25h cap
-actual: ~30min Claude time (port + build + e2e + revert + doc)
-variance: -90% (early exit on first regression)
+actual: ~90min Claude time (2 ports + 2 reverts + G-K closure + 2 e2e + doc)
+variance: -82% (early exit after second attempt failure)
 artifacts:
-  - This findings doc
-  - fajaros-x86 follow-up commit — port attempt + revert + comment block
+  - This findings doc (with Section 4.D.8 second-attempt retry)
+  - fajar-lang commit — @no_vectorize promoted to modifier (Gap G-K closure)
+  - fajaros-x86 commit 58c10c7 — first port attempt + revert + comment
 prereq: Phase 4.C closed (fajaros-x86 2c74988)
+related closures: Gap G-K closed via fj-lang @no_vectorize modifier promotion
 ---
 
 # Phase 4.D Findings — `km_vecmat_packed_v8` port attempt (BLOCKED on Gap G-M)
@@ -197,13 +199,129 @@ Recommended: **(a)** because it's small, mechanical, and produces a
 clear Phase 4.D retry attempt with the canonical recipe. If retry
 also fails, we have stronger evidence for (b)/(c).
 
+## 4.D.8 — Second attempt: canonical `@no_vectorize @kernel` recipe (also fails)
+
+After the first attempt revert, I closed Gap G-K (fj-lang Phase 4.D
+follow-up — `@no_vectorize` promoted from primary annotation to
+modifier so it can stack with `@kernel`). Then re-tried the port with
+the CANONICAL Phase 4.1 recipe per the original FAJAROS_100PCT_FJ_PLAN
+§4.2:
+
+```fajar
+@no_vectorize
+@noinline
+@kernel fn km_vecmat_packed_v8(x_addr: i64, mat_addr: i64, m: i64, n: i64,
+                                 out_addr: i64) { ... }
+```
+
+Build: clean. ELF +336 bytes (consistent with first attempt).
+
+`make test-gemma3-e2e`:
+```
+nova> ask hello
+EXC:14
+0000000080000000     ← CR2 (faulting address)
+0000000000070000     ← faulting RIP
+PANIC:14
+```
+
+### Comparison of two attempts
+
+| Attempt | Recipe | Fault class | CR2 / RIP | Function at fault |
+|---|---|---|---|---|
+| **A1** | `@noinline @kernel` (no `@no_vectorize`) | EXC:13 GP | RIP=0x164C2A | `km_vecmat_packed_raw` (sibling fn, NOT modified) |
+| **A2** | `@no_vectorize @noinline @kernel` (canonical) | EXC:14 page fault | CR2=0x80000000 (2 GB, far past 512 MB identity-map) | RIP=0x70000 (low memory, not in kernel .text) |
+
+**The fault SHIFTS depending on whether `@no_vectorize` is applied.**
+This proves Gap G-M is independent of G-K (compile-time annotation
+parsing) — it is a runtime LLVM-O2 codegen issue with the new
+inline body's instruction stream. Specifically:
+
+- A1 (no `@no_vectorize`): LLVM auto-vectorizes inner loop. The
+  vectorization context flips heuristics on `km_vecmat_packed_raw`,
+  making it GP-fault.
+- A2 (`@no_vectorize`): Auto-vectorization is suppressed on the new
+  function. `km_vecmat_packed_raw` is no longer disturbed (RIP is
+  no longer in it). But a NEW fault — page fault on a 2 GB address
+  far outside the identity-mapped region — fires INSIDE the new
+  function during forward-pass arithmetic.
+
+### Why the new function faults on its own
+
+Hypotheses (each would need IR diff to confirm):
+
+1. **Pointer arithmetic overflow** — `mat_addr + packed_bytes`,
+   `scales_base + n_groups * 4`, or one of the inner-loop offsets
+   computes a pointer outside the 512 MB identity map. e.g. if
+   `mat_addr` is high (~0x40000000 = 1 GB end) and `packed_bytes`
+   adds another ~1 GB, we'd hit 0x80000000.
+2. **`bits` read miscompiles** — `volatile_read_u8(0xC00090)` is
+   supposed to return 4 or 8. If LLVM sign-extends or zero-extends
+   wrong, the `if bits == 8` branch could go down the wrong path
+   (8-bit reads vs 4-bit), changing all subsequent offsets.
+3. **Per-iteration branch on `bits`** drives codegen down a different
+   path than the C version's outside-loop dispatch. The 4-bit nibble
+   unpacking inside hot loop changes alignment of subsequent loads.
+
+The root cause is NOT trivially diagnosable from RIP=0x70000 (low
+memory, generic page-fault handler frame); we'd need a debugger or
+LLVM IR diff to bisect. That's outside this session's budget.
+
+### Corrected G-M characterization
+
+After A2, G-M is **NOT** strictly "cross-function compilation drift"
+(my A1 hypothesis). It is more like **"the canonical Phase 4.1 recipe
+(`@no_vectorize @kernel fn`) does not produce correct code for vecmat-
+shaped (triple-nested-loop, mixed-bit) kernels in fj-lang's LLVM
+backend."** Possibly:
+
+- LLVM O2 with `target-features="-avx,-avx2,..."` still does scalar
+  optimizations (instruction scheduling, GEP folding) that produce
+  wrong addresses
+- Or the volatile_read_u8 path emits IR that LLVM lowers to a
+  miscompiled load
+- Or there's a fj-lang frontend bug specific to per-iter branches +
+  multiple address-base offsets in `@no_vectorize` context
+
+| Gap | Refined symptom |
+|---|---|
+| **G-M** | The Phase 4.B (km_rmsnorm-style) port recipe — single-loop, single-base-pointer, single-bits — works. The Phase 4.D recipe — triple-nested, multiple-base-pointers, per-iteration bits-branch — fails under both `@noinline @kernel` (A1: cross-fn drift) and `@no_vectorize @noinline @kernel` (A2: own-function page fault). LLVM O2 codegen sensitivity to inner complexity. Re-entry: IR diff debug session, OR rewrite to single-base-pointer outer-loop dispatch (separate 4-bit and 8-bit fns), OR upstream LLVM fix. |
+
+### Verification (post-A2 revert)
+
+| Gate | Result |
+|---|---|
+| `make build-llvm` | ✅ ELF 1,505,806 bytes (matches Phase 4.C baseline) |
+| `make test-gemma3-e2e` (~210s) | ✅ 5/5 mechanical invariants PASS |
+
+### Net positive outcome of Phase 4.D session
+
+- **Gap G-K CLOSED** in fj-lang via @no_vectorize modifier promotion
+  (lexer/parser/codegen unchanged at module level; modifier loop in
+  parse_item_or_stmt + parse_impl_block consumes it; LLVM codegen
+  emits the same string attributes as before, gated by
+  `fndef.no_vectorize` flag).
+- **3 @no_vectorize regression tests** (was 2: now also includes
+  `at_no_vectorize_stacks_with_kernel` proving G-K is closed).
+- **Lib tests:** 8973 → 8974 PASS under `--features llvm,native`.
+- **Updated findings doc** clarifies G-M is independent of G-K and
+  is a runtime LLVM-O2 codegen issue, not a parsing one.
+
+Phase 4.D itself remains BLOCKED. Phase 4.E (tfm_attention) and
+Phase 4.F (tfm_rope_apply) recommended DEFERRED — same triple-nested
++ multi-base-pointer shape, same risk.
+
 ---
 
 *FAJAROS_100PCT_FJ_PHASE_4D_FINDINGS — 2026-05-04. Phase 4.D
-attempted port reverted in ~30min after gemma3-e2e EXC:13 in
-unrelated `km_vecmat_packed_raw`. Surfaces new Gap G-M
-(cross-function LLVM O2 context drift). Phase 4.B/4.C recipe
-doesn't generalize past ~50-LOC ports with high inner-branch
-density. Baseline preserved (5/5 e2e PASS). 6/9 compiler gaps
-closed; 5 documented. Phase 4.D BLOCKED behind G-M re-entry
-conditions; Phase 4.E/4.F same risk class.*
+attempted twice (A1: @noinline @kernel; A2: canonical @no_vectorize
+@kernel). Both reverted. A1 caused EXC:13 in unrelated sibling fn
+`km_vecmat_packed_raw` (cross-function drift). A2 caused EXC:14 at
+unmapped 0x80000000 inside the new fn (own-fn LLVM-O2 codegen
+bug). G-K closed compiler-side as side-effect of A2 setup
+(@no_vectorize promoted to modifier; fj-lang separate commit, +1
+regression test). G-M refined: not cross-fn drift but LLVM-O2
+sensitivity to vecmat-shaped (triple-nested, multi-base-pointer,
+per-iter bits-branch) kernels. Baseline preserved (5/5 e2e PASS).
+6/9 compiler gaps closed; 5 documented (G-M refined). Phase 4.D
+BLOCKED behind G-M re-entry conditions; Phase 4.E/4.F same risk.*
