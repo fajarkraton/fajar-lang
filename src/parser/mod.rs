@@ -1357,7 +1357,7 @@ mod tests {
     #[test]
     fn parse_while_loop() {
         let expr = parse_expr_ok("while x > 0 { x }");
-        assert!(matches!(expr, Expr::While { label: _, .. }));
+        assert!(matches!(expr, Expr::While { .. }));
     }
 
     #[test]
