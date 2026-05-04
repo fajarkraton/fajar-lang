@@ -484,7 +484,7 @@ impl CompilerPlugin for NamingConventionLint {
                     if !name.is_empty() && name.chars().next().is_some_and(|c| c.is_lowercase()) {
                         diags.push(PluginDiagnostic {
                             severity: DiagnosticSeverity::Warning,
-                            message: format!("{}{name}` should be PascalCase", &keyword.trim()),
+                            message: format!("{}{name}` should be PascalCase", keyword.trim()),
                             file: file.to_string(),
                             line: (i + 1) as u32,
                             column: 1,

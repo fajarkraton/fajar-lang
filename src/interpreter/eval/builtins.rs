@@ -500,7 +500,7 @@ impl Interpreter {
             // AVX2/AES-NI — LLVM-only builtins (not available in tree-walking interpreter)
             "avx2_dot_f32" | "avx2_add_f32" | "avx2_mul_f32" | "avx2_relu_f32" => {
                 Err(RuntimeError::TypeError(
-                    format!("{}() requires LLVM compilation: fj run --backend llvm file.fj (not available in interpreter)", &args.first().map(|_| name).unwrap_or(name))
+                    format!("{}() requires LLVM compilation: fj run --backend llvm file.fj (not available in interpreter)", args.first().map(|_| name).unwrap_or(name))
                 ).into())
             }
             "aesni_encrypt_block" | "aesni_decrypt_block" => {
