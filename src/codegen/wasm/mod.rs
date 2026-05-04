@@ -2331,6 +2331,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),

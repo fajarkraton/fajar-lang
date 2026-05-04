@@ -205,6 +205,12 @@ pub struct FnDef {
     /// @kernel/@device/@safe/@unsafe — matching the pattern used by
     /// `is_test`/`should_panic`/`is_ignored`.
     pub no_inline: bool,
+    /// V33.P6 (Gap G-B closure): the function carried the `@naked`
+    /// modifier annotation. Body must be a single asm!() block.
+    /// LLVM codegen emits the `naked` function attribute (no
+    /// compiler-generated prologue/epilogue). Coexists with primary
+    /// annotations like @unsafe / @kernel (modifier pattern).
+    pub naked: bool,
     /// Doc comment lines (from `///` comments preceding the function).
     pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `@kernel`, `@device`).
@@ -2329,6 +2335,7 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+            naked: false,
             doc_comment: None,
             annotation: Some(Annotation {
                 name: "kernel".into(),

@@ -1096,6 +1096,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "get_ref".to_string(),

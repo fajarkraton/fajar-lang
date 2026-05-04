@@ -467,6 +467,7 @@ impl Parser {
         let mut should_panic = false;
         let mut is_ignored = false;
         let mut no_inline = false;
+        let mut naked = false;
         let annotation;
         loop {
             match self.peek_kind() {
@@ -486,6 +487,16 @@ impl Parser {
                     self.advance();
                     no_inline = true;
                 }
+                TokenKind::AtNaked => {
+                    // FAJAROS_100PCT_FJ_PLAN Phase 6 (Gap G-B):
+                    // @naked modifier — function body must be a single
+                    // asm!() block; LLVM emits `naked` attribute so no
+                    // prologue/epilogue is generated. Stacks with primary
+                    // annotations like @unsafe / @kernel (matches @noinline
+                    // pattern). Codegen reads fndef.naked flag.
+                    self.advance();
+                    naked = true;
+                }
                 _ => {
                     // Try non-modifier annotation (only one allowed)
                     annotation = self.try_parse_annotation();
@@ -501,6 +512,7 @@ impl Parser {
                 fndef.should_panic = should_panic;
                 fndef.is_ignored = is_ignored;
                 fndef.no_inline = no_inline;
+                fndef.naked = naked;
                 fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }

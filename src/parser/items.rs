@@ -78,6 +78,8 @@ impl Parser {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation,
             name,
@@ -966,6 +968,8 @@ impl Parser {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation,
             name,

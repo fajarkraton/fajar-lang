@@ -3454,6 +3454,19 @@ impl<'ctx> LlvmCompiler<'ctx> {
             function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
         }
 
+        // ── V33.P6: @naked modifier (Gap G-B closure) ──────────────────
+        // The @naked modifier suppresses prologue/epilogue emission. Body
+        // must be a single asm!() block (analyzer enforcement is a
+        // future enhancement; for now, mis-use produces broken code).
+        // Stacks with primary annotations like @unsafe and @kernel.
+        // Same LLVM attribute @interrupt uses, but applied via the
+        // modifier-flag mechanism instead of the annotation.name match.
+        if fndef.naked {
+            let naked_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("naked");
+            let naked_attr = self.context.create_enum_attribute(naked_kind, 0);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
+        }
+
         // ── Parameter-based attributes ─────────────────────────────────
         // Reference parameters get noalias/nonnull/readonly attributes
         for (i, param) in fndef.params.iter().enumerate() {
@@ -9225,6 +9238,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
@@ -9342,6 +9357,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -9451,6 +9468,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9516,6 +9535,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9657,6 +9678,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -10140,6 +10163,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "fib".to_string(),
@@ -10200,6 +10225,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "add3".to_string(),
@@ -10308,6 +10335,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "is_even".to_string(),
@@ -10359,6 +10388,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "is_odd".to_string(),
@@ -11183,6 +11214,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation,
             name: name.to_string(),
@@ -11501,6 +11534,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -11743,6 +11778,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "add".to_string(),
@@ -11857,6 +11894,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "distance".to_string(),
@@ -11980,6 +12019,8 @@ mod tests {
                         should_panic: false,
                         is_ignored: false,
                         no_inline: false,
+
+                        naked: false,
                         doc_comment: None,
                         annotation: None,
                         name: "get".to_string(),
@@ -12010,6 +12051,8 @@ mod tests {
                     should_panic: false,
                     is_ignored: false,
                     no_inline: false,
+
+                    naked: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -12052,6 +12095,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "pair".to_string(),
@@ -12264,6 +12309,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12389,6 +12436,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12467,6 +12516,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12537,6 +12588,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -12580,6 +12633,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -12633,6 +12688,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12673,6 +12730,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12729,6 +12788,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12782,6 +12843,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12837,6 +12900,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12894,6 +12959,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13106,6 +13173,8 @@ mod tests {
                     should_panic: false,
                     is_ignored: false,
                     no_inline: false,
+
+                    naked: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fetch".to_string(),
@@ -13134,6 +13203,8 @@ mod tests {
                     should_panic: false,
                     is_ignored: false,
                     no_inline: false,
+
+                    naked: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -13293,6 +13364,8 @@ mod tests {
                 should_panic: false,
                 is_ignored: false,
                 no_inline: false,
+
+                naked: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13395,6 +13468,8 @@ mod tests {
             should_panic: false,
             is_ignored: false,
             no_inline: false,
+
+            naked: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -13473,6 +13548,8 @@ mod tests {
                     should_panic: false,
                     is_ignored: false,
                     no_inline: false,
+
+                    naked: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fib".to_string(),
@@ -13507,6 +13584,8 @@ mod tests {
                     should_panic: false,
                     is_ignored: false,
                     no_inline: false,
+
+                    naked: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),

@@ -340,6 +340,17 @@ pub enum TokenKind {
     /// LLVM pass bisect. V31.FAJARLANG Track B.P2.
     AtNoVectorize,
 
+    /// `@naked` — function body must be a single `asm!()` block. The
+    /// LLVM `naked` function attribute suppresses prologue/epilogue
+    /// emission so the asm has full control over registers and stack.
+    /// Required (in Rust style) for OS interrupt entry stubs that
+    /// must save/restore caller-saved registers exactly. fajaros
+    /// currently uses `global_asm!()` blocks for the same purpose
+    /// (Phase 3 runtime_stubs.fj); `@naked` provides a more natural
+    /// fn-level alternative for ad-hoc naked stubs. FAJAROS_100PCT_FJ_PLAN
+    /// Phase 6 (Gap G-B closure).
+    AtNaked,
+
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
     Plus,
@@ -676,6 +687,7 @@ impl fmt::Display for TokenKind {
             TokenKind::AtInline => write!(f, "@inline"),
             TokenKind::AtCold => write!(f, "@cold"),
             TokenKind::AtNoVectorize => write!(f, "@no_vectorize"),
+            TokenKind::AtNaked => write!(f, "@naked"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -809,6 +821,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("inline", TokenKind::AtInline);
     m.insert("cold", TokenKind::AtCold);
     m.insert("no_vectorize", TokenKind::AtNoVectorize);
+    m.insert("naked", TokenKind::AtNaked);
     m
 });
 
@@ -930,6 +943,7 @@ mod tests {
             lookup_annotation("no_vectorize"),
             Some(TokenKind::AtNoVectorize)
         );
+        assert_eq!(lookup_annotation("naked"), Some(TokenKind::AtNaked));
     }
 
     #[test]
@@ -1143,6 +1157,7 @@ mod tests {
             (TokenKind::AtInline, "@inline"),
             (TokenKind::AtCold, "@cold"),
             (TokenKind::AtNoVectorize, "@no_vectorize"),
+            (TokenKind::AtNaked, "@naked"),
             (TokenKind::AtNpu, "@npu"),
             (TokenKind::AtGpu, "@gpu"),
             (TokenKind::AtEntry, "@entry"),
