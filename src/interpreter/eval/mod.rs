@@ -4524,6 +4524,10 @@ mod tests {
     // ── WebSocket / MQTT tests ──
 
     #[test]
+    #[cfg_attr(
+        feature = "websocket",
+        ignore = "requires live WebSocket server; tests mock impl only"
+    )]
     fn test_ws_connect_send_recv_close() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -4543,6 +4547,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "mqtt",
+        ignore = "requires live MQTT broker; tests mock impl only"
+    )]
     fn test_mqtt_pub_sub_roundtrip() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -4582,6 +4590,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "websocket",
+        ignore = "requires live WebSocket server; tests mock impl only"
+    )]
     fn test_ws_recv_empty_returns_null() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -4597,6 +4609,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "ble",
+        ignore = "requires BlueZ + adapter; tests mock impl only"
+    )]
     fn test_ble_scan_returns_devices() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -4613,6 +4629,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "ble",
+        ignore = "requires BlueZ + adapter; tests mock impl only"
+    )]
     fn test_ble_connect_read_write_disconnect() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -4642,6 +4662,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "ble",
+        ignore = "requires BlueZ + adapter; tests mock impl only"
+    )]
     fn test_ble_read_after_write_returns_new_data() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(

@@ -203,7 +203,12 @@ jobs:
             fuzz/target
           key: ${{ runner.os }}-fuzz-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked || true
+        # Idempotent install: skip if cached `~/.cargo/bin` already has
+        # the binary. Drop `--locked` because cargo-fuzz 0.13.1's
+        # Cargo.lock pins rustix 0.36.5 which doesn't compile on current
+        # nightly (uses removed `rustc_layout_scalar_valid_range_*`
+        # attrs). Fresh resolution picks a compatible rustix.
+        run: command -v cargo-fuzz >/dev/null 2>&1 || cargo install cargo-fuzz
       - name: Fuzz lexer (60s)
         run: cd fuzz && cargo +nightly fuzz run fuzz_lexer -- -max_total_time=60
       - name: Fuzz parser (60s)

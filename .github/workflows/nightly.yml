@@ -62,7 +62,9 @@ jobs:
           key: ${{ runner.os }}-nightly-fuzz-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked || true
+        # Idempotent install + drop --locked (rustix 0.36.5 in cargo-fuzz
+        # 0.13.1 lockfile doesn't compile on current nightly). See ci.yml.
+        run: command -v cargo-fuzz >/dev/null 2>&1 || cargo install cargo-fuzz
 
       - name: Fuzz lexer (120s)
         run: cd fuzz && cargo +nightly fuzz run fuzz_lexer -- -max_total_time=120
