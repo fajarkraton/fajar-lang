@@ -468,6 +468,7 @@ impl Parser {
         let mut is_ignored = false;
         let mut no_inline = false;
         let mut naked = false;
+        let mut no_mangle = false;
         let annotation;
         loop {
             match self.peek_kind() {
@@ -497,6 +498,15 @@ impl Parser {
                     self.advance();
                     naked = true;
                 }
+                TokenKind::AtNoMangle => {
+                    // FAJAROS_100PCT_FJ_PLAN Phase 7 (Gap G-C):
+                    // @no_mangle modifier — suppress symbol mangling.
+                    // For impl-block methods, LLVM codegen emits the
+                    // bare method name instead of `Type__method`.
+                    // Stacks with primary annotations (modifier pattern).
+                    self.advance();
+                    no_mangle = true;
+                }
                 _ => {
                     // Try non-modifier annotation (only one allowed)
                     annotation = self.try_parse_annotation();
@@ -513,6 +523,7 @@ impl Parser {
                 fndef.is_ignored = is_ignored;
                 fndef.no_inline = no_inline;
                 fndef.naked = naked;
+                fndef.no_mangle = no_mangle;
                 fndef.doc_comment = doc_comment;
                 Ok(Item::FnDef(fndef))
             }

@@ -3228,7 +3228,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
         for item in &program.items {
             if let Item::ImplBlock(ib) = item {
                 for method in &ib.methods {
-                    let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                    // V33.P7 (Gap G-C): @no_mangle methods keep their bare
+                    // name; default methods get the `Type__method` prefix.
+                    let mangled_name = if method.no_mangle {
+                        method.name.clone()
+                    } else {
+                        format!("{}__{}", ib.target_type, method.name)
+                    };
                     let mut mangled_method = method.clone();
                     mangled_method.name = mangled_name;
                     self.declare_function(&mangled_method)?;
@@ -3260,7 +3266,13 @@ impl<'ctx> LlvmCompiler<'ctx> {
         for item in &program.items {
             if let Item::ImplBlock(ib) = item {
                 for method in &ib.methods {
-                    let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                    // V33.P7 (Gap G-C): @no_mangle methods keep their bare
+                    // name; default methods get the `Type__method` prefix.
+                    let mangled_name = if method.no_mangle {
+                        method.name.clone()
+                    } else {
+                        format!("{}__{}", ib.target_type, method.name)
+                    };
                     let mut mangled_method = method.clone();
                     mangled_method.name = mangled_name;
                     if let Err(e) = self.compile_function(&mangled_method) {
@@ -5695,7 +5707,12 @@ impl<'ctx> LlvmCompiler<'ctx> {
                     Item::ImplBlock(ib) => {
                         self.register_impl_block(ib);
                         for method in &ib.methods {
-                            let mangled_name = format!("{}__{}", ib.target_type, method.name);
+                            // V33.P7 (Gap G-C): @no_mangle keeps bare name.
+                            let mangled_name = if method.no_mangle {
+                                method.name.clone()
+                            } else {
+                                format!("{}__{}", ib.target_type, method.name)
+                            };
                             let mut mangled_method = method.clone();
                             mangled_method.name = mangled_name;
                             self.declare_function(&mangled_method)?;
@@ -9240,6 +9257,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: name.to_string(),
@@ -9359,6 +9377,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -9470,6 +9489,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9537,6 +9557,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -9680,6 +9701,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -10165,6 +10187,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "fib".to_string(),
@@ -10227,6 +10250,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "add3".to_string(),
@@ -10337,6 +10361,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "is_even".to_string(),
@@ -10390,6 +10415,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "is_odd".to_string(),
@@ -11216,6 +11242,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation,
             name: name.to_string(),
@@ -11536,6 +11563,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -11780,6 +11808,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "add".to_string(),
@@ -11896,6 +11925,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "distance".to_string(),
@@ -12021,6 +12051,7 @@ mod tests {
                         no_inline: false,
 
                         naked: false,
+                        no_mangle: false,
                         doc_comment: None,
                         annotation: None,
                         name: "get".to_string(),
@@ -12053,6 +12084,7 @@ mod tests {
                     no_inline: false,
 
                     naked: false,
+                    no_mangle: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -12097,6 +12129,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "pair".to_string(),
@@ -12311,6 +12344,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12438,6 +12472,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12518,6 +12553,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12590,6 +12626,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "double".to_string(),
@@ -12635,6 +12672,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -12690,6 +12728,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12732,6 +12771,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12790,6 +12830,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12845,6 +12886,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12902,6 +12944,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -12961,6 +13004,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13175,6 +13219,7 @@ mod tests {
                     no_inline: false,
 
                     naked: false,
+                    no_mangle: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fetch".to_string(),
@@ -13205,6 +13250,7 @@ mod tests {
                     no_inline: false,
 
                     naked: false,
+                    no_mangle: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -13366,6 +13412,7 @@ mod tests {
                 no_inline: false,
 
                 naked: false,
+                no_mangle: false,
                 doc_comment: None,
                 annotation: None,
                 name: "main".to_string(),
@@ -13470,6 +13517,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "main".to_string(),
@@ -13550,6 +13598,7 @@ mod tests {
                     no_inline: false,
 
                     naked: false,
+                    no_mangle: false,
                     doc_comment: None,
                     annotation: None,
                     name: "fib".to_string(),
@@ -13586,6 +13635,7 @@ mod tests {
                     no_inline: false,
 
                     naked: false,
+                    no_mangle: false,
                     doc_comment: None,
                     annotation: None,
                     name: "main".to_string(),
@@ -14252,6 +14302,69 @@ mod tests {
         assert!(
             !plain_def_line.contains("naked"),
             "regular fn must not have `naked` attr inline. line: {plain_def_line}",
+        );
+    }
+
+    // ── V33.P7: @no_mangle modifier (Gap G-C closure) ──────────────────
+    //
+    // These tests verify that an @no_mangle impl-block method emits the
+    // bare method name in the LLVM module symbol table, while a default
+    // (un-annotated) impl method gets the `Type__method` mangled form.
+
+    #[test]
+    fn at_no_mangle_emits_bare_symbol_for_impl_method() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_no_mangle");
+
+        let src = r#"
+            struct Foo { x: i64 }
+            impl Foo {
+                @no_mangle
+                fn export_me() -> i64 { 42 }
+            }
+            fn main() {}
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // The IR must define a function named `export_me` (bare, no Foo__ prefix).
+        assert!(
+            ir.lines()
+                .any(|l| l.contains("define") && l.contains("@export_me(")),
+            "@no_mangle method should emit bare `@export_me` in IR. IR:\n{ir}",
+        );
+        assert!(
+            !ir.contains("@Foo__export_me"),
+            "@no_mangle method must NOT carry the Foo__ prefix. IR:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn default_impl_method_keeps_mangled_symbol() {
+        // Defensive: a method without @no_mangle still gets the
+        // `Type__method` prefix. Ensures the modifier doesn't leak.
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_mangled");
+
+        let src = r#"
+            struct Bar { x: i64 }
+            impl Bar {
+                fn ordinary() -> i64 { 7 }
+            }
+            fn main() {}
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains("@Bar__ordinary"),
+            "default impl method should carry the Bar__ prefix. IR:\n{ir}",
         );
     }
 

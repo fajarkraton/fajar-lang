@@ -57,6 +57,7 @@ fn make_fn(name: &str, params: Vec<Param>, ret: Option<TypeExpr>, body: Expr) ->
         no_inline: false,
 
         naked: false,
+        no_mangle: false,
         doc_comment: None,
         annotation: None,
         name: name.to_string(),

@@ -80,6 +80,7 @@ impl Parser {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation,
             name,
@@ -866,8 +867,32 @@ impl Parser {
             } else {
                 false
             };
-            let ann = self.try_parse_annotation();
-            let method = self.parse_fn_def(is_method_pub, ann)?;
+            // V33.P7: accumulate modifier flags (@noinline, @naked, @no_mangle)
+            // before the primary annotation, mirroring parse_item_or_stmt.
+            let mut method_no_inline = false;
+            let mut method_naked = false;
+            let mut method_no_mangle = false;
+            let ann = loop {
+                match self.peek_kind() {
+                    TokenKind::AtNoInline => {
+                        self.advance();
+                        method_no_inline = true;
+                    }
+                    TokenKind::AtNaked => {
+                        self.advance();
+                        method_naked = true;
+                    }
+                    TokenKind::AtNoMangle => {
+                        self.advance();
+                        method_no_mangle = true;
+                    }
+                    _ => break self.try_parse_annotation(),
+                }
+            };
+            let mut method = self.parse_fn_def(is_method_pub, ann)?;
+            method.no_inline = method_no_inline;
+            method.naked = method_naked;
+            method.no_mangle = method_no_mangle;
             methods.push(method);
         }
         let end_tok = self.expect(&TokenKind::RBrace)?;
@@ -970,6 +995,7 @@ impl Parser {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation,
             name,

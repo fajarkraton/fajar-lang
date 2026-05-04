@@ -211,6 +211,14 @@ pub struct FnDef {
     /// compiler-generated prologue/epilogue). Coexists with primary
     /// annotations like @unsafe / @kernel (modifier pattern).
     pub naked: bool,
+    /// V33.P7 (Gap G-C closure): the function carried the `@no_mangle`
+    /// modifier annotation. When the function is an impl-block method
+    /// (or future generic monomorphization), LLVM codegen emits the
+    /// bare function name in the symbol table instead of the
+    /// `Type__method` mangling. Free-standing functions are already
+    /// emitted un-mangled — `@no_mangle` is the explicit opt-out
+    /// attribute that survives if a real mangling scheme lands.
+    pub no_mangle: bool,
     /// Doc comment lines (from `///` comments preceding the function).
     pub doc_comment: Option<String>,
     /// Optional annotation (e.g., `@kernel`, `@device`).
@@ -2336,6 +2344,7 @@ mod tests {
             is_ignored: false,
             no_inline: false,
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: Some(Annotation {
                 name: "kernel".into(),

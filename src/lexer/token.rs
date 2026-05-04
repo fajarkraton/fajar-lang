@@ -351,6 +351,15 @@ pub enum TokenKind {
     /// Phase 6 (Gap G-B closure).
     AtNaked,
 
+    /// `@no_mangle` — suppress symbol-name mangling. For impl-block
+    /// methods, this means the LLVM symbol is the bare method name
+    /// (e.g. `foo`) instead of the default `Type__foo` mangled form.
+    /// Free-standing fns are already emitted un-mangled, so this is
+    /// effectively a no-op there but stays as the explicit opt-out
+    /// attribute for forward-compatibility with any future mangling
+    /// scheme. FAJAROS_100PCT_FJ_PLAN Phase 7 (Gap G-C closure).
+    AtNoMangle,
+
     // ── Arithmetic Operators ───────────────────────────────────────────
     /// `+`
     Plus,
@@ -688,6 +697,7 @@ impl fmt::Display for TokenKind {
             TokenKind::AtCold => write!(f, "@cold"),
             TokenKind::AtNoVectorize => write!(f, "@no_vectorize"),
             TokenKind::AtNaked => write!(f, "@naked"),
+            TokenKind::AtNoMangle => write!(f, "@no_mangle"),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -822,6 +832,7 @@ pub static ANNOTATIONS: LazyLock<HashMap<&'static str, TokenKind>> = LazyLock::n
     m.insert("cold", TokenKind::AtCold);
     m.insert("no_vectorize", TokenKind::AtNoVectorize);
     m.insert("naked", TokenKind::AtNaked);
+    m.insert("no_mangle", TokenKind::AtNoMangle);
     m
 });
 
@@ -944,6 +955,7 @@ mod tests {
             Some(TokenKind::AtNoVectorize)
         );
         assert_eq!(lookup_annotation("naked"), Some(TokenKind::AtNaked));
+        assert_eq!(lookup_annotation("no_mangle"), Some(TokenKind::AtNoMangle));
     }
 
     #[test]
@@ -1158,6 +1170,7 @@ mod tests {
             (TokenKind::AtCold, "@cold"),
             (TokenKind::AtNoVectorize, "@no_vectorize"),
             (TokenKind::AtNaked, "@naked"),
+            (TokenKind::AtNoMangle, "@no_mangle"),
             (TokenKind::AtNpu, "@npu"),
             (TokenKind::AtGpu, "@gpu"),
             (TokenKind::AtEntry, "@entry"),

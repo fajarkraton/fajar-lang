@@ -1098,6 +1098,7 @@ mod tests {
             no_inline: false,
 
             naked: false,
+            no_mangle: false,
             doc_comment: None,
             annotation: None,
             name: "get_ref".to_string(),
