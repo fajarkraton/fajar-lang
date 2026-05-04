@@ -3442,17 +3442,30 @@ impl<'ctx> LlvmCompiler<'ctx> {
             function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
         }
 
-        // ── V33.P6: @naked modifier (Gap G-B closure) ──────────────────
+        // ── V33.P6: @naked modifier (Gap G-B + G-N closure) ──────────────
         // The @naked modifier suppresses prologue/epilogue emission. Body
         // must be a single asm!() block (analyzer enforcement is a
         // future enhancement; for now, mis-use produces broken code).
         // Stacks with primary annotations like @unsafe and @kernel.
-        // Same LLVM attribute @interrupt uses, but applied via the
-        // modifier-flag mechanism instead of the annotation.name match.
+        // Same LLVM attribute pair @interrupt uses (line ~3422):
+        //   - `naked`     → suppress prologue/epilogue
+        //   - `noinline`  → CRITICAL: the asm body contains its own `ret`
+        //                   instruction, which does not make sense if
+        //                   inlined into a caller. Without `noinline`,
+        //                   LLVM happily inlines the asm body — the
+        //                   inlined `ret` then RETURNS FROM THE CALLER
+        //                   prematurely, eliminating subsequent caller
+        //                   logic. Witnessed Phase 6.6 G-N: caller
+        //                   `elf_load_segments_in` was inlining
+        //                   fj_rt_bare_buffer_read_u64_le's `ret` and
+        //                   exiting after the first call.
         if fndef.naked {
             let naked_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("naked");
             let naked_attr = self.context.create_enum_attribute(naked_kind, 0);
             function.add_attribute(inkwell::attributes::AttributeLoc::Function, naked_attr);
+            let noinline_kind = inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+            let noinline_attr = self.context.create_enum_attribute(noinline_kind, 0);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
         }
 
         // ── V33.P4.D: @no_vectorize modifier (Gap G-K closure) ──────────
@@ -3783,55 +3796,98 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .is_some_and(|b| b.get_terminator().is_none());
 
         if needs_ret {
-            let is_void = function.get_type().get_return_type().is_none();
-            if is_void {
-                // Void function — discard any body value, return void
-                self.builder
-                    .build_return(None)
-                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
-            } else if let Some(val) = body_val {
-                // Coerce implicit return value to match fn signature (e.g., i1→i64)
-                let coerced = if let Some(ret_ty) = function.get_type().get_return_type() {
-                    if ret_ty.is_int_type() && val.is_int_value() {
-                        let ret_w = ret_ty.into_int_type().get_bit_width();
-                        let val_w = val.into_int_value().get_type().get_bit_width();
-                        if val_w < ret_w {
-                            self.builder
-                                .build_int_z_extend(
-                                    val.into_int_value(),
-                                    ret_ty.into_int_type(),
-                                    "impl_ret_ext",
-                                )
-                                .map_err(|e| CodegenError::Internal(e.to_string()))?
-                                .into()
-                        } else if val_w > ret_w {
-                            self.builder
-                                .build_int_truncate(
-                                    val.into_int_value(),
-                                    ret_ty.into_int_type(),
-                                    "impl_ret_trunc",
-                                )
-                                .map_err(|e| CodegenError::Internal(e.to_string()))?
-                                .into()
+            // V33.P6 (Gap G-B + G-N closure): @naked fns must NOT emit
+            // a default return value computation — the asm!() body handles
+            // both the return value (via register convention) and the actual
+            // `ret` instruction. fj-lang's default-return path produces dead
+            // `xor %eax,%eax; ret` AFTER the asm body, which corrupted
+            // adjacent function compilation.
+            //
+            // LLVM requires every basic block to have a terminator AND
+            // requires the function's return type to match the terminator.
+            // For @naked fns we emit `ret <undef>` (or `ret void` for void
+            // returns) — the `naked` attribute suppresses code generation
+            // for this terminator, so it produces NO machine instructions,
+            // but it satisfies LLVM's IR verifier. CRITICAL: do NOT emit
+            // `unreachable` here — LLVM treats `unreachable` as `noreturn`
+            // for inter-procedural analysis, propagating dead-code
+            // elimination to callers (witnessed elf_load_segments_in
+            // shrinking from 0x37b bytes to 5 bytes during Phase 6.6).
+            if fndef.naked {
+                match function.get_type().get_return_type() {
+                    None => {
+                        self.builder
+                            .build_return(None)
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                    Some(ret_ty) => {
+                        let undef_val: BasicValueEnum =
+                            if let inkwell::types::BasicTypeEnum::IntType(it) = ret_ty {
+                                it.get_undef().into()
+                            } else if let inkwell::types::BasicTypeEnum::FloatType(ft) = ret_ty {
+                                ft.get_undef().into()
+                            } else if let inkwell::types::BasicTypeEnum::PointerType(pt) = ret_ty {
+                                pt.get_undef().into()
+                            } else {
+                                // Fallback: i64 undef for any other return type
+                                self.context.i64_type().get_undef().into()
+                            };
+                        self.builder
+                            .build_return(Some(&undef_val))
+                            .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                    }
+                }
+            } else {
+                let is_void = function.get_type().get_return_type().is_none();
+                if is_void {
+                    // Void function — discard any body value, return void
+                    self.builder
+                        .build_return(None)
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                } else if let Some(val) = body_val {
+                    // Coerce implicit return value to match fn signature (e.g., i1→i64)
+                    let coerced = if let Some(ret_ty) = function.get_type().get_return_type() {
+                        if ret_ty.is_int_type() && val.is_int_value() {
+                            let ret_w = ret_ty.into_int_type().get_bit_width();
+                            let val_w = val.into_int_value().get_type().get_bit_width();
+                            if val_w < ret_w {
+                                self.builder
+                                    .build_int_z_extend(
+                                        val.into_int_value(),
+                                        ret_ty.into_int_type(),
+                                        "impl_ret_ext",
+                                    )
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                    .into()
+                            } else if val_w > ret_w {
+                                self.builder
+                                    .build_int_truncate(
+                                        val.into_int_value(),
+                                        ret_ty.into_int_type(),
+                                        "impl_ret_trunc",
+                                    )
+                                    .map_err(|e| CodegenError::Internal(e.to_string()))?
+                                    .into()
+                            } else {
+                                val
+                            }
                         } else {
                             val
                         }
                     } else {
                         val
-                    }
+                    };
+                    self.builder
+                        .build_return(Some(&coerced))
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
                 } else {
-                    val
-                };
-                self.builder
-                    .build_return(Some(&coerced))
-                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
-            } else {
-                // Non-void function but no body value — implicit return 0
-                let zero = self.context.i64_type().const_int(0, false);
-                self.builder
-                    .build_return(Some(&zero))
-                    .map_err(|e| CodegenError::Internal(e.to_string()))?;
-            }
+                    // Non-void function but no body value — implicit return 0
+                    let zero = self.context.i64_type().const_int(0, false);
+                    self.builder
+                        .build_return(Some(&zero))
+                        .map_err(|e| CodegenError::Internal(e.to_string()))?;
+                }
+            } // end of `else` branch (non-naked path) — V33.P6 follow-up
         }
 
         // Restore previous scope
