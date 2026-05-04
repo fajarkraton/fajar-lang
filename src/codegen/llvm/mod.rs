@@ -14195,6 +14195,66 @@ mod tests {
         );
     }
 
+    // ── V33.P6: @naked modifier (Gap G-B closure) ──────────────────────
+    //
+    // These tests verify (a) @naked fns receive the LLVM `naked` function
+    // attribute in IR, (b) regular fns do NOT receive it.
+
+    #[test]
+    fn at_naked_emits_naked_attribute() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_at_naked");
+
+        let src = r#"
+            @naked @unsafe fn naked_fn() {
+                asm!("xor %eax, %eax\n\tret", options(att_syntax))
+            }
+            fn main() {}
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // LLVM serializes the `naked` enum attribute literally as `naked`
+        // in the function attribute group. Sanity-grep it.
+        assert!(
+            ir.contains("naked"),
+            "@naked fn should carry the `naked` LLVM attribute. IR:\n{ir}",
+        );
+    }
+
+    #[test]
+    fn regular_fn_does_not_receive_naked_attribute() {
+        // Defensive: a non-@naked fn must NOT have the `naked` attribute.
+        // Otherwise the modifier would leak across all functions.
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_no_naked");
+
+        let src = r#"
+            fn plain() -> i64 { 42 }
+            fn main() {}
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // The function definition line for `plain` should NOT include
+        // `naked`. We grep for `define ... @plain(` and check no `naked`
+        // appears between `define` and `{`.
+        let plain_def_line = ir
+            .lines()
+            .find(|l| l.contains("@plain(") && l.contains("define"))
+            .unwrap_or_else(|| panic!("@plain definition not found in IR:\n{ir}"));
+        assert!(
+            !plain_def_line.contains("naked"),
+            "regular fn must not have `naked` attr inline. line: {plain_def_line}",
+        );
+    }
+
     #[test]
     fn at_no_vectorize_does_not_affect_regular_functions() {
         // Defensive: regular functions must NOT receive the
