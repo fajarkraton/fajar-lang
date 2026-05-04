@@ -3090,6 +3090,29 @@ impl<'ctx> LlvmCompiler<'ctx> {
             }
         }
 
+        // Pass 0.4: emit global_asm! blocks via LLVMSetModuleInlineAsm2.
+        // (FAJAROS_100PCT_FJ_PLAN Phase 2.A — Gap G-G fix.) Concatenates
+        // every Item::GlobalAsm template with newlines and installs as
+        // module-level inline assembly. The concatenated string is emitted
+        // verbatim by LLVM into the output object file's text section
+        // (or whatever section the assembly's `.section` directives request).
+        // Required for kernel boot stubs (e.g. Multiboot2 header in a
+        // specific section) that cannot be expressed as Fajar Lang functions.
+        {
+            let mut combined = String::new();
+            for item in &program.items {
+                if let Item::GlobalAsm(ga) = item {
+                    if !combined.is_empty() {
+                        combined.push('\n');
+                    }
+                    combined.push_str(&ga.template);
+                }
+            }
+            if !combined.is_empty() {
+                self.module.set_inline_assembly(&combined);
+            }
+        }
+
         // Pass 0.5: register impl block methods
         for item in &program.items {
             if let Item::ImplBlock(ib) = item {
@@ -13738,6 +13761,84 @@ mod tests {
             "expected `target-features` to disable AVX + SSE on @no_vectorize \
              fn — V31.B.P2 codegen at src/codegen/llvm/mod.rs:3306-3309. \
              IR:\n{ir}",
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FAJAROS_100PCT_FJ_PLAN Phase 2.A — global_asm! emission gate
+    // ═══════════════════════════════════════════════════════════
+    //
+    // Closes Gap G-G surfaced in Phase 2 audit: `global_asm!()` was
+    // parsed + collected but NEVER emitted into the output ELF.
+    // Patch lands at compile_program Pass 0.4 — concatenates every
+    // Item::GlobalAsm template and calls module.set_inline_assembly().
+    //
+    // These tests verify (a) the asm appears in module IR, (b) multiple
+    // global_asm blocks concatenate, (c) absence of global_asm leaves
+    // module asm empty.
+
+    #[test]
+    fn global_asm_single_block_appears_in_module_ir() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_global_asm_single");
+
+        let src = r#"
+            global_asm!(".section .my_test\n.global mark\nmark: .quad 0xCAFEBABE")
+            fn main() -> i64 { 0 }
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        // module-level inline asm appears as `module asm "..."` lines
+        assert!(
+            ir.contains("module asm") && ir.contains(".my_test"),
+            "expected module asm with .my_test section in IR. IR head:\n{}",
+            &ir.chars().take(500).collect::<String>(),
+        );
+    }
+
+    #[test]
+    fn global_asm_multiple_blocks_concatenate() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_global_asm_multi");
+
+        let src = r#"
+            global_asm!(".section .first\nfirst_marker: .quad 1")
+            global_asm!(".section .second\nsecond_marker: .quad 2")
+            fn main() -> i64 { 0 }
+        "#;
+        let tokens = crate::lexer::tokenize(src).expect("lex");
+        let program = crate::parser::parse(tokens).expect("parse");
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        assert!(
+            ir.contains(".first") && ir.contains(".second"),
+            "both global_asm blocks should appear in module IR. IR head:\n{}",
+            &ir.chars().take(800).collect::<String>(),
+        );
+    }
+
+    #[test]
+    fn global_asm_absence_leaves_module_asm_empty() {
+        LlvmCompiler::init_native_target().unwrap();
+        let ctx = Context::create();
+        let mut compiler = LlvmCompiler::new(&ctx, "test_no_global_asm");
+
+        // Program with NO global_asm! — module asm should be empty.
+        let body = make_int_lit(0);
+        let main = make_simple_fn("main", body);
+        let program = make_program(vec![Item::FnDef(main)]);
+        compiler.compile_program(&program).expect("compile");
+
+        let ir = compiler.print_ir();
+        assert!(
+            !ir.contains("module asm"),
+            "module without global_asm! should NOT have `module asm` line. IR:\n{ir}",
         );
     }
 
