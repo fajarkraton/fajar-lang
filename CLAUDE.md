@@ -720,6 +720,7 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 | Example programs | `docs/EXAMPLES.md` |
 | Git workflow | `docs/CONTRIBUTING.md` |
 | OS plans | `docs/V30_PLAN.md` + `docs/COMPILER_ENHANCEMENT_PLAN.md` |
+| **FajarOS 100% Fajar Lang plan** | **`docs/FAJAROS_100PCT_FJ_PLAN.md`** — 9-phase migration: remove all .S/.c/.cpp from kernel build path + close 3 fj-lang gaps (LLVM atomics, @naked, @no_mangle); ~21-32d realistic |
 
 ---
 
@@ -736,5 +737,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 33 (**V33-PERFECTION-COMPLETE 2026-05-03**: FAJAR_LANG_PERFECTION_PLAN P0-P9 closed engineering-side; 22/25 work-items PASS, 3 await founder external action — F1 binary-release verification, F3 fajarquant crates.io coordination, A1 LLVM upstream filing). All defended in depth: regression scripts, prevention layers, and paste-ready filing drafts. Quality gates at close: 7626 lib + 2498+ integ tests (0 fail / 0 flake), 162 LLVM tests, 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warning, 95.79% pub-item doc coverage, 100% stdlib_v3 doc coverage, 0 error-code coverage gap (125/135 covered + 12 forward-compat). Tags `v32.1.0` (P0-P6 milestone, tag-only) + `v33.0.0` (Latest GitHub Release with 5 platform binaries) published 2026-05-03. **HONEST_AUDIT_V33** (`docs/HONEST_AUDIT_V33.md`) is the exit scorecard for all 25 work-items. Cumulative effort ~14h actual vs 218-336h plan estimate (~95% under) because most items had deeper existing scaffolding than the plan-doc reflected; closure was largely measurement + prevention-layer work. Pre-V33 history compressed: V32 audit + 4-fix follow-up, V27.5 effort-variance debunked, F.11 demoted, F.13 dispatch verdict, V31.C Phase D scaling chain, arXiv submission ready. Detail → `CHANGELOG.md` + `MEMORY.md` + `docs/HONEST_AUDIT_V32.md` + `docs/HONEST_AUDIT_V33.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-03*
+*CLAUDE.md Version: 33 (**V33-PERFECTION-COMPLETE 2026-05-03**: FAJAR_LANG_PERFECTION_PLAN P0-P9 closed engineering-side; 22/25 work-items PASS, 3 await founder external action — F1 binary-release verification, F3 fajarquant crates.io coordination, A1 LLVM upstream filing). All defended in depth: regression scripts, prevention layers, and paste-ready filing drafts. Quality gates at close: 7626 lib + 2498+ integ tests (0 fail / 0 flake), 162 LLVM tests, 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warning, 95.79% pub-item doc coverage, 100% stdlib_v3 doc coverage, 0 error-code coverage gap (125/135 covered + 12 forward-compat). Tags `v32.1.0` (P0-P6 milestone, tag-only) + `v33.0.0` (Latest GitHub Release with 5 platform binaries) published 2026-05-03. **HONEST_AUDIT_V33** (`docs/HONEST_AUDIT_V33.md`) is the exit scorecard for all 25 work-items. Cumulative effort ~14h actual vs 218-336h estimate (~95% under). Detail → `CHANGELOG.md` + `MEMORY.md` + `docs/HONEST_AUDIT_V32.md` + `docs/HONEST_AUDIT_V33.md`. Next plan: **`docs/FAJAROS_100PCT_FJ_PLAN.md`** (9 phases, ~21-32d, FajarOS to pure Fajar Lang). Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-04*
