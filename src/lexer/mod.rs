@@ -615,20 +615,67 @@ fn scan_identifier_or_keyword(cursor: &mut Cursor<'_>) -> TokenKind {
         return TokenKind::FStringLit(parts);
     }
 
-    // Check for raw string: r"..."
-    if cursor.peek() == Some('r') && cursor.peek_second() == Some('"') {
-        cursor.advance(); // consume 'r'
-        cursor.advance(); // consume '"'
-        let str_start = cursor.pos();
-        // Read until closing "
-        while cursor.peek() != Some('"') && !cursor.is_eof() {
-            cursor.advance();
+    // Check for raw string: r"..." or r#"..."# (Rust-style with optional
+    // hash delimiters for embedding `"` chars without escaping).
+    // Multiple hashes allowed: r##"..."## works for content containing `"#`.
+    // Required by FAJAROS_100PCT_FJ_PLAN Phase 2.B (boot startup port —
+    // 515 LOC of asm with embedded `"a"` and `.ascii "..."` directives
+    // can't fit into r"..." which terminates at the first `"`).
+    if cursor.peek() == Some('r')
+        && (cursor.peek_second() == Some('"') || cursor.peek_second() == Some('#'))
+    {
+        // Lookahead to confirm this is a raw string (not just identifier
+        // starting with 'r' followed by '#' as a separator etc.). For the
+        // hash variant, we need at least one '#' followed eventually by '"'.
+        let mut hashes = 0;
+        let mut probe = 1; // skip 'r'
+        while cursor.peek_nth(probe) == Some('#') {
+            hashes += 1;
+            probe += 1;
         }
-        let content = cursor.source()[str_start..cursor.pos()].to_string();
-        if !cursor.is_eof() {
-            cursor.advance(); // consume closing '"'
+        if cursor.peek_nth(probe) == Some('"') {
+            // Confirmed raw string: r"..." (hashes=0) or r#"..."# (hashes=N).
+            cursor.advance(); // consume 'r'
+            for _ in 0..hashes {
+                cursor.advance(); // consume each opening '#'
+            }
+            cursor.advance(); // consume opening '"'
+            let str_start = cursor.pos();
+
+            // Find the closing delimiter: '"' followed by N hashes.
+            let mut end = cursor.pos();
+            'scan: loop {
+                if cursor.is_eof() {
+                    break;
+                }
+                if cursor.peek() == Some('"') {
+                    // Verify N hashes follow.
+                    let mut ok = true;
+                    for h in 1..=hashes {
+                        if cursor.peek_nth(h) != Some('#') {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if ok {
+                        end = cursor.pos();
+                        break 'scan;
+                    }
+                }
+                cursor.advance();
+            }
+            let content = cursor.source()[str_start..end].to_string();
+            // Consume the closing '"' and N hashes.
+            if !cursor.is_eof() {
+                cursor.advance(); // consume '"'
+                for _ in 0..hashes {
+                    cursor.advance();
+                }
+            }
+            return TokenKind::RawStringLit(content);
         }
-        return TokenKind::RawStringLit(content);
+        // Not a raw string after all (e.g. 'r' followed by 'X' that isn't '"' or '#'+'"').
+        // Fall through to identifier handling.
     }
 
     let word = cursor.eat_while(is_ident_continue);
@@ -1414,6 +1461,41 @@ mod tests {
             r#"r"raw \n string""#,
             TokenKind::RawStringLit(r"raw \n string".into())
         );
+    }
+
+    #[test]
+    fn tokenize_raw_string_with_single_hash() {
+        // r#"..."# allows embedded `"` chars (FAJAROS_100PCT_FJ_PLAN P2.B).
+        assert_tokens!(
+            r##"r#"asm "a" directive"#"##,
+            TokenKind::RawStringLit(r#"asm "a" directive"#.into())
+        );
+    }
+
+    #[test]
+    fn tokenize_raw_string_with_double_hash() {
+        // r##"..."## allows embedded `"#` substring without terminating early.
+        assert_tokens!(
+            r###"r##"end "# not actually"##"###,
+            TokenKind::RawStringLit(r##"end "# not actually"##.into())
+        );
+    }
+
+    #[test]
+    fn tokenize_raw_string_multiline_with_quotes() {
+        // Multi-line raw string with embedded quotes — typical pattern for
+        // global_asm!() blocks porting .S boot code.
+        let src = "r#\".section .text, \"a\"\nmov rax, 1\".global foo\"#";
+        let tokens = tokenize(src).expect("lex");
+        assert_eq!(tokens.len(), 2); // RawStringLit + Eof
+        match &tokens[0].kind {
+            TokenKind::RawStringLit(s) => {
+                assert!(s.contains(".section .text, \"a\""));
+                assert!(s.contains("mov rax, 1"));
+                assert!(s.contains(".global foo"));
+            }
+            other => panic!("expected RawStringLit, got {:?}", other),
+        }
     }
 
     // ── Character Literals ─────────────────────────────────────────────

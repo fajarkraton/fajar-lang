@@ -1083,9 +1083,11 @@ impl Parser {
         self.eat(&TokenKind::Bang);
         self.expect(&TokenKind::LParen)?;
 
-        // First argument must be a string template
+        // First argument must be a string template (regular or raw).
+        // Raw strings (r"..." / r#"..."#) required for templates with
+        // embedded `"` chars per FAJAROS_100PCT_FJ_PLAN Phase 2.B.
         let template = match self.peek_kind() {
-            TokenKind::StringLit(s) => {
+            TokenKind::StringLit(s) | TokenKind::RawStringLit(s) => {
                 let s = s.clone();
                 self.advance();
                 s
@@ -1193,6 +1195,9 @@ impl Parser {
     /// Parses a global assembly item: `global_asm!(".section .text\n...")`.
     ///
     /// Called when `global_asm` identifier is detected at top level.
+    /// Accepts both regular `"..."` and raw `r"..."` / `r#"..."#`
+    /// string templates (raw strings required for asm content with
+    /// embedded `"` chars per FAJAROS_100PCT_FJ_PLAN Phase 2.B).
     pub(super) fn parse_global_asm(&mut self) -> Result<GlobalAsm, ParseError> {
         let start = self.peek().span.start;
         self.advance(); // consume "global_asm"
@@ -1200,7 +1205,7 @@ impl Parser {
         self.expect(&TokenKind::LParen)?;
 
         let template = match self.peek_kind() {
-            TokenKind::StringLit(s) => {
+            TokenKind::StringLit(s) | TokenKind::RawStringLit(s) => {
                 let s = s.clone();
                 self.advance();
                 s
