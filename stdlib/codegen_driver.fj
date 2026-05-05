@@ -25,9 +25,24 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
 
     let tag = ast[pos]
     if tag == "INT" {
-        exr(ast[pos + 1], pos + 2)
+        // Possible postfix FIELD chain
+        let base = ast[pos + 1]
+        let mut p2 = pos + 2
+        let mut code = base
+        while p2 + 1 < n && ast[p2] == "FIELD" {
+            code = concat!(code, ".", ast[p2 + 1])
+            p2 = p2 + 2
+        }
+        exr(code, p2)
     } else if tag == "IDENT" {
-        exr(ast[pos + 1], pos + 2)
+        let base = ast[pos + 1]
+        let mut p2 = pos + 2
+        let mut code = base
+        while p2 + 1 < n && ast[p2] == "FIELD" {
+            code = concat!(code, ".", ast[p2 + 1])
+            p2 = p2 + 2
+        }
+        exr(code, p2)
     } else if tag == "FLOAT" {
         exr(ast[pos + 1], pos + 2)
     } else if tag == "BOOL" {
@@ -35,6 +50,28 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
     } else if tag == "STR" {
         // C string literal: wrap in quotes
         exr(concat!("\"", ast[pos + 1], "\""), pos + 2)
+    } else if tag == "ENUM_VARIANT" {
+        // EnumName::Variant → C: EnumName_Variant
+        let enum_name = ast[pos + 1]
+        let variant = ast[pos + 2]
+        exr(concat!(enum_name, "_", variant), pos + 3)
+    } else if tag == "BEGIN_STRUCT_LIT" {
+        // Type { f1: e1, f2: e2 } → C99: (Type){.f1 = e1, .f2 = e2}
+        let type_name = ast[pos + 1]
+        let mut p2 = pos + 2
+        let mut body = ""
+        let mut first = true
+        while p2 < n && ast[p2] != "END_STRUCT_LIT" {
+            let fname = ast[p2]
+            p2 = p2 + 1
+            let r = parse_expr_emit(ast, p2)
+            if !first { body = concat!(body, ", ") }
+            body = concat!(body, ".", fname, " = ", r.code)
+            first = false
+            p2 = r.pos
+        }
+        p2 = p2 + 1  // past END_STRUCT_LIT
+        exr(concat!("(", type_name, "){", body, "}"), p2)
     } else if tag == "BEGIN_CALL" {
         let raw_name = ast[pos + 1]
         // Map fj-lang builtins to their C runtime counterparts.
@@ -75,13 +112,20 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
 //
 // Strategy: read atom (lhs); peek next — if next is another atom-start,
 // recursively parse as rhs-expr, then expect BINOP <op> and combine.
+// Helper: is the tag at `pos` a valid expression atom-starter?
+fn is_atom_start(tag: str) -> bool {
+    tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
+    tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
+    tag == "BEGIN_STRUCT_LIT"
+}
+
 pub fn parse_expr_emit(ast: [str], pos: i64) -> ExprResult {
     let n = to_int(len(ast))
     if pos >= n { return exr("0", pos) }
 
     let lhs = parse_atom(ast, pos)
-    let mut p = lhs.pos
-    if p < n && (ast[p] == "INT" || ast[p] == "IDENT" || ast[p] == "BEGIN_CALL") {
+    let p = lhs.pos
+    if p < n && is_atom_start(ast[p]) {
         let rhs = parse_expr_emit(ast, p)
         if rhs.pos + 1 < to_int(len(ast)) && ast[rhs.pos] == "BINOP" {
             let op = ast[rhs.pos + 1]
@@ -101,6 +145,7 @@ pub fn stmt_end(ast: [str], pos: i64) -> i64 {
                     else if tag == "BEGIN_EXPR_STMT" { "END_EXPR_STMT" }
                     else if tag == "BEGIN_IF" { "END_IF" }
                     else if tag == "BEGIN_WHILE" { "END_WHILE" }
+                    else if tag == "BEGIN_FOR" { "END_FOR" }
                     else if tag == "BEGIN_ASSIGN" { "END_ASSIGN" }
                     else { "" }
     if end_token == "" { return pos + 1 }
@@ -136,8 +181,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         // Peek the first expression atom to infer C type
         let first_atom = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
         let er = parse_expr_emit(ast, pos + 2)
+        // Struct literal → use the struct type name
         let c_type = if first_atom == "FLOAT" { "double" }
                      else if first_atom == "STR" { "const char*" }
+                     else if first_atom == "BEGIN_STRUCT_LIT" {
+                         // Struct type name lives at pos+3 (one past BEGIN_STRUCT_LIT)
+                         if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "int64_t" }
+                     }
                      else { "int64_t" }
         return emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))
     }
@@ -180,6 +230,29 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             p = stmt_end(ast, p)
         }
         return emit_endwhile(cg2)
+    }
+
+    if tag == "BEGIN_FOR" {
+        // BEGIN_FOR <var> <start_expr> FOR_RANGE_TO <end_expr> BEGIN_LOOP_BODY <stmts> END_LOOP_BODY END_FOR
+        let var_name = ast[pos + 1]
+        let r_start = parse_expr_emit(ast, pos + 2)
+        // Expect FOR_RANGE_TO at r_start.pos
+        if ast[r_start.pos] != "FOR_RANGE_TO" { return cg }
+        let r_end = parse_expr_emit(ast, r_start.pos + 1)
+        // Emit C: for (int64_t var = start; var < end; var++) {
+        let mut cg2 = emit_line(cg, concat!("for (int64_t ", var_name, " = ", r_start.code,
+                                            "; ", var_name, " < ", r_end.code,
+                                            "; ", var_name, "++) {"))
+        cg2 = indent(cg2)
+        let mut p = r_end.pos
+        if ast[p] != "BEGIN_LOOP_BODY" { return cg2 }
+        p = p + 1
+        while p < n && ast[p] != "END_LOOP_BODY" {
+            cg2 = emit_stmt(ast, p, cg2)
+            p = stmt_end(ast, p)
+        }
+        cg2 = dedent(cg2)
+        return emit_line(cg2, "}")
     }
 
     if tag == "BEGIN_ASSIGN" {

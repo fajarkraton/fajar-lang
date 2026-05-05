@@ -2,6 +2,69 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.7.0] — 2026-05-05 Stage-1 Use-Site Closure (struct/enum/for)
+
+**Closes the "DECL hollow" gaps from v33.6.0.** Trigger: same
+perfection-over-time rule. v33.6.0 declared structs and enums but
+gave no way to USE them in expressions. v33.7.0 adds: struct literal
+construction, struct field access, enum variant access, plus `for`
+loop with range syntax. Plus a real bug fix in binop atom detection.
+
+### Added (use-site features)
+
+- **Struct field access** (`p.x`, chainable `p.a.b`) — postfix
+  `.<ident>` chain after IDENT in parse_primary; codegen concatenates
+  with `.` for C output.
+- **Struct literal** (`Point { x: 10, y: 20 }`) — PascalCase ident +
+  `{` triggers `BEGIN_STRUCT_LIT`; codegen emits C99 designated
+  initializer `(Point){.x = 10, .y = 20}`.
+- **Enum variant access** (`Color::Red`) — `EnumName::Variant` →
+  `ENUM_VARIANT` atom; codegen emits `EnumName_Variant` matching the
+  enum DECL output (`Color_Red`).
+- **`for` loop with range** (`for i in 0..n { body }`) — new
+  `BEGIN_FOR <var> <start> FOR_RANGE_TO <end> BEGIN_LOOP_BODY ...`
+  AST shape; codegen emits `for (int64_t i = start; i < end; i++)`.
+- **emit_let struct-type inference** — when first atom is
+  `BEGIN_STRUCT_LIT`, use type name as C type (was defaulting to
+  `int64_t`, now `Point p = (Point){...}`).
+
+### Fixed
+
+- **Binop RHS detection in `parse_expr_emit`** — was only checking
+  tags `INT`/`IDENT`/`BEGIN_CALL`; missed `FLOAT`/`BOOL`/`STR`/
+  `ENUM_VARIANT`/`BEGIN_STRUCT_LIT`. Surfaced by P22 (`m == Mode::On`
+  silently dropped the BINOP). New `is_atom_start` helper covers all
+  8 atom-start tags.
+
+### Test suite expansion: 17 → 22
+
+```
+P18 struct lit + field access      → 30   (Point{x:10,y:20}; p.x+p.y)
+P19 enum variant use               → 1    (Color::Green = 1 in C order)
+P20 for loop with range            → 10   (sum 0..5)
+P21 for + struct lit + field acc   → 15   (accumulator: 1+2+3+4+5)
+P22 enum variant in if-cond        → 100  (m == Mode::On)
+```
+
+**22/22 PASS in 0.10s.**
+
+### What v33.7.0 still honestly doesn't claim (genuine separate scope)
+
+- ❌ `match` expression — pattern compilation genuinely complex (~100+
+  LOC). Workaround: if-elif chain over enum variants covers 90% of
+  Stage-1 use cases.
+- ❌ Mutable struct field write (`p.x = 5`) — read works; write needs
+  ~15 LOC ext (R10 NEW).
+- ❌ Generic fns, closures, async, lifetimes — Subset-excluded by design.
+- ❌ Inclusive ranges (`..=`), step ranges — only `..` exclusive.
+- ❌ Stage 2 triple-test — separate roadmap phase.
+
+### Effort
+
+Phase 10 closed in ~1h Claude time vs ~3h budget (-67% variance).
+Cumulative across v33.4.0..v33.7.0: ~7h Claude time, 11 self-host
+phases CLOSED.
+
 ## [v33.6.0] — 2026-05-05 Stage-1-Full Honest Closure
 
 **Closes all `❌ honest-scope` items from v33.5.0.** Trigger: user

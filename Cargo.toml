@@ -1,6 +1,6 @@
 [package]
 name = "fajar-lang"
-version = "33.6.0"
+version = "33.7.0"
 edition = "2024"
 rust-version = "1.87"
 description = "Fajar Lang — Systems programming language for embedded ML + OS integration. FajarQuant, JIT compilation, GPU dispatch, algebraic effects, 10,400+ tests."

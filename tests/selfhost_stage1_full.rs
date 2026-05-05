@@ -249,3 +249,61 @@ fn full_p17_struct_and_enum_together() {
     );
     assert_eq!(r.status.code(), Some(19));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p18_struct_literal_and_field_access() {
+    // Phase 10: struct DECL is no longer hollow — instances + field reads work.
+    let r = compile_subset_program(
+        "full_p18",
+        "struct Point { x: i64, y: i64 } fn main() -> i64 { let p = Point { x: 10, y: 20 }; return p.x + p.y }",
+    );
+    assert_eq!(r.status.code(), Some(30));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p19_enum_variant_use() {
+    // Phase 10: enum DECL is no longer hollow — variant access via `EnumName::Variant` works.
+    let r = compile_subset_program(
+        "full_p19",
+        "enum Color { Red, Green, Blue } fn main() -> i64 { let c = Color::Green; return c }",
+    );
+    // Color_Green == 1 in C enum order
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p20_for_loop_range() {
+    // Phase 10: for loop with `start..end` range syntax → C `for (i = start; i < end; i++)`
+    let r = compile_subset_program(
+        "full_p20",
+        "fn main() -> i64 { let mut s = 0; for i in 0..5 { s = s + i }; return s }",
+    );
+    // 0+1+2+3+4 = 10
+    assert_eq!(r.status.code(), Some(10));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p21_for_with_field_access_and_struct_lit() {
+    // Composability: struct literal + for loop + field access in body.
+    let r = compile_subset_program(
+        "full_p21",
+        "struct Acc { total: i64 } fn main() -> i64 { let mut a = Acc { total: 0 }; for i in 1..6 { a = Acc { total: a.total + i } }; return a.total }",
+    );
+    // 1+2+3+4+5 = 15
+    assert_eq!(r.status.code(), Some(15));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p22_enum_variant_in_branch() {
+    // Composability: enum variant inside if-condition (C eq comparison).
+    let r = compile_subset_program(
+        "full_p22",
+        "enum Mode { On, Off } fn main() -> i64 { let m = Mode::On; if m == Mode::On { return 100 } else { return 200 } }",
+    );
+    assert_eq!(r.status.code(), Some(100));
+}

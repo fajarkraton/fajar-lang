@@ -183,6 +183,73 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 let a = ast.push("BOOL").push("0")
                 return pr_ok(a, end)
             }
+            // Enum variant access: `EnumName::Variant`
+            let after_id = skip_ws(src, end)
+            if after_id + 2 <= n && src.substring(after_id, after_id + 2) == "::" {
+                let p_var = skip_ws(src, after_id + 2)
+                let v_end = read_word(src, p_var)
+                if v_end > p_var {
+                    let variant = src.substring(p_var, v_end)
+                    let a = ast.push("ENUM_VARIANT").push(word).push(variant)
+                    return pr_ok(a, v_end)
+                }
+            }
+            // Struct literal: `PascalIdent { field: expr, ... }`
+            // Restricted to PascalCase to avoid colliding with `if cond { body }`
+            let first = src.substring(p, p + 1)
+            let is_pascal = first >= "A" && first <= "Z"
+            if is_pascal && after_id < n && src.substring(after_id, after_id + 1) == "{" {
+                let mut a = ast.push("BEGIN_STRUCT_LIT").push(word)
+                let mut p2 = skip_ws(src, after_id + 1)
+                if p2 < n && src.substring(p2, p2 + 1) == "}" {
+                    return pr_ok(a.push("END_STRUCT_LIT"), p2 + 1)
+                }
+                let mut more2 = true
+                while more2 {
+                    p2 = skip_ws(src, p2)
+                    let f_end = read_word(src, p2)
+                    if f_end == p2 { return pr_err(a, p2, "ERR_STRUCT_LIT_FNAME") }
+                    let fname = src.substring(p2, f_end)
+                    let p_colon = expect_char(src, f_end, ":")
+                    if p_colon < 0 { return pr_err(a, f_end, "ERR_STRUCT_LIT_COLON") }
+                    a = a.push(fname)
+                    let r = parse_expr_ast(src, p_colon, a)
+                    if r.error { return r }
+                    a = r.ast
+                    p2 = skip_ws(src, r.pos)
+                    if p2 < n && src.substring(p2, p2 + 1) == "," {
+                        p2 = p2 + 1
+                    } else { more2 = false }
+                }
+                p2 = skip_ws(src, p2)
+                if p2 < n && src.substring(p2, p2 + 1) == "}" {
+                    return pr_ok(a.push("END_STRUCT_LIT"), p2 + 1)
+                }
+                return pr_err(a, p2, "ERR_STRUCT_LIT_RB")
+            }
+            // Field access: `obj.field` (potentially chained: `obj.f1.f2`)
+            // Emit IDENT then FIELD <name>; codegen_driver concatenates with `.`
+            let mut cur_pos = end
+            let mut field_chain: [str] = []
+            let mut cur_after = skip_ws(src, cur_pos)
+            while cur_after < n && src.substring(cur_after, cur_after + 1) == "." {
+                let p_field = skip_ws(src, cur_after + 1)
+                let f_end = read_word(src, p_field)
+                if f_end == p_field { break }
+                let fname = src.substring(p_field, f_end)
+                field_chain = field_chain.push(fname)
+                cur_pos = f_end
+                cur_after = skip_ws(src, cur_pos)
+            }
+            if to_int(len(field_chain)) > 0 {
+                let mut a = ast.push("IDENT").push(word)
+                let mut i = 0
+                while i < to_int(len(field_chain)) {
+                    a = a.push("FIELD").push(field_chain[i])
+                    i = i + 1
+                }
+                return pr_ok(a, cur_pos)
+            }
             let a = ast.push("IDENT").push(word)
             pr_ok(a, end)
         }
@@ -339,6 +406,44 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
             cur = skip_ws(src, rs.pos)
         }
         a = a.push("END_LOOP_BODY").push("END_WHILE")
+        return pr_ok(a, cur + 1)
+    }
+
+    // Try `for ident in start..end { body }`
+    let after_for = expect_str(src, p0, "for")
+    if after_for > 0 {
+        let p1 = skip_ws(src, after_for)
+        let id_end = read_word(src, p1)
+        if id_end == p1 { return pr_err(ast, p1, "ERR_FOR_IDENT") }
+        let var_name = src.substring(p1, id_end)
+        let after_in = expect_str(src, id_end, "in")
+        if after_in < 0 { return pr_err(ast, id_end, "ERR_FOR_IN") }
+        let mut a = ast.push("BEGIN_FOR").push(var_name)
+        // Parse start expression (until `..`)
+        // Trick: parse_expr_ast normally consumes binops; but `..` is not a binop in our grammar,
+        // so parse_expr_ast will stop at `..` automatically.
+        let r_start = parse_expr_ast(src, after_in, a)
+        if r_start.error { return r_start }
+        a = r_start.ast
+        let p_dotdot = skip_ws(src, r_start.pos)
+        if p_dotdot + 2 > n || src.substring(p_dotdot, p_dotdot + 2) != ".." {
+            return pr_err(a, p_dotdot, "ERR_FOR_DOTDOT")
+        }
+        a = a.push("FOR_RANGE_TO")
+        let r_end = parse_expr_ast(src, p_dotdot + 2, a)
+        if r_end.error { return r_end }
+        a = r_end.ast
+        let p_lb = expect_char(src, r_end.pos, "{")
+        if p_lb < 0 { return pr_err(a, r_end.pos, "ERR_FOR_LB") }
+        a = a.push("BEGIN_LOOP_BODY")
+        let mut cur = skip_ws(src, p_lb)
+        while cur < n && src.substring(cur, cur + 1) != "}" {
+            let rs = parse_stmt_ast(src, cur, a)
+            if rs.error { return rs }
+            a = rs.ast
+            cur = skip_ws(src, rs.pos)
+        }
+        a = a.push("END_LOOP_BODY").push("END_FOR")
         return pr_ok(a, cur + 1)
     }
 
