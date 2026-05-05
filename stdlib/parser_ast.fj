@@ -51,11 +51,36 @@ fn is_alnum_ast(c: str) -> bool { is_alpha_ast(c) || is_digit_ast(c) }
 
 fn is_ws_ast(c: str) -> bool { c == " " || c == "\n" || c == "\t" || c == "\r" }
 
+// Skip whitespace AND single-line `// ...` and block `/* ... */` comments.
 fn skip_ws(src: str, pos: i64) -> i64 {
     let n = to_int(len(src))
     let mut p = pos
-    while p < n && is_ws_ast(src.substring(p, p + 1)) {
-        p = p + 1
+    let mut progress = true
+    while progress {
+        progress = false
+        while p < n && is_ws_ast(src.substring(p, p + 1)) {
+            p = p + 1
+            progress = true
+        }
+        // Single-line comment: //...\n
+        if p + 2 <= n && src.substring(p, p + 2) == "//" {
+            p = p + 2
+            while p < n && src.substring(p, p + 1) != "\n" {
+                p = p + 1
+            }
+            if p < n { p = p + 1 }  // consume newline
+            progress = true
+            continue
+        }
+        // Block comment: /* ... */
+        if p + 2 <= n && src.substring(p, p + 2) == "/*" {
+            p = p + 2
+            while p + 2 <= n && src.substring(p, p + 2) != "*/" {
+                p = p + 1
+            }
+            if p + 2 <= n { p = p + 2 }
+            progress = true
+        }
     }
     p
 }
@@ -370,6 +395,18 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let p_else_kw = skip_ws(src, p_after_then)
         let after_else = expect_str(src, p_else_kw, "else")
         if after_else > 0 {
+            // `else if cond { ... }`: parse the chained if as the SOLE stmt
+            // inside the else block. The recursive parse_stmt_ast handles
+            // arbitrary depth.
+            let p_after_else = skip_ws(src, after_else)
+            if expect_str(src, p_after_else, "if") > 0 {
+                a = a.push("BEGIN_ELSE")
+                let rs = parse_stmt_ast(src, p_after_else, a)
+                if rs.error { return rs }
+                a = rs.ast.push("END_ELSE").push("END_IF")
+                return pr_ok(a, rs.pos)
+            }
+            // `else { ... }`
             let p_lb2 = expect_char(src, after_else, "{")
             if p_lb2 < 0 { return pr_err(a, after_else, "ERR_ELSE_LB") }
             a = a.push("BEGIN_ELSE")

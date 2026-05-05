@@ -319,3 +319,36 @@ fn full_p23_struct_field_write() {
     );
     assert_eq!(r.status.code(), Some(120));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p24_else_if_chain() {
+    // Multi-branch via else-if. v33.7.0 silently dropped this.
+    let r = compile_subset_program(
+        "full_p24",
+        "fn main() -> i64 { let n = 7; if n > 10 { return 1 } else if n > 5 { return 2 } else { return 3 } }",
+    );
+    assert_eq!(r.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p25_single_line_comment() {
+    // Single-line `//` comment. v33.7.0 produced parse error.
+    let r = compile_subset_program(
+        "full_p25",
+        "fn main() -> i64 {\n    // this is a comment\n    return 42\n}",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p26_block_comment() {
+    // Block `/* ... */` comment.
+    let r = compile_subset_program(
+        "full_p26",
+        "fn main() -> i64 { /* skip me */ let x = 5; /* and me */ return x + 8 }",
+    );
+    assert_eq!(r.status.code(), Some(13));
+}

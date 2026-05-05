@@ -2,6 +2,32 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.7.2] — 2026-05-05 Silent gaps closed: else-if + comments
+
+Two silent gaps surfaced by perfection-rule audit and closed:
+
+- **`else if` chain** — v33.7.0 silently dropped the `else if cond
+  { ... }` part (only the first if-branch emitted). Fix: in
+  parse_stmt_ast's else-handler, after `else` keyword peek for `if`;
+  if present, recursively parse another if-stmt as the SOLE statement
+  in the else block. Codegen emits nested if-else chain
+  (semantically equivalent to else-if, valid C).
+
+- **Single-line `//` and block `/* */` comments** — v33.7.0
+  rejected fj source containing comments (skip_ws only handled raw
+  whitespace). Fix: skip_ws now also consumes both comment forms
+  in a fixpoint loop until no further progress.
+
+Test suite 23 → 26:
+  P24 `if n>10 {1} else if n>5 {2} else {3}` (n=7) → 2
+  P25 `// comment` skipped, return 42 → 42
+  P26 `/* block */` skipped, let x=5; return x+8 → 13
+
+**26/26 PASS in 0.18s.**
+
+Effort: ~15min Claude time. Both were silent defects (no test surfaced
+them in v33.7.0).
+
 ## [v33.7.1] — 2026-05-05 R10 closure: mutable struct field writes
 
 Trivial follow-up to v33.7.0 per perfection-over-time rule. v33.7.0
