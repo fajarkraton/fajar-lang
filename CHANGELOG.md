@@ -2,6 +2,62 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.2.0] — 2026-05-05 FAJAROS_100PCT_FJ_PLAN TERMINAL COMPLETE
+
+**TRUE 100% Fajar Lang.** ZERO non-fj LOC (.S/.c/.cpp) in fajaros-x86
+kernel build path. 9/9 fj-lang LLVM compiler gaps closed.
+
+### Added (compiler capability — final gap closure)
+
+- **--code-model kernel implies `noredzone` LLVM function attribute**
+  (Phase 4.D Gap G-M closure). x86_64 SysV ABI's red zone (128 bytes
+  below %rsp that leaf functions can use without adjusting %rsp) is
+  unsafe in kernel mode: when an interrupt fires, hardware pushes the
+  IRQ frame BELOW the current %rsp, corrupting anything stashed there.
+  fj-lang's `--code-model kernel` previously did not imply the same;
+  any kernel-mode fn that LLVM O2 spilled to red-zone slots silently
+  corrupted under IRQ load. Witnessed: km_vecmat_packed_v8 spilled
+  out_addr to -0x38(%rsp), timer IRQ overwrote it, #GP fault on
+  garbage-pointer store. Fix: emit LLVM `noredzone` attribute on every
+  fn when code_model == Kernel. Now generates `sub $0x40, %rsp` proper
+  prologue + post-rsp access. This single fix unblocked Phase 4.D/E/F/G
+  migrations, enabling vecmat_v8.c (585 LOC) deletion in fajaros-x86.
+
+### FAJAROS_100PCT_FJ_PLAN status (TERMINAL COMPLETE)
+
+All 9 plan phases closed. fajaros-x86 commit `541db09`:
+- Phase 4.D: km_vecmat_packed_v8 → pure fj
+- Phase 4.E: tfm_attention_score → pure fj
+- Phase 4.F: tfm_rope_apply_at → pure fj (1572-entry sin LUT in
+  global_asm rodata)
+- Phase 4.G: mdl_ram_lmhead_argmax_v8_tied → pure fj (302M-iter
+  loop; "G-L" was same red-zone class as G-M)
+- vecmat_v8.c (585 LOC) DELETED from kernel/compute/
+
+Verification: `find kernel -name '*.S' -o -name '*.c' -o -name '*.cpp'`
+returns 0 hits. `make test-gemma3-e2e` 5/5 PASS.
+
+### All compiler gap closures (cumulative since v33.0.0)
+
+| Gap | Closure | Phase |
+|---|---|---|
+| G-A | LLVM atomics | Phase 5 (v33.1.0) |
+| G-B | @naked compiler | Phase 6 (v33.1.0) |
+| G-C | @no_mangle | Phase 7 (v33.1.0) |
+| G-G | LLVM global_asm! | Phase 2.A (v33.0.0) |
+| G-H | r#"..."# raw strings | Phase 2.A.2 (v33.0.0) |
+| G-I | parser raw strings in asm | Phase 2.A.2 (v33.0.0) |
+| G-K | @no_vectorize stack | Phase 4.D follow-up (v33.1.0) |
+| G-N | @naked codegen noinline + ret-undef | Phase 6.6 (v33.1.0) |
+| **G-M** | **--code-model kernel implies noredzone** | **Phase 4.D-G (v33.2.0 NEW)** |
+
+### Stats
+
+- 8974 lib tests pass under `--features llvm,native`
+- 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warnings
+- LLVM IR codegen verified bit-equivalent for 12 fajaros bare-metal
+  stub migrations + 4 mailbox function ports
+
 ## [v33.1.1] — 2026-05-05 inline asm dialect fix + Phase 6.6 verification
 
 ### Fixed (codegen-llvm)
