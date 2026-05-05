@@ -716,3 +716,43 @@ fn full_p58_skip_ws_read_word_read_int() {
     // 3 + 8 + 2 = 13
     assert_eq!(r.status.code(), Some(13));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p59_implicit_return_from_expr_body() {
+    // Phase 16 sub-task 1: `fn f() -> i64 { expr }` (no explicit `return`).
+    // Many parser_ast.fj fns end with a bare expression — emit_fn now
+    // detects that the last stmt is BEGIN_EXPR_STMT for a non-void fn and
+    // emits `return <expr>;` instead of `<expr>;`.
+    let r = compile_subset_program(
+        "full_p59",
+        "fn twice(x: i64) -> i64 { x + x } fn add_one(y: i64) -> i64 { y + 1 } fn main() -> i64 { let a = twice(7); let b = add_one(a); return b }",
+    );
+    // twice(7) = 14; add_one(14) = 15
+    assert_eq!(r.status.code(), Some(15));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p60_implicit_return_with_let_then_expr() {
+    // Phase 16 sub-task 1: implicit return after intermediate let bindings.
+    let r = compile_subset_program(
+        "full_p60",
+        "fn compute(x: i64) -> i64 { let a = x * 2; let b = a + 3; b * 5 } fn main() -> i64 { return compute(4) }",
+    );
+    // (4*2 + 3) * 5 = 11 * 5 = 55
+    assert_eq!(r.status.code(), Some(55));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p61_implicit_return_str_method_chain() {
+    // Phase 16 sub-task 1: implicit return for str-typed expression body
+    // (mirrors many parser_ast.fj helpers like `read_word` that end with
+    // a bare expression).
+    let r = compile_subset_program(
+        "full_p61",
+        "fn first_char(s: str) -> str { s.substring(0, 1) } fn main() -> i64 { let c = first_char(\"hello\"); if c == \"h\" { return 11 } else { return 99 } }",
+    );
+    assert_eq!(r.status.code(), Some(11));
+}

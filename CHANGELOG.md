@@ -2,6 +2,53 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.2] — 2026-05-05 Phase 16 sub-task 1: implicit-return from expression body
+
+Patch closes the first of three remaining Phase 16 FULL sub-tasks per the
+recommended path (Phase 16 FULL → Phase 17 Stage 2 triple-test).
+
+### What it does
+
+`fn f() -> i64 { expr }` (no explicit `return`) now lowers to
+`return <expr>;` instead of a bare `<expr>;`. Many `parser_ast.fj` helpers
+end with a bare expression — this unblocks compiling them via the chain
+without rewriting their source to add explicit `return` everywhere.
+
+### Implementation
+
+`emit_fn` (stdlib/codegen_driver.fj) pre-scans the body to find the
+position of the LAST statement before `END_BODY`. If `ret_type != "void"`
+AND that last stmt is `BEGIN_EXPR_STMT`, the loop special-cases its
+emission via `emit_return(cg, er.code)` instead of the usual bare
+`<expr>;` path.
+
+### Tests added (3 NEW)
+
+- **P59** `fn twice(x) -> i64 { x + x }` + `fn add_one(y) -> i64 { y + 1 }` —
+  cross-fn implicit-return chain. `twice(7) = 14; add_one(14) = 15`.
+- **P60** implicit return after intermediate `let` bindings. Body
+  `let a = x*2; let b = a+3; b * 5` returns 55 for `x = 4`.
+- **P61** implicit return for `str`-typed body via `s.substring(0, 1)`
+  — mirrors `parser_ast.fj` `read_word`-style helpers.
+
+### Test suite: 58 → 61 (3 NEW)
+
+**61/61 PASS in 0.61s.** Lib tests: 7629/7629 PASS. Quality gates: fmt
+clean, clippy 0 warnings.
+
+### Stage 2 Phase 16 progress
+
+- ✅ Pratt precedence + parens + `&&`/`||`/`%` (v34.5.0)
+- ✅ `to_int(x)` smart dispatch (v34.5.1)
+- ✅ Implicit-return-from-expression-body (v34.5.2)
+- ❌ Match payload extraction (`Ok(c) => c`) — sub-task 2 (next, hardest)
+- ❌ State-passing struct patterns — sub-task 3
+- ❌ Phase 17 Stage 2 triple-test
+
+### Effort
+
+~20min (target ~30min, -33%). Cumulative ~15.7h across v33.4.0..v34.5.2.
+
 ## [v34.5.1] — 2026-05-05 Phase 16 deepening: skip_ws/read_word/read_int compile
 
 Patch follow-up to v34.5.0. Adds smart `to_int(x)` dispatch:

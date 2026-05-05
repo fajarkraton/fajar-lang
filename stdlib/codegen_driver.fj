@@ -680,10 +680,25 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     }
     // Expect BEGIN_BODY
     if p < n && ast[p] == "BEGIN_BODY" { p = p + 1 }
+    // Phase 16 sub-task 1: pre-scan body to find the LAST stmt position. If
+    // ret_type != "void" and the last stmt is BEGIN_EXPR_STMT, treat it as an
+    // implicit return — emit `return <expr>;` instead of `<expr>;`.
+    let mut last_stmt_pos = 0 - 1
+    let mut scan = p
+    while scan < n && ast[scan] != "END_BODY" {
+        last_stmt_pos = scan
+        scan = stmt_end(ast, scan)
+    }
+    let implicit_return = ret_type != "void" && last_stmt_pos >= 0 && ast[last_stmt_pos] == "BEGIN_EXPR_STMT"
     // Use cg_local (with cleared+param-populated var_types) instead of cg
     let mut cg2 = emit_function_typed(cg_local, name, param_pairs, ret_type)
     while p < n && ast[p] != "END_BODY" {
-        cg2 = emit_stmt(ast, p, cg2)
+        if implicit_return && p == last_stmt_pos {
+            let er = parse_expr_emit(ast, cg2.var_types, p + 1)
+            cg2 = emit_return(cg2, er.code)
+        } else {
+            cg2 = emit_stmt(ast, p, cg2)
+        }
         p = stmt_end(ast, p)
     }
     emit_function_end(cg2)
