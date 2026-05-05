@@ -2,6 +2,61 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.6] — 2026-05-05 Phase 16 sub-task 5: string escape preservation (test driver fix)
+
+Closes the last documented Phase 16 gap. Pre-flight audit (CLAUDE.md
+§6.8 R1) revealed the chain itself was already CORRECT — parser_ast.fj
+reads STR content RAW (preserving backslash + escape char) and codegen
+emits the body verbatim into `"<body>"`, so `\n` (2 chars) in fj source
+correctly emerges as `\n` (2 chars) in C, where gcc parses it as the
+escape sequence newline. The "issue" surfaced earlier was a
+test-infrastructure artifact: `compile_subset_program` injected fj
+source via `let src = "..."`, and fj's OUTER string-literal parser
+processed `\n` to actual newline (0x0A) BEFORE the source reached
+parse_to_ast.
+
+### Fix
+
+`compile_subset_program` now double-escapes backslashes (and literal
+control bytes) when building the injection driver, so `\n` survives
+the outer fj-string parsing as 2 chars and reaches parse_to_ast intact.
+
+```rust
+let escaped = fj_source
+    .replace('\\', "\\\\")
+    .replace('"', "\\\"")
+    .replace('\n', "\\n")
+    .replace('\t', "\\t")
+    .replace('\r', "\\r");
+```
+
+### Tests added (2 NEW)
+
+- **P69** `is_ws("\n")` / `is_ws("\t")` — verifies escape-sequence STR
+  literals compile correctly via the chain. Returns 1 for space match.
+- **P70** `is_newline("\n")` — explicit `\n` argument matches `"\n"`
+  literal in the comparison body. Returns 7.
+
+### Test suite: 68 → 70 (2 NEW)
+
+**70/70 PASS in 0.51s.** Lib tests: 7629/7629 PASS. fmt clean. clippy 0.
+
+### Stage 2 Phase 16 progress
+
+- ✅ Pratt precedence + parens (v34.5.0)
+- ✅ to_int smart dispatch (v34.5.1)
+- ✅ Implicit-return-from-expr-body (v34.5.2)
+- ✅ Struct-typed fn signatures (v34.5.3)
+- ✅ Array types + IDENT-rebind + free len (v34.5.4)
+- ✅ Chained method calls (v34.5.5)
+- ✅ String escape preservation (v34.5.6)  ← THIS
+- 🎯 **Phase 16 FULL CLOSED** — all documented gaps resolved
+- ❌ Phase 17 Stage 2 triple-test — NEXT (~1d)
+
+### Effort
+
+~25min. Cumulative ~18.2h across v33.4.0..v34.5.6.
+
 ## [v34.5.5] — 2026-05-05 Phase 16 sub-task 4: chained method calls in assignment
 
 Closes the biggest remaining Phase 16 blocker: `a = a.push("X").push("Y")`

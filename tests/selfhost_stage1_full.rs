@@ -30,6 +30,19 @@ fn cat_files(files: &[&str]) -> String {
 }
 
 fn compile_subset_program(label: &str, fj_source: &str) -> std::process::Output {
+    // Phase 16.6: when injecting fj source through `let src = "..."`, fj's
+    // outer string-literal parser will process escapes (`\n` → 0x0A,
+    // `\t` → 0x09, etc.) BEFORE the source reaches parse_to_ast. To preserve
+    // user-intended escapes (e.g. `c == "\n"` should remain 2 chars in the
+    // string we feed to parse_to_ast, not a real newline), we double-escape
+    // backslashes here. We also escape `"` and any literal control bytes
+    // (newline, tab, CR) that may exist in the test source.
+    let escaped = fj_source
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t")
+        .replace('\r', "\\r");
     let driver = format!(
         r#"
 fn main() {{
@@ -39,7 +52,7 @@ fn main() {{
     println(c_src)
 }}
 "#,
-        fj_source.replace('"', "\\\"")
+        escaped
     );
     let combined = format!(
         "{}{}",
@@ -810,6 +823,36 @@ fn full_p66_let_rebind_via_alias_preserves_type() {
         "fn copy_and_extend(v: [str]) -> [str] { let mut a = v; a = a.push(\"new\"); return a } fn main() -> i64 { let arr: [str] = []; let b = copy_and_extend(arr); return to_int(len(b)) }",
     );
     assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p69_string_escape_preservation() {
+    // Phase 16 sub-task 5: `c == "\n"` (where source has 2 chars `\` + `n`)
+    // must compile to a C string literal containing the same 2 chars (not
+    // a literal newline byte that breaks gcc's lexer). parser_ast.fj reads
+    // STR content RAW (preserving the backslash); codegen emits `"<body>"`
+    // as-is; gcc parses `\n` as escape → newline. Test driver had to be
+    // updated to double-escape backslashes when injecting via `let src =`
+    // (otherwise fj's outer string literal converts `\n` to newline first).
+    let r = compile_subset_program(
+        "full_p69",
+        "fn is_ws(c: str) -> bool { return c == \" \" || c == \"\\n\" || c == \"\\t\" } fn main() -> i64 { if is_ws(\" \") { return 1 }; if is_ws(\"\\n\") { return 2 }; if is_ws(\"\\t\") { return 3 }; return 99 }",
+    );
+    // " " hits first branch → return 1
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p70_string_escape_newline_match() {
+    // Phase 16 sub-task 5: explicit `\n` lookup. `\n` in the input string
+    // matches the `"\n"` literal in the cmp.
+    let r = compile_subset_program(
+        "full_p70",
+        "fn is_newline(c: str) -> bool { return c == \"\\n\" } fn main() -> i64 { if is_newline(\"\\n\") { return 7 }; return 0 }",
+    );
+    assert_eq!(r.status.code(), Some(7));
 }
 
 #[cfg(unix)]
