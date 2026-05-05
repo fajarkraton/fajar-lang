@@ -2,6 +2,49 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.1.1] — 2026-05-05 inline asm dialect fix + Phase 6.6 verification
+
+### Fixed (codegen-llvm)
+
+- `compile_inline_asm` now explicitly passes `Some(InlineAsmDialect::ATT)`
+  when `options(att_syntax)` is parsed, instead of always passing `None`
+  (which inkwell defaulted to ATT internally). Functionally a no-op
+  but documentation-correct.
+
+### Discovered (silent codegen failure pattern)
+
+While investigating G-M Phase 4.D-A2 with FJ_EMIT_IR=1 + clean rebuild,
+discovered that fj-lang's inline asm template was NOT escaping `$`
+literals. LLVM inline asm syntax uses `$0`, `$1`, etc. for constraint
+references; a literal `$` must be escaped as `$$`. Without escape,
+`cmpb $0x0A, %dil` was parsed as "constraint reference 0 followed by
+`x0A`", emitting "error: invalid operand in inline asm" and producing
+a 0-byte combined.o file. Phase 6.6's bare_stubs_naked.fj migrations
+silently relied on cached .o.saved artifacts from prior successful
+builds — clean rebuild surfaced the issue. Fixed in fajaros-x86 by
+escaping all `$` immediates as `$$` in @naked fn asm bodies.
+
+After the fix, Phase 6.6 12-stub migration genuinely builds clean and
+passes 5/5 gemma3-e2e at every stage (previously was implicitly
+relying on cached compiler artifacts).
+
+### G-M (LLVM-O2 vecmat-shape sensitivity) — debug progress
+
+With the dialect/escaping fixes applied AND a fresh build environment:
+- Phase 4.D-A2 port (canonical `@no_vectorize @noinline @kernel` recipe)
+  now reproduces deterministically as EXC:13 GP fault at RIP=0x164C8A,
+  inside the new km_vecmat_packed_v8 fn (offset 0x8a)
+- Earlier-session "EXC:14 at 0x80000000 RIP=0x70000" was actually the
+  garbage-pointer behavior of the broken 0-byte combined.o build, NOT
+  the algorithmic codegen bug
+- Real G-M repro is now consistent and easier to bisect; deferred to
+  next session for IR/disasm comparison vs working km_rmsnorm port
+
+### FAJAROS_100PCT_FJ_PLAN status (unchanged from v33.1.0)
+
+8/9 fj-lang LLVM compiler gaps closed. Phase 6.6 substantive completion
+re-verified post-fix.
+
 ## [v33.1.0] — 2026-05-05 FAJAROS_100PCT_FJ_PLAN partial closure
 
 **8/9 fj-lang LLVM compiler gaps closed.** 6/9 plan phases CLOSED + 2
