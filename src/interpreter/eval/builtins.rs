@@ -102,6 +102,10 @@ impl Interpreter {
                 }
             }
             "push" => {
+                // Phase 17.7: consume + mutate fast path. The previous
+                // `let mut new_arr = a.clone()` made every `push(state.lines,
+                // line)` call O(n) in lines.len(), producing O(n²) total
+                // across emit_program's 1000+ emit_line calls.
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
                         expected: 2,
@@ -109,11 +113,13 @@ impl Interpreter {
                     }
                     .into());
                 }
-                match &args[0] {
-                    Value::Array(a) => {
-                        let mut new_arr = a.clone();
-                        new_arr.push(args[1].clone());
-                        Ok(Value::Array(new_arr))
+                let mut iter = args.into_iter();
+                let receiver = iter.next().unwrap_or(Value::Null);
+                let elem = iter.next().unwrap_or(Value::Null);
+                match receiver {
+                    Value::Array(mut a) => {
+                        a.push(elem);
+                        Ok(Value::Array(a))
                     }
                     _ => Err(RuntimeError::TypeError("push() requires an array".into()).into()),
                 }

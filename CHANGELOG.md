@@ -2,6 +2,58 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.11] — 2026-05-06 Phase 17.7: O(n²) → O(n) push + emit_program join
+
+Two interpreter perf fixes that move the chain closer to handling
+larger sources (the all-3-stdlib self-compile target).
+
+### 1. `.push()` and `push()` consume + mutate (was deep-clone)
+
+Both the `Array::push(elem)` method and the free `push(arr, elem)`
+builtin previously did `let mut new_arr = a.clone()` — copying the
+entire Vec on every call. With parser_ast.fj's parser doing tens of
+thousands of `ast = ast.push("X")` calls, this was the dominant cost.
+
+Now both consume the array Value (when owned) and append in place.
+Result: ~3× memory reduction (~700MB → ~250MB peak) on the all-3
+combined source probe; AST-build phase ~5× faster.
+
+### 2. `emit_program` final join: O(n²) → O(n)
+
+The previous loop:
+```fj
+let mut result = ""
+while i < to_int(len(cg.lines)) {
+    result = concat!(result, cg.lines[i], "\n")
+    i = i + 1
+}
+```
+
+reallocated `result` every iteration — total work O(n²) in line count
+across the chain's emit pass. Replaced with a single
+`cg.lines.join("\n")` call which builds the result in one allocation.
+
+### Honest scope
+
+Even with these fixes, the **all-3-combined self-compile** (codegen.fj
++ parser_ast.fj + codegen_driver.fj as one ~3000 LOC source) still
+takes >5min to run through the chain because of a remaining O(n²)
+pattern: every `CodegenState { lines: state.lines, ... }` rebuild in
+codegen.fj's emit_line clones all 9 array fields via eval_field, which
+deep-clones the underlying Vec. The fundamental fix is to back arrays
+with `Rc<Vec<Value>>` so cloning is O(1) — that's a deeper interpreter
+refactor and is the next session's target.
+
+### Test suite
+
+**80/80 stage1-full PASS in 2.08s. 1/1 phase17_codegen_fj PASS in 30s
+(was 14s in v34.5.9 — small regression from the larger CodegenState).
+Lib: 7629 PASS. fmt clean. clippy 0 warnings.**
+
+### Effort
+
+~1h. Cumulative ~24.7h across v33.4.0..v34.5.11.
+
 ## [v34.5.10] — 2026-05-06 Phase 17.6: cg threading + struct field tracking + GCC stmt-expr lowering
 
 Infrastructure release toward closing codegen_driver.fj's self-compile.

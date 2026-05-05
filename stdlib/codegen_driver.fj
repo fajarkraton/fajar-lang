@@ -1140,11 +1140,11 @@ pub fn emit_program(ast: [str]) -> str {
             p = p + 1
         }
     }
-    let mut result = ""
-    let mut i = 0
-    while i < to_int(len(cg.lines)) {
-        result = concat!(result, cg.lines[i], "\n")
-        i = i + 1
-    }
-    result
+    // Phase 17.7: O(n) join instead of O(n²) repeated concat!. fj's
+    // Array.join(sep) builtin builds the result with one allocation;
+    // the previous loop reallocated `result` every iteration, making
+    // emit_program quadratic in line count (the dominant cost when
+    // running the chain on 1000+ LOC stdlib files).
+    let joined = cg.lines.join("\n")
+    concat!(joined, "\n")
 }

@@ -187,6 +187,19 @@ impl Interpreter {
             }
         }
 
+        // Phase 17.7 fast path: array .push(x) — when obj is an owned
+        // Value::Array, push in-place by consuming + reconstructing instead of
+        // deep-cloning. Eliminates O(n) cost per push, which made the chain
+        // O(n²) across thousands of `ast = ast.push(...)` calls in the
+        // self-host parser.
+        if method == "push" && matches!(obj, Value::Array(_)) && arg_vals.len() == 1 {
+            if let Value::Array(mut a) = obj {
+                let v = arg_vals.into_iter().next().unwrap_or(Value::Null);
+                a.push(v);
+                return Ok(Value::Array(a));
+            }
+        }
+
         // Built-in methods on primitive types
         match (&obj, method) {
             // String methods
