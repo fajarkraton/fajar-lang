@@ -392,7 +392,8 @@
 
 /// LCG step. Returns new state. Caller passes back to subsequent calls.
 /// Mirrors Rust state.wrapping_mul(6364136223846793005).wrapping_add(1).
-@kernel fn lcg_next_state(state: i64) -> i64 {
+/// Pure integer arithmetic — callable from any context.
+@unsafe fn lcg_next_state(state: i64) -> i64 {
     let multiplier: i64 = 6364136223846793005
     wrapping_add(wrapping_mul(state, multiplier), 1)
 }
@@ -401,7 +402,7 @@
 /// Mirrors Rust `(state >> 11) as f64 / (1u64 << 53) as f64).max(1e-15)`.
 /// fj-lang uses arithmetic shift on i64; mask to 53 bits to recover
 /// the logical-shift behavior of Rust's u64 path.
-@kernel fn lcg_to_f64(state: i64) -> f64 {
+@unsafe fn lcg_to_f64(state: i64) -> f64 {
     let mask: i64 = 9007199254740991  // 2^53 - 1 = 0x1FFFFFFFFFFFFF
     let bits: i64 = (state >> 11) & mask
     let denom: f64 = 9007199254740992.0  // 2^53
@@ -431,11 +432,327 @@
     n_boundaries
 }
 
+/// Box-Muller + rejection sampling from Beta-like distribution.
+/// Mirrors Rust `sample_beta_distribution`.
+/// Uses LCG seeded with 42 (matches Rust default for reproducibility).
+@device fn sample_beta_distribution(d: i64, n: i64) -> [f64] {
+    let pi: f64 = 3.141592653589793
+    let sigma: f64 = 1.0 / sqrt(d as f64)
+    let mut rng_state: i64 = 42
+    let mut samples: [f64] = []
+    while (samples.len() as i64) < n {
+        // Box-Muller: 2 uniform samples → 1 normal
+        rng_state = lcg_next_state(rng_state)
+        let u1: f64 = lcg_to_f64(rng_state)
+        rng_state = lcg_next_state(rng_state)
+        let u2: f64 = lcg_to_f64(rng_state)
+        let z: f64 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2)
+        let x: f64 = z * sigma
+        let abs_x: f64 = if x < 0.0 { -x } else { x }
+        if abs_x < 1.0 {
+            samples = samples.push(x)
+        }
+    }
+    samples
+}
+
+/// Compute Lloyd-Max optimal scalar quantizer codebook.
+/// Returns flat layout: [centroids[0..n_centroids], boundaries[0..n_centroids-1]]
+/// where n_centroids = 2^bit_width. Caller splits.
+/// Mirrors Rust `lloyd_max`.
+@device fn lloyd_max(d: i64, b: i64, iterations: i64) -> [f64] {
+    let n_centroids: i64 = 1 << b
+    let n_samples: i64 = 10000
+
+    // Sample from Beta-like distribution
+    let samples: [f64] = sample_beta_distribution(d, n_samples)
+
+    // Initial centroids: uniform over data range
+    let mut min_val: f64 = samples[0]
+    let mut max_val: f64 = samples[0]
+    let mut s_idx: i64 = 1
+    while s_idx < n_samples {
+        let v: f64 = samples[s_idx]
+        if v < min_val { min_val = v }
+        if v > max_val { max_val = v }
+        s_idx = s_idx + 1
+    }
+
+    let mut centroids: [f64] = []
+    let mut k: i64 = 0
+    let nc_f: f64 = n_centroids as f64
+    while k < n_centroids {
+        let frac: f64 = ((k as f64) + 0.5) / nc_f
+        centroids = centroids.push(min_val + (max_val - min_val) * frac)
+        k = k + 1
+    }
+
+    // Lloyd-Max iterations
+    let mut iter: i64 = 0
+    while iter < iterations {
+        // Boundaries = midpoints of adjacent centroids
+        let mut boundaries: [f64] = []
+        let mut bi: i64 = 0
+        while bi < n_centroids - 1 {
+            boundaries = boundaries.push((centroids[bi] + centroids[bi + 1]) / 2.0)
+            bi = bi + 1
+        }
+
+        // Assign each sample to bucket; accumulate sum + count per bucket
+        let mut new_centroids: [f64] = []
+        let mut counts: [i64] = []
+        let mut k2: i64 = 0
+        while k2 < n_centroids {
+            new_centroids = new_centroids.push(0.0)
+            counts = counts.push(0)
+            k2 = k2 + 1
+        }
+        let mut si: i64 = 0
+        while si < n_samples {
+            let s: f64 = samples[si]
+            let bucket: i64 = find_bucket(s, boundaries, n_centroids - 1)
+            new_centroids[bucket] = new_centroids[bucket] + s
+            counts[bucket] = counts[bucket] + 1
+            si = si + 1
+        }
+        // Mean per bucket; preserve old centroid if bucket empty
+        k2 = 0
+        while k2 < n_centroids {
+            if counts[k2] > 0 {
+                new_centroids[k2] = new_centroids[k2] / (counts[k2] as f64)
+            } else {
+                new_centroids[k2] = centroids[k2]
+            }
+            k2 = k2 + 1
+        }
+        centroids = new_centroids
+        iter = iter + 1
+    }
+
+    // Final boundaries
+    let mut boundaries_final: [f64] = []
+    let mut bf: i64 = 0
+    while bf < n_centroids - 1 {
+        boundaries_final = boundaries_final.push((centroids[bf] + centroids[bf + 1]) / 2.0)
+        bf = bf + 1
+    }
+
+    // Pack: [centroids ++ boundaries]
+    let mut result: [f64] = centroids
+    let mut bi2: i64 = 0
+    while bi2 < n_centroids - 1 {
+        result = result.push(boundaries_final[bi2])
+        bi2 = bi2 + 1
+    }
+    result
+}
+
+/// MSE-quantize a vector against a codebook (no rotation; caller pre-rotates).
+/// Returns indices [i64] (one per coordinate of the input).
+/// Mirrors Rust `quant_mse` Step 2 (Step 1 rotation handled separately).
+@device fn quantize_mse_indices(y: [f64], boundaries: [f64], dim: i64, n_boundaries: i64) -> [i64] {
+    let mut indices: [i64] = []
+    let mut j: i64 = 0
+    while j < dim {
+        indices = indices.push(find_bucket(y[j], boundaries, n_boundaries))
+        j = j + 1
+    }
+    indices
+}
+
+/// Dequantize indices to centroid values (inverse of quantize_mse_indices).
+/// Mirrors Rust `dequant_mse` Step 1 (Step 2 inverse rotation handled separately).
+@device fn dequantize_mse_centroids(indices: [i64], centroids: [f64], dim: i64) -> [f64] {
+    let n_centroids: i64 = centroids.len() as i64
+    let mut y_hat: [f64] = []
+    let mut j: i64 = 0
+    while j < dim {
+        let idx: i64 = indices[j]
+        let v: f64 = if idx >= 0 && idx < n_centroids { centroids[idx] } else { 0.0 }
+        y_hat = y_hat.push(v)
+        j = j + 1
+    }
+    y_hat
+}
+
 // ═══════════════════════════════════════════════════════════════════════
-// PHASE 3.B continues: deferred to next sprint
+// PHASE 3.B remainder deferred (random_orthogonal — Givens rotations):
+// - random_orthogonal (~40 LOC) — used by adaptive.rs (Phase 4)
 // ═══════════════════════════════════════════════════════════════════════
-// - sample_beta_distribution (Box-Muller + LCG, ~20 LOC)
-// - lloyd_max (Lloyd-Max iterations, ~50 LOC)
-// - quant_mse / dequant_mse (codebook lookup, ~40 LOC)
-// - random_orthogonal (Givens rotations, ~40 LOC)
-// Each ~10-30min based on Phase 1+2 pattern.
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 3.C — kivi.rs port (~500 LOC, KIVI baseline)
+// Per-channel quantization for keys, per-token for values.
+// Liu et al. (2024) arXiv:2402.02750.
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/kivi.rs lines 1-500
+// Storage: keys/values are flat row-major [seq_len * d_head] f64;
+// indices output as flat [seq_len * d_head] i64 (u8-range).
+// Returns packed [scales..zeros..indices..] flat layout.
+
+/// KIVI per-channel quantize keys.
+/// keys: [seq_len * d_head] flat row-major.
+/// Returns packed: [scales (d_head)] ++ [zeros (d_head)] ++ [indices (seq*d, as f64)]
+@device fn kivi_quantize_keys(keys: [f64], seq_len: i64, d_head: i64, bits: i64) -> [f64] {
+    let levels: i64 = (1 << bits) - 1
+    let levels_f: f64 = levels as f64
+
+    let mut scales: [f64] = []
+    let mut zeros: [f64] = []
+    let mut indices: [f64] = []
+    // Initialize indices array to seq_len * d_head zeros
+    let mut z: i64 = 0
+    while z < seq_len * d_head {
+        indices = indices.push(0.0)
+        z = z + 1
+    }
+
+    let mut d: i64 = 0
+    while d < d_head {
+        // Find min/max of column d (across all seq positions)
+        let mut min_val: f64 = keys[d]
+        let mut max_val: f64 = keys[d]
+        let mut t: i64 = 0
+        while t < seq_len {
+            let v: f64 = keys[t * d_head + d]
+            if v < min_val { min_val = v }
+            if v > max_val { max_val = v }
+            t = t + 1
+        }
+        let range: f64 = max_val - min_val
+        let scale: f64 = if range > 1.0e-15 { range / levels_f } else { 1.0 }
+        scales = scales.push(scale)
+        zeros = zeros.push(min_val)
+
+        // Quantize column d
+        t = 0
+        while t < seq_len {
+            let val: f64 = (keys[t * d_head + d] - min_val) / scale
+            let mut q: i64 = round(val) as i64
+            if q < 0 { q = 0 }
+            if q > levels { q = levels }
+            indices[t * d_head + d] = q as f64
+            t = t + 1
+        }
+        d = d + 1
+    }
+
+    // Pack: [scales..zeros..indices]
+    let mut result: [f64] = []
+    let mut i: i64 = 0
+    while i < d_head { result = result.push(scales[i]); i = i + 1 }
+    i = 0
+    while i < d_head { result = result.push(zeros[i]); i = i + 1 }
+    i = 0
+    while i < seq_len * d_head { result = result.push(indices[i]); i = i + 1 }
+    result
+}
+
+/// KIVI per-channel dequantize keys.
+/// packed: scales[d_head] ++ zeros[d_head] ++ indices[seq*d_head]
+/// Returns reconstructed keys [seq_len * d_head] flat row-major.
+@device fn kivi_dequantize_keys(packed: [f64], seq_len: i64, d_head: i64) -> [f64] {
+    let mut result: [f64] = []
+    let mut t: i64 = 0
+    while t < seq_len {
+        let mut d: i64 = 0
+        while d < d_head {
+            let scale: f64 = packed[d]
+            let zero: f64 = packed[d_head + d]
+            let idx_val: f64 = packed[2 * d_head + t * d_head + d]
+            result = result.push(zero + idx_val * scale)
+            d = d + 1
+        }
+        t = t + 1
+    }
+    result
+}
+
+/// KIVI per-token quantize values.
+/// values: [seq_len * d_head] flat row-major.
+/// Returns packed: [scales (seq_len)] ++ [zeros (seq_len)] ++ [indices (seq*d, as f64)]
+@device fn kivi_quantize_values(values: [f64], seq_len: i64, d_head: i64, bits: i64) -> [f64] {
+    let levels: i64 = (1 << bits) - 1
+    let levels_f: f64 = levels as f64
+
+    let mut scales: [f64] = []
+    let mut zeros: [f64] = []
+    let mut indices: [f64] = []
+    let mut z: i64 = 0
+    while z < seq_len * d_head {
+        indices = indices.push(0.0)
+        z = z + 1
+    }
+
+    let mut t: i64 = 0
+    while t < seq_len {
+        // Find min/max of row t (across all dim)
+        let row_start: i64 = t * d_head
+        let mut min_val: f64 = values[row_start]
+        let mut max_val: f64 = values[row_start]
+        let mut d: i64 = 1
+        while d < d_head {
+            let v: f64 = values[row_start + d]
+            if v < min_val { min_val = v }
+            if v > max_val { max_val = v }
+            d = d + 1
+        }
+        let range: f64 = max_val - min_val
+        let scale: f64 = if range > 1.0e-15 { range / levels_f } else { 1.0 }
+        scales = scales.push(scale)
+        zeros = zeros.push(min_val)
+
+        d = 0
+        while d < d_head {
+            let val: f64 = (values[row_start + d] - min_val) / scale
+            let mut q: i64 = round(val) as i64
+            if q < 0 { q = 0 }
+            if q > levels { q = levels }
+            indices[row_start + d] = q as f64
+            d = d + 1
+        }
+        t = t + 1
+    }
+
+    let mut result: [f64] = []
+    let mut i: i64 = 0
+    while i < seq_len { result = result.push(scales[i]); i = i + 1 }
+    i = 0
+    while i < seq_len { result = result.push(zeros[i]); i = i + 1 }
+    i = 0
+    while i < seq_len * d_head { result = result.push(indices[i]); i = i + 1 }
+    result
+}
+
+/// KIVI per-token dequantize values.
+/// packed: scales[seq_len] ++ zeros[seq_len] ++ indices[seq*d_head]
+@device fn kivi_dequantize_values(packed: [f64], seq_len: i64, d_head: i64) -> [f64] {
+    let mut result: [f64] = []
+    let mut t: i64 = 0
+    while t < seq_len {
+        let scale: f64 = packed[t]
+        let zero: f64 = packed[seq_len + t]
+        let idx_offset: i64 = 2 * seq_len + t * d_head
+        let mut d: i64 = 0
+        while d < d_head {
+            let idx_val: f64 = packed[idx_offset + d]
+            result = result.push(zero + idx_val * scale)
+            d = d + 1
+        }
+        t = t + 1
+    }
+    result
+}
+
+/// KIVI memory in bytes (per-channel keys + per-token values).
+/// Mirrors Rust `kivi_memory_bytes`.
+/// Storage: indices ceil(bits/8) per element + 8 bytes per scale + 8 per zero.
+@device fn kivi_memory_bytes(seq_len: i64, d_head: i64, bits: i64) -> i64 {
+    let n_elements: i64 = seq_len * d_head
+    let bytes_per_element: i64 = (bits + 7) / 8
+    let indices_bytes: i64 = n_elements * bytes_per_element * 2  // keys + values
+    let scales_bytes: i64 = (d_head + seq_len) * 8  // f64 scales
+    let zeros_bytes: i64 = (d_head + seq_len) * 8   // f64 zeros
+    indices_bytes + scales_bytes + zeros_bytes
+}
