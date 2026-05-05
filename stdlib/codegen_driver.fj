@@ -1,0 +1,200 @@
+// AST-driven codegen driver (Phase 8 — Stage-1-Full)
+// Walks the flat tagged AST produced by stdlib/parser_ast.fj and
+// emits C source via the existing stdlib/codegen.fj API.
+//
+// Expression encoding is POSTFIX:
+//   `INT 5` pushes "5"
+//   `IDENT x` pushes "x"
+//   `<lhs> <rhs> BINOP <op>` combines into "(lhs op rhs)"
+//   `BEGIN_CALL f <args> END_CALL` builds "f(arg, arg)"
+
+struct ExprResult {
+    code: str,
+    pos: i64
+}
+
+fn exr(code: str, pos: i64) -> ExprResult {
+    ExprResult { code: code, pos: pos }
+}
+
+// Parse an atom (INT / IDENT / BEGIN_CALL ... END_CALL) starting at pos.
+// Returns (code, new_pos).
+fn parse_atom(ast: [str], pos: i64) -> ExprResult {
+    let n = to_int(len(ast))
+    if pos >= n { return exr("0", pos) }
+
+    let tag = ast[pos]
+    if tag == "INT" {
+        exr(ast[pos + 1], pos + 2)
+    } else if tag == "IDENT" {
+        exr(ast[pos + 1], pos + 2)
+    } else if tag == "BEGIN_CALL" {
+        let raw_name = ast[pos + 1]
+        // Map fj-lang builtins to their C runtime counterparts
+        let name = if raw_name == "println" { "fj_println_int" } else { raw_name }
+        let mut p = pos + 2
+        let mut args: [str] = []
+        while p < n && ast[p] != "END_CALL" {
+            let r = parse_expr_emit(ast, p)
+            args = args.push(r.code)
+            p = r.pos
+        }
+        p = p + 1  // past END_CALL
+        let mut argstr = ""
+        let mut i = 0
+        while i < to_int(len(args)) {
+            if i > 0 { argstr = concat!(argstr, ", ") }
+            argstr = concat!(argstr, args[i])
+            i = i + 1
+        }
+        exr(concat!(name, "(", argstr, ")"), p)
+    } else {
+        exr(concat!("/* ERR_ATOM_", tag, " */"), pos + 1)
+    }
+}
+
+// Parse an expression: atom, then optionally a binop chain.
+// AST encoding: <lhs_atom> <rhs_atom> BINOP <op>
+//               (or chained, but parser_ast emits right-associative recursion
+//                so the next BINOP after the inner expr is the outer op)
+//
+// Strategy: read atom (lhs); peek next — if next is another atom-start,
+// recursively parse as rhs-expr, then expect BINOP <op> and combine.
+pub fn parse_expr_emit(ast: [str], pos: i64) -> ExprResult {
+    let n = to_int(len(ast))
+    if pos >= n { return exr("0", pos) }
+
+    let lhs = parse_atom(ast, pos)
+    let mut p = lhs.pos
+    if p < n && (ast[p] == "INT" || ast[p] == "IDENT" || ast[p] == "BEGIN_CALL") {
+        let rhs = parse_expr_emit(ast, p)
+        if rhs.pos + 1 < to_int(len(ast)) && ast[rhs.pos] == "BINOP" {
+            let op = ast[rhs.pos + 1]
+            return exr(concat!("(", lhs.code, " ", op, " ", rhs.code, ")"), rhs.pos + 2)
+        }
+    }
+    lhs
+}
+
+// Compute end position of a statement starting at pos (skipping nested).
+pub fn stmt_end(ast: [str], pos: i64) -> i64 {
+    let n = to_int(len(ast))
+    if pos >= n { return n }
+    let tag = ast[pos]
+    let end_token = if tag == "BEGIN_RET" { "END_RET" }
+                    else if tag == "BEGIN_LET" { "END_LET" }
+                    else if tag == "BEGIN_EXPR_STMT" { "END_EXPR_STMT" }
+                    else if tag == "BEGIN_IF" { "END_IF" }
+                    else { "" }
+    if end_token == "" { return pos + 1 }
+    let mut p = pos + 1
+    let mut depth = 1
+    while p < n && depth > 0 {
+        if ast[p] == tag { depth = depth + 1 }
+        else if ast[p] == end_token { depth = depth - 1 }
+        if depth == 0 { return p + 1 }
+        p = p + 1
+    }
+    p
+}
+
+// Emit a single statement; pos advancement is the caller's job (via stmt_end).
+pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n { return cg }
+
+    let tag = ast[pos]
+
+    if tag == "BEGIN_RET" {
+        let p_inner = pos + 1
+        if ast[p_inner] == "END_RET" {
+            return emit_return(cg, "0")
+        }
+        let er = parse_expr_emit(ast, p_inner)
+        return emit_return(cg, er.code)
+    }
+
+    if tag == "BEGIN_LET" {
+        let name = ast[pos + 1]
+        let er = parse_expr_emit(ast, pos + 2)
+        return emit_let(cg, name, er.code)
+    }
+
+    if tag == "BEGIN_EXPR_STMT" {
+        let er = parse_expr_emit(ast, pos + 1)
+        return emit_line(cg, concat!(er.code, ";"))
+    }
+
+    if tag == "BEGIN_IF" {
+        let er = parse_expr_emit(ast, pos + 1)
+        let mut cg2 = emit_if(cg, er.code)
+        let mut p = er.pos
+        if ast[p] != "BEGIN_THEN" { return cg2 }
+        p = p + 1
+        while p < n && ast[p] != "END_THEN" {
+            cg2 = emit_stmt(ast, p, cg2)
+            p = stmt_end(ast, p)
+        }
+        p = p + 1  // past END_THEN
+        if p < n && ast[p] == "BEGIN_ELSE" {
+            cg2 = emit_else(cg2)
+            p = p + 1
+            while p < n && ast[p] != "END_ELSE" {
+                cg2 = emit_stmt(ast, p, cg2)
+                p = stmt_end(ast, p)
+            }
+        }
+        return emit_endif(cg2)
+    }
+
+    cg
+}
+
+// Walk a function definition starting at pos.
+pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
+    let name = ast[pos + 1]
+    let ret_type = ast[pos + 2]
+    let mut cg2 = emit_function(cg, name, [], ret_type)
+    let mut p = pos + 4  // past BEGIN_BODY
+    while p < n && ast[p] != "END_BODY" {
+        cg2 = emit_stmt(ast, p, cg2)
+        p = stmt_end(ast, p)
+    }
+    emit_function_end(cg2)
+}
+
+// Find end of a fn def starting at pos.
+pub fn fn_end(ast: [str], pos: i64) -> i64 {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_FN" { return pos + 1 }
+    let mut p = pos + 1
+    while p < n && ast[p] != "END_FN" {
+        p = p + 1
+    }
+    p + 1
+}
+
+// Top-level emitter: walks the AST, returns full C source as a single string.
+pub fn emit_program(ast: [str]) -> str {
+    let mut cg = new_codegen()
+    cg = emit_preamble(cg)
+    let n = to_int(len(ast))
+    let mut p = 0
+    while p < n {
+        if ast[p] == "BEGIN_FN" {
+            cg = emit_fn(ast, p, cg)
+            p = fn_end(ast, p)
+        } else {
+            p = p + 1
+        }
+    }
+    let mut result = ""
+    let mut i = 0
+    while i < to_int(len(cg.lines)) {
+        result = concat!(result, cg.lines[i], "\n")
+        i = i + 1
+    }
+    result
+}

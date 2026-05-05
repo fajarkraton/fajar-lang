@@ -1,0 +1,346 @@
+// Self-hosted AST builder for Fajar Lang (Stage-1-Subset)
+// Phase 8: produces a flat string-tagged AST that emit_program walks
+// to generate C code.
+//
+// AST representation (flat [str], tagged):
+//
+//   BEGIN_FN <name> <ret_type> BEGIN_BODY
+//     <stmts>
+//   END_BODY END_FN
+//
+//   BEGIN_LET <name> <expr> END_LET
+//   BEGIN_RET <expr> END_RET
+//   BEGIN_IF <cond_expr> BEGIN_THEN <stmts> END_THEN
+//                       [BEGIN_ELSE <stmts> END_ELSE] END_IF
+//   BEGIN_EXPR_STMT <expr> END_EXPR_STMT
+//
+//   <expr>:
+//     INT <value>
+//     IDENT <name>
+//     <lhs_expr> <rhs_expr> BINOP <op>     ← postfix encoding
+//     BEGIN_CALL <fn_name> <args...> END_CALL
+
+struct ParseResult {
+    ast: [str],
+    pos: i64,
+    error: bool
+}
+
+fn pr_ok(ast: [str], pos: i64) -> ParseResult {
+    ParseResult { ast: ast, pos: pos, error: false }
+}
+
+fn pr_err(ast: [str], pos: i64, code: str) -> ParseResult {
+    let a = ast.push(code)
+    ParseResult { ast: a, pos: pos, error: true }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Char predicates
+// ─────────────────────────────────────────────────────────────────────
+
+fn is_digit_ast(c: str) -> bool {
+    c >= "0" && c <= "9"
+}
+
+fn is_alpha_ast(c: str) -> bool {
+    c == "_" || (c >= "a" && c <= "z") || (c >= "A" && c <= "Z")
+}
+
+fn is_alnum_ast(c: str) -> bool { is_alpha_ast(c) || is_digit_ast(c) }
+
+fn is_ws_ast(c: str) -> bool { c == " " || c == "\n" || c == "\t" || c == "\r" }
+
+fn skip_ws(src: str, pos: i64) -> i64 {
+    let n = to_int(len(src))
+    let mut p = pos
+    while p < n && is_ws_ast(src.substring(p, p + 1)) {
+        p = p + 1
+    }
+    p
+}
+
+fn read_word(src: str, pos: i64) -> i64 {
+    let n = to_int(len(src))
+    let mut p = pos
+    while p < n && is_alnum_ast(src.substring(p, p + 1)) {
+        p = p + 1
+    }
+    p
+}
+
+fn read_int(src: str, pos: i64) -> i64 {
+    let n = to_int(len(src))
+    let mut p = pos
+    while p < n && is_digit_ast(src.substring(p, p + 1)) {
+        p = p + 1
+    }
+    p
+}
+
+fn expect_char(src: str, pos: i64, ch: str) -> i64 {
+    let p = skip_ws(src, pos)
+    if p < to_int(len(src)) && src.substring(p, p + 1) == ch {
+        p + 1
+    } else {
+        -1
+    }
+}
+
+fn expect_str(src: str, pos: i64, s: str) -> i64 {
+    let p = skip_ws(src, pos)
+    let sn = to_int(len(s))
+    let n = to_int(len(src))
+    if p + sn <= n && src.substring(p, p + sn) == s {
+        // Ensure it's not a prefix of a longer identifier (e.g. "fn" vs "fnX")
+        if p + sn == n || !is_alnum_ast(src.substring(p + sn, p + sn + 1)) {
+            return p + sn
+        }
+    }
+    -1
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Expression parser
+// ─────────────────────────────────────────────────────────────────────
+
+pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p = skip_ws(src, pos)
+    let n = to_int(len(src))
+    if p >= n { return pr_err(ast, p, "ERR_EOF") }
+
+    let c = src.substring(p, p + 1)
+    if is_digit_ast(c) {
+        let end = read_int(src, p)
+        let value = src.substring(p, end)
+        let a = ast.push("INT").push(value)
+        pr_ok(a, end)
+    } else if is_alpha_ast(c) {
+        let end = read_word(src, p)
+        let word = src.substring(p, end)
+        let after = skip_ws(src, end)
+        if after < n && src.substring(after, after + 1) == "(" {
+            // Function call: BEGIN_CALL <name> <args...> END_CALL
+            let mut a = ast.push("BEGIN_CALL").push(word)
+            let mut cur = after + 1
+            cur = skip_ws(src, cur)
+            if cur < n && src.substring(cur, cur + 1) == ")" {
+                a = a.push("END_CALL")
+                pr_ok(a, cur + 1)
+            } else {
+                let mut more = true
+                while more {
+                    let r = parse_expr_ast(src, cur, a)
+                    a = r.ast
+                    cur = r.pos
+                    cur = skip_ws(src, cur)
+                    if cur < n && src.substring(cur, cur + 1) == "," {
+                        cur = cur + 1
+                    } else { more = false }
+                }
+                cur = skip_ws(src, cur)
+                if cur < n && src.substring(cur, cur + 1) == ")" {
+                    a = a.push("END_CALL")
+                    pr_ok(a, cur + 1)
+                } else {
+                    pr_err(a, cur, "ERR_CALL_PAREN")
+                }
+            }
+        } else {
+            let a = ast.push("IDENT").push(word)
+            pr_ok(a, end)
+        }
+    } else {
+        pr_err(ast, p, "ERR_PRIMARY")
+    }
+}
+
+pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let lhs = parse_primary_ast(src, pos, ast)
+    if lhs.error { return lhs }
+
+    let n = to_int(len(src))
+    let mut p = skip_ws(src, lhs.pos)
+    if p >= n { return pr_ok(lhs.ast, p) }
+
+    let two = if p + 2 <= n { src.substring(p, p + 2) } else { "" }
+    let one = src.substring(p, p + 1)
+
+    let mut op: str = ""
+    let mut adv: i64 = 0
+    if two == "==" || two == "!=" || two == "<=" || two == ">=" {
+        op = two; adv = 2
+    } else if one == "+" || one == "-" || one == "*" || one == "/" ||
+              one == "<" || one == ">" {
+        op = one; adv = 1
+    }
+
+    if op == "" {
+        pr_ok(lhs.ast, p)
+    } else {
+        let new_pos = p + adv
+        let rhs = parse_expr_ast(src, new_pos, lhs.ast)
+        if rhs.error { return rhs }
+        let a = rhs.ast.push("BINOP").push(op)
+        pr_ok(a, rhs.pos)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Statement parser
+// ─────────────────────────────────────────────────────────────────────
+
+pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p0 = skip_ws(src, pos)
+    let n = to_int(len(src))
+    if p0 >= n { return pr_ok(ast, p0) }
+
+    // Try `let`
+    let after_let = expect_str(src, p0, "let")
+    if after_let > 0 {
+        let p1 = skip_ws(src, after_let)
+        let mut p_name = p1
+        let after_mut = expect_str(src, p1, "mut")
+        if after_mut > 0 { p_name = skip_ws(src, after_mut) }
+        let p_name2 = skip_ws(src, p_name)
+        let id_end = read_word(src, p_name2)
+        let name = src.substring(p_name2, id_end)
+        let after_id = skip_ws(src, id_end)
+        let mut p2 = after_id
+        if p2 < n && src.substring(p2, p2 + 1) == ":" {
+            p2 = skip_ws(src, p2 + 1)
+            p2 = read_word(src, p2)
+        }
+        let p_eq = expect_char(src, p2, "=")
+        if p_eq < 0 { return pr_err(ast, p2, "ERR_LET_EQ") }
+        let mut a = ast.push("BEGIN_LET").push(name)
+        let r = parse_expr_ast(src, p_eq, a)
+        if r.error { return r }
+        a = r.ast.push("END_LET")
+        let mut p3 = skip_ws(src, r.pos)
+        if p3 < n && src.substring(p3, p3 + 1) == ";" { p3 = p3 + 1 }
+        return pr_ok(a, p3)
+    }
+
+    // Try `return`
+    let after_ret = expect_str(src, p0, "return")
+    if after_ret > 0 {
+        let mut a = ast.push("BEGIN_RET")
+        let p1 = skip_ws(src, after_ret)
+        if p1 < n && (src.substring(p1, p1 + 1) == "}" || src.substring(p1, p1 + 1) == ";") {
+            a = a.push("END_RET")
+            return pr_ok(a, p1)
+        }
+        let r = parse_expr_ast(src, p1, a)
+        if r.error { return r }
+        a = r.ast.push("END_RET")
+        let mut p2 = skip_ws(src, r.pos)
+        if p2 < n && src.substring(p2, p2 + 1) == ";" { p2 = p2 + 1 }
+        return pr_ok(a, p2)
+    }
+
+    // Try `if`
+    let after_if = expect_str(src, p0, "if")
+    if after_if > 0 {
+        let mut a = ast.push("BEGIN_IF")
+        let r = parse_expr_ast(src, after_if, a)
+        if r.error { return r }
+        a = r.ast
+        let p_brace = r.pos
+        let p_lb = expect_char(src, p_brace, "{")
+        if p_lb < 0 { return pr_err(a, p_brace, "ERR_IF_LB") }
+        a = a.push("BEGIN_THEN")
+        let mut cur = skip_ws(src, p_lb)
+        while cur < n && src.substring(cur, cur + 1) != "}" {
+            let rs = parse_stmt_ast(src, cur, a)
+            if rs.error { return rs }
+            a = rs.ast
+            cur = skip_ws(src, rs.pos)
+        }
+        a = a.push("END_THEN")
+        let p_after_then = cur + 1
+        let p_else_kw = skip_ws(src, p_after_then)
+        let after_else = expect_str(src, p_else_kw, "else")
+        if after_else > 0 {
+            let p_lb2 = expect_char(src, after_else, "{")
+            if p_lb2 < 0 { return pr_err(a, after_else, "ERR_ELSE_LB") }
+            a = a.push("BEGIN_ELSE")
+            let mut cur2 = skip_ws(src, p_lb2)
+            while cur2 < n && src.substring(cur2, cur2 + 1) != "}" {
+                let rs = parse_stmt_ast(src, cur2, a)
+                if rs.error { return rs }
+                a = rs.ast
+                cur2 = skip_ws(src, rs.pos)
+            }
+            a = a.push("END_ELSE").push("END_IF")
+            return pr_ok(a, cur2 + 1)
+        }
+        a = a.push("END_IF")
+        return pr_ok(a, p_after_then)
+    }
+
+    // Default: expression-statement
+    let mut a = ast.push("BEGIN_EXPR_STMT")
+    let r = parse_expr_ast(src, p0, a)
+    if r.error { return r }
+    a = r.ast.push("END_EXPR_STMT")
+    let mut p_after = skip_ws(src, r.pos)
+    if p_after < n && src.substring(p_after, p_after + 1) == ";" { p_after = p_after + 1 }
+    pr_ok(a, p_after)
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Function and program entry
+// ─────────────────────────────────────────────────────────────────────
+
+pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p0 = skip_ws(src, pos)
+    let after_fn = expect_str(src, p0, "fn")
+    if after_fn < 0 { return pr_err(ast, p0, "ERR_NO_FN") }
+    let p1 = skip_ws(src, after_fn)
+    let id_end = read_word(src, p1)
+    let name = src.substring(p1, id_end)
+    let p_lp = expect_char(src, id_end, "(")
+    if p_lp < 0 { return pr_err(ast, id_end, "ERR_FN_LP") }
+    let mut p = p_lp
+    let n = to_int(len(src))
+    while p < n && src.substring(p, p + 1) != ")" { p = p + 1 }
+    if p >= n { return pr_err(ast, p, "ERR_FN_RP") }
+    p = p + 1
+    let p_arrow = skip_ws(src, p)
+    let mut ret_type = "i64"
+    let after_arrow = expect_str(src, p_arrow, "->")
+    if after_arrow > 0 {
+        let p_t = skip_ws(src, after_arrow)
+        let t_end = read_word(src, p_t)
+        ret_type = src.substring(p_t, t_end)
+        p = t_end
+    }
+    let p_lb = expect_char(src, p, "{")
+    if p_lb < 0 { return pr_err(ast, p, "ERR_FN_BODY_LB") }
+    let mut a = ast.push("BEGIN_FN").push(name).push(ret_type).push("BEGIN_BODY")
+    let mut cur = skip_ws(src, p_lb)
+    while cur < n && src.substring(cur, cur + 1) != "}" {
+        let r = parse_stmt_ast(src, cur, a)
+        if r.error { return r }
+        a = r.ast
+        cur = skip_ws(src, r.pos)
+    }
+    a = a.push("END_BODY").push("END_FN")
+    pr_ok(a, cur + 1)
+}
+
+pub fn parse_to_ast(src: str) -> [str] {
+    let mut a: [str] = []
+    let mut p: i64 = 0
+    let n = to_int(len(src))
+    while p < n {
+        p = skip_ws(src, p)
+        if p >= n { break }
+        let r = parse_fn_ast(src, p, a)
+        a = r.ast
+        if r.error { return a }
+        p = r.pos
+    }
+    a
+}

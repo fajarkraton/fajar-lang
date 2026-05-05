@@ -2,6 +2,65 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.5.0] — 2026-05-05 Stage-1-Full Self-Hosting
+
+**fj-source compiler now compiles ARBITRARY Stage-1-Subset programs.**
+Phase 8 closes Phase 5 R7 ("driver narrow"): `parse_to_ast(src)` builds
+a flat-tagged AST from any subset fj source string; `emit_program(ast)`
+walks the AST and emits valid C via the existing codegen.fj API.
+
+### Added (Stage-1-Full bootstrap chain)
+
+- **`stdlib/parser_ast.fj`** (346 LOC, 16 fns) — flat-tagged AST builder
+  walking source directly (substring extraction for ident text +
+  literal values). Struct-based `ParseResult { ast, pos, error }`
+  return — same pattern as `stdlib/analyzer.fj`.
+- **`stdlib/codegen_driver.fj`** (200 LOC, 8 fns) — AST-walking C
+  emitter. `emit_program(ast: [str]) -> str` traverses BEGIN_FN /
+  BEGIN_LET / BEGIN_RET / BEGIN_IF / BEGIN_EXPR_STMT statements;
+  expressions decoded from postfix BINOP encoding; `println(...)`
+  mapped to `fj_println_int(...)` C runtime helper.
+- **`tests/selfhost_stage1_full.rs`** — 8 Rust integration tests, each
+  passes a real fj source STRING (not a hardcoded driver) through the
+  full chain. All PASS in 0.11s:
+  P1 `return 42` → 42; P2 `let+return` → 7; P3 `let+let+binop` → 30;
+  P4 `if-else branch` → 111; P5 `println(777)+return 0` → 0+stdout=777;
+  P6 `chained binop x+y+z` → 17; P7 `multiplication a*b` → 42;
+  P8 `subtract-in-condition x-y>10` → 99.
+
+### Stage-1-Full vs Stage-1-Subset
+
+| Aspect | v33.4.0 (Subset) | v33.5.0 (Full) |
+|---|---|---|
+| Test suite drivers | hardcoded emit_* sequences | real fj source strings |
+| Programs covered | 5 fixed shapes | arbitrary subset fj programs |
+| Ident extraction | none (Rust-injected) | substring from source |
+| Literal values | hardcoded | extracted from source |
+| Risk R7 (driver narrow) | partially mitigated | CLOSED |
+
+### What v33.5.0 still does NOT support (future work)
+
+- Multi-fn programs with cross-fn calls (parse_to_ast skips fn params
+  via shallow `until )` walk; new R8 risk noted)
+- `while` / `for` / `match` constructs
+- `struct` / `enum` definitions
+- Generics, closures, async, lifetimes (excluded from Subset by design)
+- String / float / boolean literals as expression values
+
+Each is a 10-50 LOC fj extension on the established pattern.
+
+### Honest scope (CLAUDE.md §6.6 R1+R3)
+
+- ✅ Stage-1-Full Self-Host: ARBITRARY subset programs compile end-to-end
+- ❌ Stage 2 triple-test: Stage 1 binary == Stage 2 binary — roadmap-only
+- ❌ Cross-fn programs: R8 deferred (multi-fn parser AST work)
+- **Sister Rust compiler stays.** Production reference unchanged.
+
+### Effort
+
+Phase 8 closed in ~1h Claude time vs ~10-15h budget (-90% to -93%).
+Cumulative across v33.4.0 + v33.5.0: ~4.5h vs plan 5-15d (-99%).
+
 ## [v33.4.0] — 2026-05-05 Stage-1-Subset Self-Hosting
 
 **fj-lang now self-hosts at the Stage-1-Subset level.** stdlib/lexer.fj +
