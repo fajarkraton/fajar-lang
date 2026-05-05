@@ -46,7 +46,14 @@ struct CodegenState {
     errors: i64,
     // Phase 15.1 var-type tracking: parallel array of [name, type, name, type, ...]
     // Reset at fn boundary; used for arr[i] / .push(IDENT) element-type dispatch.
-    var_types: [str]
+    var_types: [str],
+    // Phase 16.2: declared struct names. Populated by pre-scan in emit_program;
+    // map_type_ctx checks this list so struct-typed fn signatures map to the
+    // bare struct name (typedef) instead of defaulting to int64_t.
+    struct_names: [str],
+    // Phase 16.2: fn return types. Populated by pre-scan; flat [name, ret_type, ...].
+    // Used at BEGIN_LET sites to derive C type when first_atom is BEGIN_CALL.
+    fn_ret_types: [str]
 }
 
 // Creates a new codegen state
@@ -57,7 +64,9 @@ fn new_codegen() -> CodegenState {
         next_tmp: 0,
         in_main: false,
         errors: 0,
-        var_types: []
+        var_types: [],
+        struct_names: [],
+        fn_ret_types: []
     }
 }
 
@@ -75,7 +84,9 @@ fn emit_line(state: CodegenState, line: str) -> CodegenState {
         next_tmp: state.next_tmp,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: state.var_types
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
 }
 
@@ -87,7 +98,9 @@ fn indent(state: CodegenState) -> CodegenState {
         next_tmp: state.next_tmp,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: state.var_types
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
 }
 
@@ -99,7 +112,9 @@ fn dedent(state: CodegenState) -> CodegenState {
         next_tmp: state.next_tmp,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: state.var_types
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
 }
 
@@ -111,7 +126,9 @@ fn fresh_tmp(state: CodegenState) -> CodegenState {
         next_tmp: state.next_tmp + 1,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: state.var_types
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
 }
 
@@ -124,7 +141,9 @@ pub fn record_var_type(state: CodegenState, name: str, c_type: str) -> CodegenSt
         next_tmp: state.next_tmp,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: new_vt
+        var_types: new_vt,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
 }
 
@@ -135,8 +154,79 @@ pub fn clear_var_types(state: CodegenState) -> CodegenState {
         next_tmp: state.next_tmp,
         in_main: state.in_main,
         errors: state.errors,
-        var_types: []
+        var_types: [],
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types
     }
+}
+
+// Phase 16.2: register a declared struct name (so map_type_ctx returns the
+// bare typedef name instead of defaulting to int64_t).
+pub fn add_struct_name(state: CodegenState, name: str) -> CodegenState {
+    let new_sn = state.struct_names.push(name)
+    CodegenState {
+        lines: state.lines,
+        indent: state.indent,
+        next_tmp: state.next_tmp,
+        in_main: state.in_main,
+        errors: state.errors,
+        var_types: state.var_types,
+        struct_names: new_sn,
+        fn_ret_types: state.fn_ret_types
+    }
+}
+
+pub fn is_struct_name(state: CodegenState, name: str) -> bool {
+    let sn = state.struct_names
+    let n = to_int(len(sn))
+    let mut i = 0
+    while i < n {
+        if sn[i] == name { return true }
+        i = i + 1
+    }
+    false
+}
+
+// Phase 16.2: register a fn's return type (so BEGIN_LET can derive the C type
+// when the rhs is a BEGIN_CALL to a struct-returning fn).
+pub fn add_fn_ret_type(state: CodegenState, fn_name: str, ret_type: str) -> CodegenState {
+    let new_rt = state.fn_ret_types.push(fn_name).push(ret_type)
+    CodegenState {
+        lines: state.lines,
+        indent: state.indent,
+        next_tmp: state.next_tmp,
+        in_main: state.in_main,
+        errors: state.errors,
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: new_rt
+    }
+}
+
+pub fn lookup_fn_ret_type(state: CodegenState, fn_name: str) -> str {
+    let rt = state.fn_ret_types
+    let n = to_int(len(rt))
+    let mut i = 0
+    while i + 1 < n {
+        if rt[i] == fn_name { return rt[i + 1] }
+        i = i + 2
+    }
+    ""
+}
+
+// Phase 16.2: type-mapping that consults declared struct names.
+// Mirrors map_type but, when the type is unknown, falls back to checking
+// state.struct_names — if found, returns the bare struct name (typedef) so
+// `-> ParseResult` lowers to `ParseResult ...` not `int64_t ...`.
+pub fn map_type_ctx(ty: str, state: CodegenState) -> str {
+    if ty == "i64" || ty == "i32" || ty == "int" { return "int64_t" }
+    if ty == "f64" || ty == "f32" || ty == "float" { return "double" }
+    if ty == "bool" { return "int" }
+    if ty == "str" { return "const char*" }
+    if ty == "void" || ty == "" { return "void" }
+    if ty == "[i64]" || ty == "[int]" || ty == "[i32]" || ty == "[str]" { return "_FjArr*" }
+    if is_struct_name(state, ty) { return ty }
+    "int64_t"
 }
 
 // Look up variable's declared C type. Returns "" if not found.
@@ -259,7 +349,7 @@ pub fn emit_function(state: CodegenState, name: str, params: [str], ret_type: st
 /// Used by the AST-driven codegen_driver (Phase 8+).
 pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], ret_type: str) -> CodegenState {
     let mut s = state
-    let c_ret = map_type(ret_type)
+    let c_ret = map_type_ctx(ret_type, state)
 
     let mut param_str = ""
     let pn = to_int(len(param_pairs))
@@ -269,7 +359,7 @@ pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], r
         if !first { param_str = concat!(param_str, ", ") }
         let pname = param_pairs[i]
         let ptype = param_pairs[i + 1]
-        let c_t = map_type(ptype)
+        let c_t = map_type_ctx(ptype, state)
         param_str = concat!(param_str, c_t, " ", pname)
         first = false
         i = i + 2

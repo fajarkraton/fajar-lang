@@ -539,13 +539,19 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                 else { fj_type = "i64" }
             }
             else if first_atom == "BEGIN_MACRO_CALL" { fj_type = "str" }
+            else if first_atom == "BEGIN_CALL" {
+                // Phase 16.2: derive fj-type from callee's registered ret type
+                let callee = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                let r = lookup_fn_ret_type(cg, callee)
+                if r != "" { fj_type = r }
+            }
         }
         let er = parse_expr_emit(ast, vars, p_after_name)
 
         // C type priority: declared annotation wins (unless empty), then atom inference
         let mut c_type = ""
         if declared_type != "" {
-            c_type = map_type(declared_type)
+            c_type = map_type_ctx(declared_type, cg)
         }
         if c_type == "" || c_type == "int64_t" {
             c_type = if first_atom == "FLOAT" { "double" }
@@ -562,6 +568,14 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                      }
                      else if first_atom == "BEGIN_ARRAY_LIT" { "_FjArr*" }
                      else if first_atom == "BEGIN_MACRO_CALL" { "const char*" }
+                     else if first_atom == "BEGIN_CALL" {
+                         // Phase 16.2: if callee returns a struct, declare with the struct typedef
+                         let callee = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                         let r = lookup_fn_ret_type(cg, callee)
+                         if r != "" && is_struct_name(cg, r) { r }
+                         else if r != "" { map_type_ctx(r, cg) }
+                         else { "int64_t" }
+                     }
                      else { "int64_t" }
         }
         if c_type == "" { c_type = "int64_t" }
@@ -727,7 +741,7 @@ pub fn emit_struct(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     while p < n && ast[p] != "END_STRUCT" {
         let fname = ast[p]
         let ftype = ast[p + 1]
-        let c_t = map_type(ftype)
+        let c_t = map_type_ctx(ftype, cg)
         s = emit_line(s, concat!(c_t, " ", fname, ";"))
         p = p + 2
     }
@@ -783,8 +797,34 @@ pub fn enum_end(ast: [str], pos: i64) -> i64 {
 // Top-level emitter: walks the AST, returns full C source as a single string.
 pub fn emit_program(ast: [str]) -> str {
     let mut cg = new_codegen()
-    cg = emit_preamble(cg)
     let n = to_int(len(ast))
+    // Phase 16.2: pre-scan to register declared struct names and fn return
+    // types BEFORE we emit anything. This lets emit_function_typed render
+    // `-> ParseResult` as `ParseResult` (typedef) instead of int64_t, and
+    // lets BEGIN_LET resolve `let r1 = struct_returning_fn(...)` to the
+    // correct C type.
+    let mut sp = 0
+    while sp < n {
+        if ast[sp] == "BEGIN_STRUCT" {
+            cg = add_struct_name(cg, ast[sp + 1])
+            sp = struct_end(ast, sp)
+        } else if ast[sp] == "BEGIN_FN" {
+            let fn_name = ast[sp + 1]
+            let mut q = sp + 2
+            while q < n && ast[q] != "RET_TYPE" && ast[q] != "BEGIN_BODY" && ast[q] != "END_FN" {
+                q = q + 1
+            }
+            let mut rt = "i64"
+            if q < n && ast[q] == "RET_TYPE" {
+                rt = ast[q + 1]
+            }
+            cg = add_fn_ret_type(cg, fn_name, rt)
+            sp = fn_end(ast, sp)
+        } else {
+            sp = sp + 1
+        }
+    }
+    cg = emit_preamble(cg)
     let mut p = 0
     while p < n {
         if ast[p] == "BEGIN_FN" {

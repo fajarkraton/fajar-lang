@@ -756,3 +756,43 @@ fn full_p61_implicit_return_str_method_chain() {
     );
     assert_eq!(r.status.code(), Some(11));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p62_struct_typed_fn_signature() {
+    // Phase 16 sub-task 2: `fn f() -> ParseResult { ... }` lowers to
+    // `ParseResult f() { ... }` instead of `int64_t f() { ... }`. Pre-scan
+    // collects struct names; map_type_ctx returns the bare typedef name
+    // when the type matches a declared struct. Same applies to params.
+    let r = compile_subset_program(
+        "full_p62",
+        "struct ParseResult { val: i64, pos: i64, error: bool } fn pr_ok(v: i64, p: i64) -> ParseResult { return ParseResult { val: v, pos: p, error: false } } fn pr_err(p: i64) -> ParseResult { return ParseResult { val: 0, pos: p, error: true } } fn try_parse(src: str, pos: i64) -> ParseResult { let n = to_int(strlen(src)); if pos >= n { return pr_err(pos) }; let c = src.substring(pos, pos + 1); if c == \"x\" { return pr_ok(42, pos + 1) }; return pr_err(pos) } fn main() -> i64 { let r1 = try_parse(\"xyz\", 0); if r1.error { return 99 }; return r1.val }",
+    );
+    // try_parse("xyz", 0) → pr_ok(42, 1); r1.val = 42
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p63_state_passing_struct_through_chain() {
+    // Phase 16 sub-task 2: state-passing pattern (mirrors parser_ast.fj
+    // ParseResult flow). Each fn takes state, returns updated state.
+    let r = compile_subset_program(
+        "full_p63",
+        "struct State { count: i64, active: bool } fn bump(s: State) -> State { return State { count: s.count + 1, active: s.active } } fn deactivate(s: State) -> State { return State { count: s.count, active: false } } fn main() -> i64 { let s0 = State { count: 0, active: true }; let s1 = bump(s0); let s2 = bump(s1); let s3 = deactivate(s2); if s3.active { return 99 }; return s3.count }",
+    );
+    // Three bump-and-deactivate steps: count becomes 2, active false → return 2
+    assert_eq!(r.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p64_struct_typed_let_via_call_no_annotation() {
+    // Phase 16 sub-task 2: `let r = struct_returning_fn(...)` (no explicit
+    // type annotation) — lookup_fn_ret_type derives the struct typedef.
+    let r = compile_subset_program(
+        "full_p64",
+        "struct Box { v: i64 } fn make_box(v: i64) -> Box { return Box { v: v } } fn main() -> i64 { let b = make_box(77); return b.v }",
+    );
+    assert_eq!(r.status.code(), Some(77));
+}

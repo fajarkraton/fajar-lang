@@ -2,6 +2,69 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.3] — 2026-05-05 Phase 16 sub-task 2 (reprioritized): struct-typed fn signatures
+
+Pre-flight audit (CLAUDE.md §6.8 R1) of `parser_ast.fj` revealed that the
+*actual* blocker for compiling more parser_ast.fj fns via the chain is
+NOT match-payload extraction (parser_ast.fj uses if/else chains, not
+match-with-payload) but **struct-typed fn signatures**. Without this,
+`fn pr_ok(...) -> ParseResult` lowered to `int64_t pr_ok(...)` and
+gcc rejected the struct-literal `return (ParseResult){...}`.
+
+Match-payload extraction is genuinely separate scope and is deferred.
+
+### What it does
+
+- `fn f() -> StructName { ... }` lowers to `StructName f() { ... }` (typedef)
+- `fn f(s: StructName) -> ...` declares param as `StructName s`
+- `let r = struct_returning_fn(...)` declares `r` with the correct struct
+  C type (no annotation needed)
+- `r.field` access works because `r` is now declared as a struct, not int64_t
+- Struct fields can themselves be struct-typed (`field: AnotherStruct`)
+
+### Implementation
+
+- `CodegenState` gains two new fields:
+  - `struct_names: [str]` — declared struct names
+  - `fn_ret_types: [str]` — flat `[fn_name, ret_type, ...]` map
+- New helpers: `add_struct_name`, `is_struct_name`, `add_fn_ret_type`,
+  `lookup_fn_ret_type`, `map_type_ctx` (state-aware variant of `map_type`)
+- `emit_program` does a pre-scan pass populating struct_names + fn_ret_types
+  BEFORE the main emission loop
+- `emit_function_typed` (codegen.fj) uses `map_type_ctx` for ret_type + params
+- `emit_struct` field emission uses `map_type_ctx` (allows struct-of-struct)
+- `BEGIN_LET` first_atom inference adds a `BEGIN_CALL` branch that consults
+  `lookup_fn_ret_type` and uses the registered ret type when it's a struct
+
+### Tests added (3 NEW)
+
+- **P62** parser_ast.fj-style: `struct ParseResult` + `pr_ok`/`pr_err`
+  constructors + `try_parse` returning ParseResult + `r1.error`/`r1.val`
+  field access. Returns 42.
+- **P63** state-passing chain: `bump(s) -> State`, `deactivate(s) -> State`
+  threaded through main. Returns 2 after two bumps + deactivate.
+- **P64** struct-typed `let` via call without explicit annotation:
+  `let b = make_box(77); return b.v`. Verifies fn_ret_types lookup
+  derives `Box` typedef for `b`.
+
+### Test suite: 61 → 64 (3 NEW)
+
+**64/64 PASS in 0.63s.** Lib tests: 7629/7629 PASS. fmt clean. clippy 0.
+
+### Stage 2 Phase 16 progress
+
+- ✅ Pratt precedence + parens (v34.5.0)
+- ✅ to_int smart dispatch (v34.5.1)
+- ✅ Implicit-return-from-expr-body (v34.5.2)
+- ✅ Struct-typed fn signatures (v34.5.3)  ← THIS
+- ⏸ Match payload extraction — DEFERRED (genuinely separate scope; not
+  needed by parser_ast.fj; if-else chains are the actual idiom there)
+- ❌ Phase 17 Stage 2 triple-test (~1d)
+
+### Effort
+
+~50min (target ~2-4h, -67%). Cumulative ~16.5h across v33.4.0..v34.5.3.
+
 ## [v34.5.2] — 2026-05-05 Phase 16 sub-task 1: implicit-return from expression body
 
 Patch closes the first of three remaining Phase 16 FULL sub-tasks per the
