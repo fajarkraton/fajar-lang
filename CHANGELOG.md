@@ -2,6 +2,76 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.5] — 2026-05-05 Phase 16 sub-task 4: chained method calls in assignment
+
+Closes the biggest remaining Phase 16 blocker: `a = a.push("X").push("Y")`
+now lowers correctly to nested helper calls. Previously the outer
+`.push("Y")` was silently dropped (parse_primary_ast only handled one
+level of method call), and the function's body was truncated at gcc
+emission time — main was then missing entirely from the output, which
+broke parser_ast.fj's `pr_err` and `parse_one_token`-style helpers.
+
+### Implementation
+
+**Parser side** (stdlib/parser_ast.fj):
+- New helper `count_method_chain_after(src, p)` — scans ahead from the
+  first `(` of a method call, balanced-paren-skipping (with string-literal
+  awareness so embedded `(`/`)`/`.` don't mislead the counter), and counts
+  how many `.ident(` segments follow. Returns total chain depth.
+- `parse_primary_ast` method-call branch — emits `chain_depth` nested
+  `BEGIN_METHOD_CALL` markers in front of the innermost subject, then
+  parses each `.method(args)` segment in order, each closing one wrapper.
+
+**Codegen side** (stdlib/codegen_driver.fj):
+- `BEGIN_METHOD_CALL` handler — subject is now parsed via `parse_expr_emit`
+  (allowing nested `BEGIN_METHOD_CALL`) instead of hard-coding `IDENT name
+  [FIELD]*`. The recursion produces the natural `helper2(helper1(subj, x), y)`
+  nesting in the C output.
+- `find_method_name` — depth-aware: skips inner `BEGIN_METHOD_CALL` blocks
+  so callers querying the OUTER method name of a chain get the correct
+  outermost method.
+
+### AST shape
+
+For `a.push("X").push("Y")`:
+```
+BEGIN_METHOD_CALL              ← outer (handles .push("Y"))
+  BEGIN_METHOD_CALL            ← inner (handles .push("X"))
+    IDENT a
+    METHOD push
+    STR "X"
+    END_METHOD_CALL
+  METHOD push
+  STR "Y"
+  END_METHOD_CALL
+```
+
+Codegen yields: `_fj_arr_push_str(_fj_arr_push_str(a, "X"), "Y")`
+
+### Tests added (2 NEW)
+
+- **P67** 2-deep chain: `a.push("INT").push("42")` returns 2 (final length).
+- **P68** 3-deep chain: `v.push("a").push("b").push("c")` returns 3.
+
+### Test suite: 66 → 68 (2 NEW)
+
+**68/68 PASS in 0.53s.** Lib tests: 7629/7629 PASS. fmt clean. clippy 0.
+
+### Stage 2 Phase 16 progress
+
+- ✅ Pratt precedence + parens (v34.5.0)
+- ✅ to_int smart dispatch (v34.5.1)
+- ✅ Implicit-return-from-expr-body (v34.5.2)
+- ✅ Struct-typed fn signatures (v34.5.3)
+- ✅ Array types + IDENT-rebind + free len (v34.5.4)
+- ✅ Chained method calls in assignment (v34.5.5)  ← THIS
+- ❌ String escape preservation — NEXT
+- ❌ Phase 17 Stage 2 triple-test (~1d)
+
+### Effort
+
+~50min. Cumulative ~17.8h across v33.4.0..v34.5.5.
+
 ## [v34.5.4] — 2026-05-05 Phase 16 sub-task 3 partial: array types in struct fields + fn ret + IDENT-rebind + len() free fn
 
 Patch addresses a cluster of small Phase 16 gaps surfaced by probing

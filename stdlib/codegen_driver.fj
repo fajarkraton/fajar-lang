@@ -126,24 +126,19 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         let helper = if arr_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
         exr(concat!(helper, "(", arr_name, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
-        // Shape: BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <method> <args...> END_METHOD_CALL
-        let mut p2 = pos + 1
-        if p2 >= n || ast[p2] != "IDENT" {
-            return exr("/* ERR_METHOD_CALL_NO_IDENT */", pos + 1)
-        }
-        let mut subj = ast[p2 + 1]
-        p2 = p2 + 2
-        while p2 + 1 < n && ast[p2] == "FIELD" {
-            subj = concat!(subj, ".", ast[p2 + 1])
-            p2 = p2 + 2
-        }
+        // Phase 16.5: subject can be ANY expression (incl. nested
+        // BEGIN_METHOD_CALL for chained calls). Parse subject via
+        // parse_expr_emit; expect METHOD at the returned position.
+        let r_subj = parse_expr_emit(ast, vars, pos + 1)
+        let mut p2 = r_subj.pos
         if p2 + 1 >= n || ast[p2] != "METHOD" {
             return exr("/* ERR_METHOD_CALL_NO_METHOD */", p2)
         }
         let method = ast[p2 + 1]
         p2 = p2 + 2
-        // Collect args + remember each first-arg atom tag for dispatch
+        // Track first arg tag + position for type-aware dispatch
         let first_arg_tag = if p2 < n { ast[p2] } else { "" }
+        let first_arg_pos = p2
         let mut args: [str] = []
         while p2 < n && ast[p2] != "END_METHOD_CALL" {
             let r = parse_expr_emit(ast, vars, p2)
@@ -158,28 +153,14 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             // STR atom or string-returning method/macro → push_str; else push_i64
             let arg_is_str = first_arg_tag == "STR" ||
                 (first_arg_tag == "BEGIN_MACRO_CALL")
-            // For BEGIN_METHOD_CALL with str-returning method:
             let arg_method_str = if first_arg_tag == "BEGIN_METHOD_CALL" {
-                let mname = find_method_name(ast, pos + 2)
-                mname == "substring" || mname == "concat"
+                let mname = find_method_name(ast, first_arg_pos)
+                mname == "substring" || mname == "concat" || mname == "push"
             } else { false }
-            // Phase 15.1: IDENT arg → look up declared type
             let arg_ident_str = if first_arg_tag == "IDENT" {
-                // Arg is at pos+2 (METHOD_CALL header is +0 BEGIN, +1 IDENT, +2 obj_name,
-                // ...) — for the FIRST arg we need to walk past method name. Args start
-                // after METHOD <name>. For .push the args follow directly.
-                // Find the arg IDENT name: ast[pos+2] is the "IDENT" tag, ast[pos+3] is name.
-                // But pos+2 here is in the OUTER scope of BEGIN_METHOD_CALL parsing — let me
-                // scan to find METHOD then read the next IDENT.
-                let mut q = pos + 1
-                while q + 1 < n && ast[q] != "METHOD" { q = q + 1 }
-                // q is at METHOD; q+2 should be first arg
-                let arg_name_pos = q + 2
-                if arg_name_pos + 1 < n && ast[arg_name_pos] == "IDENT" {
-                    let nm = ast[arg_name_pos + 1]
-                    let t = lookup_var_type_in_table(vars, nm)
-                    t == "str"
-                } else { false }
+                let arg_name = if first_arg_pos + 1 < n { ast[first_arg_pos + 1] } else { "" }
+                let t = lookup_var_type_in_table(vars, arg_name)
+                t == "str"
             } else { false }
             if arg_is_str || arg_method_str || arg_ident_str {
                 helper = "_fj_arr_push_str"
@@ -187,7 +168,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
                 helper = "_fj_arr_push_i64"
             }
         }
-        let mut argstr = subj
+        let mut argstr = r_subj.code
         let mut k = 0
         while k < to_int(len(args)) {
             argstr = concat!(argstr, ", ", args[k])
@@ -384,9 +365,20 @@ fn map_method(method: str) -> str {
 fn find_method_name(ast: [str], pos: i64) -> str {
     let n = to_int(len(ast))
     if pos >= n || ast[pos] != "BEGIN_METHOD_CALL" { return "" }
+    // Phase 16.5: nested BEGIN_METHOD_CALL chains — skip inner blocks so we
+    // return the OUTER (top-level) method name for the call rooted at pos.
     let mut p = pos + 1
-    while p + 1 < n && ast[p] != "END_METHOD_CALL" {
-        if ast[p] == "METHOD" { return ast[p + 1] }
+    let mut depth = 0
+    while p + 1 < n {
+        let t = ast[p]
+        if t == "BEGIN_METHOD_CALL" { depth = depth + 1 }
+        else if t == "END_METHOD_CALL" {
+            if depth == 0 { return "" }
+            depth = depth - 1
+        }
+        else if t == "METHOD" {
+            if depth == 0 { return ast[p + 1] }
+        }
         p = p + 1
     }
     ""

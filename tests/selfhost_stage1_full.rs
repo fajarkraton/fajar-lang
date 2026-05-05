@@ -814,6 +814,32 @@ fn full_p66_let_rebind_via_alias_preserves_type() {
 
 #[cfg(unix)]
 #[test]
+fn full_p67_chained_method_calls_two_deep() {
+    // Phase 16 sub-task 4: a.push("X").push("Y") emits as nested
+    // _fj_arr_push_str(_fj_arr_push_str(a, "X"), "Y"). Without this,
+    // outer .push("Y") was silently dropped and main's body was missing.
+    let r = compile_subset_program(
+        "full_p67",
+        "fn build(v: [str]) -> [str] { let mut a = v; a = a.push(\"INT\").push(\"42\"); return a } fn main() -> i64 { let arr: [str] = []; let r = build(arr); return to_int(len(r)) }",
+    );
+    assert_eq!(r.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p68_chained_method_calls_three_deep() {
+    // Phase 16 sub-task 4: 3-level chain. count_method_chain_after looks
+    // ahead to count `.method(args)` segments and emits the right number
+    // of nested BEGIN_METHOD_CALL wrappers.
+    let r = compile_subset_program(
+        "full_p68",
+        "fn build3(v: [str]) -> [str] { return v.push(\"a\").push(\"b\").push(\"c\") } fn main() -> i64 { let arr: [str] = []; let r = build3(arr); return to_int(len(r)) }",
+    );
+    assert_eq!(r.status.code(), Some(3));
+}
+
+#[cfg(unix)]
+#[test]
 fn full_p64_struct_typed_let_via_call_no_annotation() {
     // Phase 16 sub-task 2: `let r = struct_returning_fn(...)` (no explicit
     // type annotation) — lookup_fn_ret_type derives the struct typedef.
