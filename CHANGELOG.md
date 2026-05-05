@@ -2,6 +2,80 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.4.0] — 2026-05-05 Stage-1-Subset Self-Hosting
+
+**fj-lang now self-hosts at the Stage-1-Subset level.** stdlib/lexer.fj +
+stdlib/analyzer.fj + stdlib/codegen.fj — all written in Fajar Lang itself
+— compose into a working bootstrap chain that compiles subset fj programs
+to native binaries via gcc. 5/5 end-to-end tests PASS in 0.05s.
+
+### Added (self-host bootstrap chain)
+
+- **stdlib/lexer.fj** (513 LOC, 10 fns) — VERIFIED bit-equivalent vs
+  Rust lexer on canonical input (19/19 tokens match exactly for
+  `fn add(a: i64, b: i64) -> i64 { a + b }`).
+- **stdlib/parser.fj** (784 LOC, 27 fns) — VERIFIED via 30/30 self-test
+  PASS covering all Stage-1-Subset forms (fn/let/const/return/if-else/
+  while/for/match/struct/enum/impl/trait/use/pub fn/multi-item/array/
+  call/field/binops/compare/pipeline/break-continue/loop/annotation).
+- **stdlib/analyzer.fj** (432 LOC, 19 fns) — 6/7 smoke tests PASS;
+  scope tracking, return-outside-fn detection, break-outside-loop
+  detection, 8 of 16 SE error codes formatted (SE001/2/4/5/6/7/8 + ME001).
+- **stdlib/codegen.fj** (321 LOC, 17 fns) — emits valid C source via
+  `Strategy: Fajar Lang → C → gcc → binary`. 2/2 gcc round-trip smoke
+  tests PASS (hello world prints 42; multi-fn with let+if+binop+call
+  prints 125).
+- **tests/selfhost_stage1_subset.rs** — 5 Rust integration tests, each
+  drives codegen.fj over a distinct subset program, gcc-compiles
+  emitted C, runs binary, asserts exit code:
+  P1 `return 42` → 42; P2 `let+return` → 7; P3 `let+let+binop` → 30;
+  P4 `if-else branch` → 111; P5 `println(777)+return 0` → 0 + stdout=777.
+
+### Self-host phase progression
+
+7 phases CLOSED (audit findings under `docs/SELFHOST_FJ_PHASE_{0..6}_FINDINGS.md`):
+
+- Phase 0 — audit (revealed src/selfhost/*.rs is Rust simulation theatre)
+- Phase 1 — subset lexer (19/19 tokens bit-equivalent vs Rust)
+- Phase 2 — subset parser (30/30 self-tests)
+- Phase 3 — subset analyzer (6/7 smoke; T4 fail = known placeholder)
+- Phase 4 — subset codegen (2/2 gcc round-trip; pivoted to gcc backend)
+- Phase 5 — bootstrap chain end-to-end (1 program proof, RC=99)
+- Phase 6 — subset E2E test suite (5/5 PASS, 0.05s)
+
+Cumulative effort: ~3h Claude time vs plan 5-10d realistic (-99%).
+
+### Pivot decisions
+
+- **Cranelift FFI → gcc backend** (Phase 4): `stdlib/codegen.fj` already
+  specified gcc strategy in its header comment. Eliminates 2-5K LOC
+  Rust FFI shim. C is human-readable, mature target; gcc handles
+  optimization. Cranelift FFI deferred to Stage-1-Full / future.
+- **20 .fj files → 5 Rust tests** (Phase 6): bottleneck is parser
+  returns count not AST. Driver-first proves the chain on 5 distinct
+  shapes faster + more deterministic via Rust runner.
+
+### Honest scope (per CLAUDE.md §6.6 R1+R3)
+
+- ✅ Stage-1-Subset self-host: subset programs compile end-to-end
+- ❌ Stage-1-Full self-host: parser AST-builder upgrade required
+  (~1d work, deferred to post-v33.4.0)
+- ❌ Stage 2 triple-test: Stage 2 is roadmap-only
+- **Sister Rust compiler stays.** `src/{lexer,parser,analyzer,codegen}/`
+  remains the production fj-lang compiler. Self-host is a parallel
+  proof point, not a Rust replacement.
+
+### Known limitations (Stage-1-Full work)
+
+- `stdlib/parser.fj::parse_program` returns `i64` (item count) only.
+  Real AST building requires per-fn refactor (every parse_* returns
+  `(new_pos, ast_chunk)`). ~1d fj work.
+- `stdlib/analyzer.fj::extract_ident` returns placeholder `var_{idx}`
+  (no token-span text extraction). Blocks duplicate-name detection at
+  source-text level; needs lexer span-tracking exposed via builtins.
+- Generic functions, closures, async fn, lifetimes, doc comments NOT
+  supported (excluded from Stage-1-Subset by design).
+
 ## [v33.3.0] — 2026-05-05 FajarQuant Algorithm 100% Fajar Lang
 
 **FajarQuant algorithm crate ported to pure Fajar Lang stdlib.** 7

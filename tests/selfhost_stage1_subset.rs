@@ -1,5 +1,8 @@
 //! Stage-1-Subset self-host bootstrap chain end-to-end test.
 //!
+//! Requires `gcc` on PATH — gated to Unix targets where it's
+//! universally available. Windows runners skip this suite.
+//!
 //! Phase 6: this test runs the fj-source bootstrap chain
 //! (stdlib/lexer.fj + stdlib/analyzer.fj + stdlib/codegen.fj +
 //! a driver) over multiple subset programs, gcc-compiles the
@@ -26,6 +29,7 @@ fn cat_files(files: &[&str]) -> String {
     s
 }
 
+#[cfg(unix)]
 #[test]
 fn p1_return_42() {
     let driver = r#"
@@ -71,6 +75,7 @@ fn main() {
     assert_eq!(run.status.code(), Some(42), "binary should return 42");
 }
 
+#[cfg(unix)]
 #[test]
 fn p2_let_and_return() {
     let driver = r#"
@@ -117,6 +122,7 @@ fn main() {
     assert_eq!(run.status.code(), Some(7));
 }
 
+#[cfg(unix)]
 #[test]
 fn p3_two_lets_plus_binop() {
     let driver = r#"
@@ -164,6 +170,7 @@ fn main() {
     assert_eq!(run.status.code(), Some(30));
 }
 
+#[cfg(unix)]
 #[test]
 fn p4_if_else_branch() {
     let driver = r#"
@@ -215,6 +222,7 @@ fn main() {
     assert_eq!(run.status.code(), Some(111));
 }
 
+#[cfg(unix)]
 #[test]
 fn p5_println_runtime() {
     let driver = r#"
