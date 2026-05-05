@@ -55,6 +55,36 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let enum_name = ast[pos + 1]
         let variant = ast[pos + 2]
         exr(concat!(enum_name, "_", variant), pos + 3)
+    } else if tag == "BEGIN_ARRAY_LIT" {
+        // [a, b, c] → _fj_arr_push_i64(_fj_arr_push_i64(_fj_arr_new(), a), b)... chain
+        // Or for empty []: just _fj_arr_new()
+        let mut p2 = pos + 1
+        let mut elems: [str] = []
+        while p2 < n && ast[p2] != "END_ARRAY_LIT" {
+            let r = parse_expr_emit(ast, p2)
+            elems = elems.push(r.code)
+            p2 = r.pos
+        }
+        p2 = p2 + 1  // past END_ARRAY_LIT
+        let m = to_int(len(elems))
+        if m == 0 {
+            exr("_fj_arr_new()", p2)
+        } else {
+            // Build nested push expression: _fj_arr_push_i64(_fj_arr_push_i64(_fj_arr_new(), e0), e1)...
+            let mut code = "_fj_arr_new()"
+            let mut k = 0
+            while k < m {
+                code = concat!("_fj_arr_push_i64(", code, ", ", elems[k], ")")
+                k = k + 1
+            }
+            exr(code, p2)
+        }
+    } else if tag == "BEGIN_INDEX" {
+        // arr[i] → _fj_arr_get_i64(arr, i)
+        let arr_name = ast[pos + 1]
+        let r = parse_expr_emit(ast, pos + 2)
+        // Skip END_INDEX at r.pos
+        exr(concat!("_fj_arr_get_i64(", arr_name, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
         // Shape: BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <method> <args...> END_METHOD_CALL
         // Build subject expr from IDENT + optional FIELD chain.
@@ -196,14 +226,15 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
 fn is_atom_start(tag: str) -> bool {
     tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
-    tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL"
+    tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL" ||
+    tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX"
 }
 
 // Map fj method name → C runtime helper. Returns "" if no mapping known.
 // Caller emits the C helper definition in emit_preamble.
 fn map_method(method: str) -> str {
     if method == "substring" { return "_fj_substring" }
-    if method == "push" { return "_fj_arr_push" }
+    if method == "push" { return "_fj_arr_push_i64" }
     if method == "len" { return "_fj_arr_len" }
     ""
 }
@@ -301,14 +332,18 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                      else if first_atom == "BEGIN_METHOD_CALL" {
                          // Heuristic: method calls returning string types
                          // (substring, concat, etc.) — return const char*.
-                         // Find METHOD <name> in the chain and check.
+                         // .push returns the array (chainable); .len returns int.
                          let method_name = find_method_name(ast, pos + 2)
                          if method_name == "substring" { "const char*" }
                          else if method_name == "concat" { "const char*" }
+                         else if method_name == "push" { "_FjArr*" }
                          else { "int64_t" }
                      }
                      else if first_atom == "BEGIN_STRUCT_LIT" {
                          if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "int64_t" }
+                     }
+                     else if first_atom == "BEGIN_ARRAY_LIT" {
+                         "_FjArr*"
                      }
                      else { "int64_t" }
         return emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))

@@ -452,3 +452,60 @@ fn full_p35_count_vowels_composability() {
     // 'hello world' has e, o, o = 3 vowels
     assert_eq!(r.status.code(), Some(3));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p36_empty_array_lit_and_len() {
+    // Phase 14: `let arr: [i64] = []` and `arr.len()` work.
+    let r = compile_subset_program(
+        "full_p36",
+        "fn main() -> i64 { let arr: [i64] = []; return arr.len() }",
+    );
+    assert_eq!(r.status.code(), Some(0));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p37_array_lit_with_elems() {
+    // Phase 14: `[1, 2, 3]` with .len()
+    let r = compile_subset_program(
+        "full_p37",
+        "fn main() -> i64 { let arr: [i64] = [1, 2, 3, 4, 5]; return arr.len() }",
+    );
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p38_array_push_and_index() {
+    // Phase 14: arr.push(x) returns updated array; arr[i] indexes.
+    let r = compile_subset_program(
+        "full_p38",
+        "fn main() -> i64 { let mut arr: [i64] = []; arr = arr.push(7); arr = arr.push(11); return arr[0] + arr[1] }",
+    );
+    assert_eq!(r.status.code(), Some(18));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p39_sum_first_n_via_array() {
+    // Phase 14 headline: build array, push elements in loop, sum via index.
+    let r = compile_subset_program(
+        "full_p39",
+        "fn sum_first_n(n: i64) -> i64 { let mut arr: [i64] = []; let mut i = 0; while i < n { arr = arr.push(i); i = i + 1 }; let mut total = 0; let mut k = 0; while k < arr.len() { total = total + arr[k]; k = k + 1 }; return total } fn main() -> i64 { return sum_first_n(5) }",
+    );
+    // 0+1+2+3+4 = 10
+    assert_eq!(r.status.code(), Some(10));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p40_array_passed_to_fn() {
+    // Phase 14: pass [i64] as fn param + return processed value.
+    let r = compile_subset_program(
+        "full_p40",
+        "fn sum_array(arr: [i64]) -> i64 { let mut total = 0; let mut i = 0; while i < arr.len() { total = total + arr[i]; i = i + 1 }; return total } fn main() -> i64 { let xs: [i64] = [10, 20, 30, 40]; return sum_array(xs) }",
+    );
+    // 10+20+30+40 = 100
+    assert_eq!(r.status.code(), Some(100));
+}

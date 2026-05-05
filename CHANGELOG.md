@@ -2,6 +2,91 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.2.0] — 2026-05-05 Dynamic [i64] arrays (R14 second increment)
+
+Second R14 increment toward full Stage 2 triple-test. fj-source
+compiler now handles `[i64]` dynamic arrays — `[]`/`[a,b,c]` literals,
+`.push(x)`, `.len()`, `arr[i]` indexing, plus typed array params
+`fn f(arr: [i64])`. Real array-processing programs like `sum_first_n`
+compile end-to-end.
+
+### Added (Phase 14)
+
+- **C runtime helpers** in emit_preamble:
+  ```c
+  typedef struct _FjArr { int64_t* data; size_t len; size_t cap; } _FjArr;
+  static _FjArr* _fj_arr_new(void);
+  static _FjArr* _fj_arr_push_i64(_FjArr* a, int64_t v);
+  static int64_t _fj_arr_get_i64(_FjArr* a, int64_t i);
+  static int64_t _fj_arr_len(_FjArr* a);
+  ```
+  Reference semantics. Realloc-doubling growth from 8 elements.
+  No bounds checking (Stage 2 prerequisite, not production).
+
+- **Type annotation parsing for `[T]`** in let + fn params.
+  `let arr: [i64] = []` and `fn f(arr: [i64])` now parse correctly.
+
+- **Array literal AST**: `BEGIN_ARRAY_LIT <expr>* END_ARRAY_LIT`.
+  Codegen lowers to chained `_fj_arr_push_i64(_fj_arr_new(), e0)...`
+
+- **Array indexing AST**: `BEGIN_INDEX <name> <idx_expr> END_INDEX`.
+  Codegen lowers to `_fj_arr_get_i64(arr, i)`.
+
+- **Method dispatch updated**: `.push(x)` → `_fj_arr_push_i64`,
+  `.len()` → `_fj_arr_len`. emit_let infers `_FjArr*` for both
+  `BEGIN_ARRAY_LIT` first-atom AND `.push`-returning method calls
+  (chainable rebind: `arr = arr.push(x)`).
+
+### sum_first_n headline (P39)
+
+```fj
+fn sum_first_n(n: i64) -> i64 {
+    let mut arr: [i64] = []
+    let mut i = 0
+    while i < n { arr = arr.push(i); i = i + 1 }
+    let mut total = 0; let mut k = 0
+    while k < arr.len() { total = total + arr[k]; k = k + 1 }
+    return total
+}
+```
+`sum_first_n(5)` → 0+1+2+3+4 = 10 via gcc-compiled binary.
+
+### Test suite: 35 → 40
+
+```
+P36 empty array + .len()                → 0
+P37 [1,2,3,4,5].len()                   → 5
+P38 .push() + arr[i] index              → 18
+P39 sum_first_n via array (headline)    → 10
+P40 fn param [i64] + array as arg       → 100
+```
+
+**40/40 PASS in 0.22s.**
+
+### Stage 2 R14 progress
+
+| Increment | Phase | Status |
+|---|---|---|
+| String scalars + .substring + ==/!= → strcmp | 13 | ✅ |
+| Dynamic [i64] arrays + push + len + index | 14 | ✅ |
+| String arrays [str] + concat! macro + to_int/to_string | 15 | ⏳ |
+| Self-compile stdlib/parser_ast | 16 | ⏳ |
+| Stage 1 == Stage 2 byte-equal | 17 | ⏳ |
+
+### Honest scope (CLAUDE.md §6.6 R3)
+
+- ✅ `[i64]` arrays work end-to-end
+- ❌ `[str]` arrays NOT yet — Phase 15 work
+- ❌ Multi-dimensional `[[i64]]` — type parser handles, codegen doesn't
+- ❌ Array bounds checking — production gap
+- ❌ Memory free — R15 leak class persists
+- ❌ Polymorphic `len(x)` over strings/arrays — use `arr.len()` method form for arrays, `strlen(s)` for strings
+
+### Effort
+
+Phase 14 closed in ~1h Claude time vs ~3h budget (-67%). 16 self-host
+phases CLOSED cumulative; ~11h total across v33.4.0..v34.2.0.
+
 ## [v34.1.0] — 2026-05-05 String values + method calls (R14 first increment)
 
 First R14 increment toward full Stage 2 triple-test. fj-source
