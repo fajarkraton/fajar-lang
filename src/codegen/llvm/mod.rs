@@ -3468,6 +3468,32 @@ impl<'ctx> LlvmCompiler<'ctx> {
             function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
         }
 
+        // ── V33.P4.D Phase 8: --code-model kernel implies noredzone ─────
+        //
+        // x86_64 SysV ABI normally permits "red zone" — the 128 bytes
+        // below %rsp that leaf functions can use without adjusting %rsp.
+        // In KERNEL MODE this is unsafe: when an interrupt fires,
+        // hardware pushes the IRQ frame BELOW the current %rsp, which
+        // would corrupt anything stashed in the red zone. Compilers
+        // typically expose `-mno-red-zone` for kernel builds; gcc on
+        // fajaros's vecmat_v8.c already uses this. fj-lang's
+        // `--code-model kernel` should imply the same — without it,
+        // any kernel-mode fn LLVM optimized into using stack slots like
+        // -0x38(%rsp) would silently corrupt under IRQ load.
+        //
+        // Witnessed: G-M Phase 4.D-A2 km_vecmat_packed_v8 fault. LLVM
+        // O2 spilled out_addr to -0x38(%rsp) (red zone). Timer IRQ
+        // fired during the inner loop, hardware pushed RIP/CS/RFLAGS/
+        // RSP/SS at %rsp-40, overwriting -0x38(%rsp). When v8 loaded
+        // back from -0x38(%rsp), it got a garbage pointer; storing
+        // sum to that pointer #GP-faulted at RIP=0x164C8A.
+        if matches!(self.target_config.code_model, LlvmCodeModel::Kernel) {
+            let noredzone_kind =
+                inkwell::attributes::Attribute::get_named_enum_kind_id("noredzone");
+            let noredzone = self.context.create_enum_attribute(noredzone_kind, 0);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, noredzone);
+        }
+
         // ── V33.P4.D: @no_vectorize modifier (Gap G-K closure) ──────────
         // Promoted from primary annotation to modifier so it can stack
         // with @kernel/@unsafe primaries (canonical Phase 4.1 recipe).
