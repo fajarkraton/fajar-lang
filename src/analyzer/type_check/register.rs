@@ -1350,6 +1350,9 @@ impl TypeChecker {
             ("read_file", vec![Type::Str], Type::Unknown),
             ("write_file", vec![Type::Str, Type::Str], Type::Unknown),
             ("append_file", vec![Type::Str, Type::Str], Type::Unknown),
+            // Self-host Stage 2 helper: shell out to a command, return exit code (i64).
+            // Stdout/stderr inherit parent. -1 if launch failed.
+            ("run_command", vec![Type::Str], Type::I64),
             ("read_binary", vec![Type::Str], Type::Unknown),
             (
                 "write_binary",

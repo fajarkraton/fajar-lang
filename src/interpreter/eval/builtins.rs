@@ -2227,6 +2227,38 @@ impl Interpreter {
                     ),
                 }
             }
+            // Self-host bootstrap helper: run a shell command, return exit code as i64.
+            // Stdout/stderr inherit the parent process. Uses /bin/sh -c on Unix,
+            // cmd.exe /C on Windows. Returns -1 if launch failed.
+            "run_command" => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                match &args[0] {
+                    Value::Str(cmd) => {
+                        let result = if cfg!(windows) {
+                            std::process::Command::new("cmd").args(["/C", cmd]).status()
+                        } else {
+                            std::process::Command::new("/bin/sh")
+                                .args(["-c", cmd])
+                                .status()
+                        };
+                        let code = match result {
+                            Ok(status) => status.code().unwrap_or(-1) as i64,
+                            Err(_) => -1,
+                        };
+                        Ok(Value::Int(code))
+                    }
+                    _ => Err(RuntimeError::TypeError(
+                        "run_command(cmd: str) requires a string command".into(),
+                    )
+                    .into()),
+                }
+            }
             "append_file" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {

@@ -1300,6 +1300,7 @@ impl Interpreter {
             "append_file",
             "read_binary",
             "write_binary",
+            "run_command",
             "file_exists",
             // MNIST builtins
             "mnist_load_images",

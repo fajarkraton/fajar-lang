@@ -1,0 +1,80 @@
+// examples/selfhost_compiler.fj — Stage-1.5 self-host driver.
+//
+// Reads a target .fj source from disk, runs the lex+parse+codegen
+// pipeline, writes the emitted C to disk, and shells out to gcc to
+// produce a native binary. Then prints the binary's exit code.
+//
+// Usage (after concatenating stdlib/codegen.fj + parser_ast.fj +
+// codegen_driver.fj on top of this file):
+//   fj run combined_selfhost.fj <target.fj> <output.bin>
+//
+// In practice we hardcode the I/O paths since fj-lang doesn't yet
+// expose argv to fj-source. This driver demonstrates the mechanics.
+
+fn compile_one(src_path: str, c_path: str, bin_path: str) -> i64 {
+    // Step 1: read source
+    let src_result = read_file(src_path)
+    let src = match src_result {
+        Ok(content) => content,
+        Err(err) => {
+            println(f"read_file failed for {src_path}: {err}")
+            return -1
+        }
+    }
+
+    // Step 2: tokenize + parse to AST + emit C
+    let ast = parse_to_ast(src)
+    let c_code = emit_program(ast)
+
+    // Step 3: write generated C to disk
+    let write_result = write_file(c_path, c_code)
+    match write_result {
+        Ok(_) => println(f"wrote C to {c_path}"),
+        Err(err) => {
+            println(f"write_file failed: {err}")
+            return -1
+        }
+    }
+
+    // Step 4: shell out to gcc
+    let cmd = concat!("gcc ", c_path, " -o ", bin_path)
+    let cc_rc = run_command(cmd)
+    if cc_rc != 0 {
+        println(f"gcc failed: rc={cc_rc}")
+        return -1
+    }
+
+    // Step 5: run the binary, return its exit code
+    run_command(bin_path)
+}
+
+fn main() {
+    // Demo: compile a small target program.
+    let target_src = "fn main() -> i64 { let x = 7; let y = 35; return x + y }"
+    let src_path = "/tmp/selfhost_target.fj"
+    let c_path = "/tmp/selfhost_target.c"
+    let bin_path = "/tmp/selfhost_target.bin"
+
+    // Write target source to disk first
+    let w = write_file(src_path, target_src)
+    match w {
+        Ok(_) => println("target source written"),
+        Err(e) => {
+            println(f"target write failed: {e}")
+            return
+        }
+    }
+
+    // Run the chain
+    let rc = compile_one(src_path, c_path, bin_path)
+    println(f"binary exit code: {rc} (expected 42 = 7+35)")
+
+    // Reproducibility: run a second time, expect same C output
+    let rc2 = compile_one(src_path, c_path, bin_path)
+    println(f"second run exit code: {rc2}")
+    if rc == rc2 {
+        println("REPRODUCIBLE: both runs produced the same exit code")
+    } else {
+        println("NON-REPRODUCIBLE")
+    }
+}

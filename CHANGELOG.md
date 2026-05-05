@@ -2,6 +2,74 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.0.0] — 2026-05-05 Stage 2 Lite reproducibility (major version)
+
+**Major version bump.** v33.x was the Stage-1-Full self-host arc.
+v34.0.0 begins the Stage 2 arc with "Stage 2 Lite" — the
+fj-source compiler chain proven deterministic + a full self-host
+driver pipeline working in pure fj.
+
+### Added (Stage 2 Lite)
+
+- **NEW fj-lang core builtin: `run_command(cmd: str) -> i64`** —
+  shells out via `/bin/sh -c` (Unix) or `cmd /C` (Windows), returns
+  exit code. Stdout/stderr inherit parent. Wired in interpreter
+  dispatch + analyzer signature + stdlib allowlist.
+- **`examples/selfhost_compiler.fj`** — full self-host driver in
+  pure fj-source: chains `read_file → parse_to_ast → emit_program
+  → write_file → run_command(gcc) → run_command(binary)`. Compiles
+  a target program from disk and runs the resulting binary.
+- **`tests/selfhost_stage2_reproducibility.rs`** — 6 reproducibility
+  tests, each compiles target via the chain TWICE and asserts:
+  - Generated C source bytes are byte-identical across runs
+  - gcc-compiled binary returns the expected exit code
+
+### 6 reproducibility tests, 6/6 PASS in 0.12s
+
+| # | Subject | RC |
+|---|---|---|
+| P1 | binop `x + y` | (chain only) |
+| P2 | if-else branch | 111 |
+| P3 | for loop sum 0..10 | 45 |
+| P4 | struct lit + field access | 30 |
+| P5 | match enum variants | 200 |
+| P6 | cross-fn + while (factorial) | 120 |
+
+### Honest scope (CLAUDE.md §6.6 R3)
+
+This is NOT a full Stage 2 triple-test. Standard triple-test pattern
+(Rust/GCC/Go/Zig): Stage 1 binary compiles target compiler's own
+source → Stage 2 binary; verify Stage 1 == Stage 2 byte-identical.
+
+For fj-lang to do this, codegen must lower fj-lang's
+interpreter-builtin features (`arr.push(x)`, `len(arr)`, `concat!`,
+`substring`, `to_int`, struct method calls) to C. The current
+codegen handles Stage-1 subset only — `stdlib/parser_ast.fj` +
+`codegen_driver.fj` use builtins not yet lowered.
+
+R14 NEW (codegen enrichment for self-compile) tracked as genuine
+separate scope, ~3-7d realistic. v34.0.0 ships the maximally-honest
+intermediate milestone: deterministic chain + full self-host driver
+plumbing.
+
+Binary BYTE equality is also NOT tested — gcc/linker embed
+path-dependent strings + timestamps that vary between runs even on
+identical input. Binary determinism is gcc/linker concern, not
+fj-source compiler concern. We test what's under our control:
+C source byte-equality + behavioral equivalence.
+
+### Effort
+
+Phase 12 closed in ~1h Claude time vs ~3-4h budget (-67% to -75%).
+Cumulative across v33.4.0..v34.0.0: ~9h, 14 self-host phases CLOSED.
+
+### Tests at v34.0.0
+
+- `cargo test --lib` ✅ 7629 PASS
+- `cargo test --test selfhost_stage1_subset` ✅ 5/5 PASS
+- `cargo test --test selfhost_stage1_full` ✅ 31/31 PASS
+- `cargo test --test selfhost_stage2_reproducibility` ✅ 6/6 PASS
+
 ## [v33.8.0] — 2026-05-05 match expression — fundamental control flow
 
 Closes the borderline-case from v33.7.x deferred list. `match` was
