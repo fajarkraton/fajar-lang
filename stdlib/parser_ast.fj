@@ -311,7 +311,9 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 return pr_err(a, p2, "ERR_STRUCT_LIT_RB")
             }
             // Field access: `obj.field` (potentially chained: `obj.f1.f2`)
-            // Emit IDENT then FIELD <name>; codegen_driver concatenates with `.`
+            // Method call: `obj.method(args)` (detect `(` after final field name)
+            // Emit IDENT + FIELD <name>* for field chain; if final segment is a
+            // method call, emit BEGIN_METHOD_CALL <obj_chain> <method> <args> END_METHOD_CALL
             let mut cur_pos = end
             let mut field_chain: [str] = []
             let mut cur_after = skip_ws(src, cur_pos)
@@ -323,6 +325,40 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 field_chain = field_chain.push(fname)
                 cur_pos = f_end
                 cur_after = skip_ws(src, cur_pos)
+            }
+            // Method call: last segment in chain followed by `(`
+            if to_int(len(field_chain)) > 0 && cur_after < n && src.substring(cur_after, cur_after + 1) == "(" {
+                let nchain = to_int(len(field_chain))
+                let method_name = field_chain[nchain - 1]
+                // Build subject expression: IDENT word + FIELD <f>* (excluding last)
+                let mut subj_a = ast.push("BEGIN_METHOD_CALL").push("IDENT").push(word)
+                let mut k = 0
+                while k < nchain - 1 {
+                    subj_a = subj_a.push("FIELD").push(field_chain[k])
+                    k = k + 1
+                }
+                subj_a = subj_a.push("METHOD").push(method_name)
+                // Parse args
+                let mut cur = cur_after + 1  // past `(`
+                cur = skip_ws(src, cur)
+                if cur < n && src.substring(cur, cur + 1) == ")" {
+                    return pr_ok(subj_a.push("END_METHOD_CALL"), cur + 1)
+                }
+                let mut more3 = true
+                while more3 {
+                    let r = parse_expr_ast(src, cur, subj_a)
+                    if r.error { return r }
+                    subj_a = r.ast
+                    cur = skip_ws(src, r.pos)
+                    if cur < n && src.substring(cur, cur + 1) == "," {
+                        cur = cur + 1
+                    } else { more3 = false }
+                }
+                cur = skip_ws(src, cur)
+                if cur < n && src.substring(cur, cur + 1) == ")" {
+                    return pr_ok(subj_a.push("END_METHOD_CALL"), cur + 1)
+                }
+                return pr_err(subj_a, cur, "ERR_METHOD_CALL_RP")
             }
             if to_int(len(field_chain)) > 0 {
                 let mut a = ast.push("IDENT").push(word)

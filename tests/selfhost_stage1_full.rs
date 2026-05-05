@@ -407,3 +407,48 @@ fn full_p31_match_in_arithmetic() {
     );
     assert_eq!(r.status.code(), Some(25));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p32_string_param_and_strlen() {
+    // Phase 13: string-typed fn param + strlen builtin.
+    let r = compile_subset_program(
+        "full_p32",
+        "fn lengthof(s: str) -> i64 { return strlen(s) } fn main() -> i64 { return lengthof(\"hello\") }",
+    );
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p33_string_eq_via_strcmp() {
+    // Phase 13: `s == "literal"` lowers to `_fj_streq(s, "literal")` (strcmp wrapper).
+    let r = compile_subset_program(
+        "full_p33",
+        "fn main() -> i64 { let s = \"hello\"; if s == \"hello\" { return 42 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p34_method_call_substring() {
+    // Phase 13: `s.substring(a, b)` lowers to `_fj_substring(s, a, b)` C runtime helper.
+    let r = compile_subset_program(
+        "full_p34",
+        "fn main() -> i64 { let s = \"hello world\"; let h = s.substring(0, 5); if h == \"hello\" { return 11 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(11));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p35_count_vowels_composability() {
+    // Phase 13 headline: real string-processing program combines all new features.
+    let r = compile_subset_program(
+        "full_p35",
+        "fn count_vowels(s: str) -> i64 { let mut count = 0; let mut i = 0; let n = strlen(s); while i < n { let c = s.substring(i, i + 1); if c == \"a\" { count = count + 1 }; if c == \"e\" { count = count + 1 }; if c == \"i\" { count = count + 1 }; if c == \"o\" { count = count + 1 }; if c == \"u\" { count = count + 1 }; i = i + 1 }; return count } fn main() -> i64 { return count_vowels(\"hello world\") }",
+    );
+    // 'hello world' has e, o, o = 3 vowels
+    assert_eq!(r.status.code(), Some(3));
+}

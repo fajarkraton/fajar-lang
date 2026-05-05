@@ -5,7 +5,7 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v34.0.0](https://img.shields.io/badge/release-v34.0.0_Stage_2_Lite_reproducibility-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v34.0.0)
+[![Release v34.1.0](https://img.shields.io/badge/release-v34.1.0_R14_string_values_+_method_calls-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v34.1.0)
 [![Tests](https://img.shields.io/badge/tests-10K%2B_CI_green-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Stress](https://img.shields.io/badge/stress-80%2F80_at_threads%3D64-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()

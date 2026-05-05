@@ -2,6 +2,85 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.1.0] — 2026-05-05 String values + method calls (R14 first increment)
+
+First R14 increment toward full Stage 2 triple-test. fj-source
+compiler now handles string-typed values, method calls
+(`s.substring(a, b)`), string equality lowered to strcmp. Real
+string-processing programs like `count_vowels` compile end-to-end.
+
+### Added (Phase 13)
+
+- **Method call AST shape** in parser_ast.fj:
+  `BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <name> <args>* END_METHOD_CALL`.
+  parse_primary_ast extended: after IDENT + field-chain, peek for
+  `(` to determine method call vs field access.
+- **C runtime helpers** in emit_preamble:
+  - `_fj_substring(s, start, end)` — allocates substring
+  - `_fj_streq(a, b)` — wraps `strcmp(a, b) == 0`
+  - `_fj_concat2(a, b)` — allocates concatenation
+- **`map_method` registry** in codegen_driver mapping fj method
+  names → C helpers (substring → _fj_substring, push/len reserved
+  for Phase 14).
+- **Type inference for str-returning methods**: `let h =
+  s.substring(0, 5)` now correctly emits `const char* h = _fj_substring(...)`
+  instead of inferring int64_t.
+- **String comparison lowering**: `s == "x"` / `s != "x"` lower to
+  `_fj_streq(s, "x")` / `(!_fj_streq(s, "x"))` when either operand
+  is a STR atom. Was previously emitting `==` (pointer compare in C).
+
+### count_vowels headline (P35)
+
+```fj
+fn count_vowels(s: str) -> i64 {
+    let mut count = 0; let mut i = 0; let n = strlen(s)
+    while i < n {
+        let c = s.substring(i, i + 1)
+        if c == "a" { count = count + 1 }
+        if c == "e" { count = count + 1 }
+        // ... i, o, u ...
+        i = i + 1
+    }
+    return count
+}
+```
+`count_vowels("hello world")` → 3 (e+o+o), via gcc-compiled binary.
+
+### Test suite expansion: 31 → 35
+
+```
+P32 string param + strlen           → 5
+P33 string eq via strcmp            → 42
+P34 method call .substring          → 11
+P35 count_vowels composability      → 3   (headline)
+```
+
+**35/35 PASS in 0.18s.**
+
+### Stage 2 R14 progress
+
+| Increment | Status |
+|---|---|
+| String values + ==, != + .substring | ✅ Phase 13 |
+| Dynamic arrays + .push + len | ⏳ Phase 14 |
+| concat! variadic macro | ⏳ Phase 14-15 |
+| to_int / to_string | ⏳ Phase 15 |
+| Self-compile of stdlib/parser_ast | ⏳ Phase 16 |
+| Stage 1 == Stage 2 byte-equal | ⏳ Phase 17 |
+
+### Honest scope (CLAUDE.md §6.6 R3)
+
+- ✅ String scalars + method calls + comparison work end-to-end
+- ❌ Memory leaks: `_fj_substring`/`_fj_concat2` malloc without
+  free. R15 NEW. Test programs are short-lived so acceptable;
+  production-grade needs arena allocator. Honest gap.
+- ❌ Full Stage 2 triple-test: still pending (Phases 14-17).
+
+### Effort
+
+Phase 13 closed in ~1h Claude time vs ~3-4h budget (-75%). 15
+self-host phases CLOSED cumulative; ~10h total across v33.4.0..v34.1.0.
+
 ## [v34.0.0] — 2026-05-05 Stage 2 Lite reproducibility (major version)
 
 **Major version bump.** v33.x was the Stage-1-Full self-host arc.

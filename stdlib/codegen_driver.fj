@@ -55,6 +55,50 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let enum_name = ast[pos + 1]
         let variant = ast[pos + 2]
         exr(concat!(enum_name, "_", variant), pos + 3)
+    } else if tag == "BEGIN_METHOD_CALL" {
+        // Shape: BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <method> <args...> END_METHOD_CALL
+        // Build subject expr from IDENT + optional FIELD chain.
+        let mut p2 = pos + 1
+        // Expect IDENT
+        if p2 >= n || ast[p2] != "IDENT" {
+            return exr("/* ERR_METHOD_CALL_NO_IDENT */", pos + 1)
+        }
+        let mut subj = ast[p2 + 1]
+        p2 = p2 + 2
+        // Field chain
+        while p2 + 1 < n && ast[p2] == "FIELD" {
+            subj = concat!(subj, ".", ast[p2 + 1])
+            p2 = p2 + 2
+        }
+        // Expect METHOD <name>
+        if p2 + 1 >= n || ast[p2] != "METHOD" {
+            return exr("/* ERR_METHOD_CALL_NO_METHOD */", p2)
+        }
+        let method = ast[p2 + 1]
+        p2 = p2 + 2
+        let helper = map_method(method)
+        // Collect arg expression strings
+        let mut args: [str] = []
+        while p2 < n && ast[p2] != "END_METHOD_CALL" {
+            let r = parse_expr_emit(ast, p2)
+            args = args.push(r.code)
+            p2 = r.pos
+        }
+        p2 = p2 + 1  // past END_METHOD_CALL
+        // Emit C call: helper(subj, arg1, arg2) if helper known, else fall back to method-as-fn-call
+        let fn_name = if helper == "" { concat!(subj, ".", method) } else { helper }
+        let mut argstr = subj
+        let mut k = 0
+        while k < to_int(len(args)) {
+            argstr = concat!(argstr, ", ", args[k])
+            k = k + 1
+        }
+        // For helper form, args go after subj. For fall-back fn-style (a.b(x)), C doesn't allow this — only emit when helper known.
+        if helper == "" {
+            exr(concat!("/* unknown method ", method, " */"), p2)
+        } else {
+            exr(concat!(helper, "(", argstr, ")"), p2)
+        }
     } else if tag == "BEGIN_MATCH" {
         // GCC statement expression: ({ int64_t _match_<pos>; if ... ; _match_<pos>; })
         // Pos used as unique suffix to avoid collisions across nested matches.
@@ -152,19 +196,53 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
 fn is_atom_start(tag: str) -> bool {
     tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
-    tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH"
+    tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL"
+}
+
+// Map fj method name → C runtime helper. Returns "" if no mapping known.
+// Caller emits the C helper definition in emit_preamble.
+fn map_method(method: str) -> str {
+    if method == "substring" { return "_fj_substring" }
+    if method == "push" { return "_fj_arr_push" }
+    if method == "len" { return "_fj_arr_len" }
+    ""
+}
+
+// Walk a BEGIN_METHOD_CALL block starting at pos and return the METHOD name.
+// Returns "" if not found.
+fn find_method_name(ast: [str], pos: i64) -> str {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_METHOD_CALL" { return "" }
+    let mut p = pos + 1
+    while p + 1 < n && ast[p] != "END_METHOD_CALL" {
+        if ast[p] == "METHOD" { return ast[p + 1] }
+        p = p + 1
+    }
+    ""
 }
 
 pub fn parse_expr_emit(ast: [str], pos: i64) -> ExprResult {
     let n = to_int(len(ast))
     if pos >= n { return exr("0", pos) }
 
+    let lhs_atom_tag = ast[pos]
     let lhs = parse_atom(ast, pos)
     let p = lhs.pos
     if p < n && is_atom_start(ast[p]) {
+        let rhs_atom_tag = ast[p]
         let rhs = parse_expr_emit(ast, p)
         if rhs.pos + 1 < to_int(len(ast)) && ast[rhs.pos] == "BINOP" {
             let op = ast[rhs.pos + 1]
+            // String comparison: if either operand is a STR atom, lower to strcmp.
+            let lhs_is_str = lhs_atom_tag == "STR"
+            let rhs_is_str = rhs_atom_tag == "STR"
+            let either_str = lhs_is_str || rhs_is_str
+            if either_str && op == "==" {
+                return exr(concat!("_fj_streq(", lhs.code, ", ", rhs.code, ")"), rhs.pos + 2)
+            }
+            if either_str && op == "!=" {
+                return exr(concat!("(!_fj_streq(", lhs.code, ", ", rhs.code, "))"), rhs.pos + 2)
+            }
             return exr(concat!("(", lhs.code, " ", op, " ", rhs.code, ")"), rhs.pos + 2)
         }
     }
@@ -220,8 +298,16 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         // Struct literal → use the struct type name
         let c_type = if first_atom == "FLOAT" { "double" }
                      else if first_atom == "STR" { "const char*" }
+                     else if first_atom == "BEGIN_METHOD_CALL" {
+                         // Heuristic: method calls returning string types
+                         // (substring, concat, etc.) — return const char*.
+                         // Find METHOD <name> in the chain and check.
+                         let method_name = find_method_name(ast, pos + 2)
+                         if method_name == "substring" { "const char*" }
+                         else if method_name == "concat" { "const char*" }
+                         else { "int64_t" }
+                     }
                      else if first_atom == "BEGIN_STRUCT_LIT" {
-                         // Struct type name lives at pos+3 (one past BEGIN_STRUCT_LIT)
                          if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "int64_t" }
                      }
                      else { "int64_t" }
