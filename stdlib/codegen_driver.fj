@@ -28,10 +28,25 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         exr(ast[pos + 1], pos + 2)
     } else if tag == "IDENT" {
         exr(ast[pos + 1], pos + 2)
+    } else if tag == "FLOAT" {
+        exr(ast[pos + 1], pos + 2)
+    } else if tag == "BOOL" {
+        exr(ast[pos + 1], pos + 2)
+    } else if tag == "STR" {
+        // C string literal: wrap in quotes
+        exr(concat!("\"", ast[pos + 1], "\""), pos + 2)
     } else if tag == "BEGIN_CALL" {
         let raw_name = ast[pos + 1]
-        // Map fj-lang builtins to their C runtime counterparts
-        let name = if raw_name == "println" { "fj_println_int" } else { raw_name }
+        // Map fj-lang builtins to their C runtime counterparts.
+        // For println, peek the first arg's tag to choose the right helper.
+        let mut name = raw_name
+        if raw_name == "println" {
+            let first_arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            if first_arg_tag == "STR" { name = "fj_println_str" }
+            else if first_arg_tag == "FLOAT" { name = "fj_println_float" }
+            else if first_arg_tag == "BOOL" { name = "fj_println_bool" }
+            else { name = "fj_println_int" }
+        }
         let mut p = pos + 2
         let mut args: [str] = []
         while p < n && ast[p] != "END_CALL" {
@@ -85,6 +100,8 @@ pub fn stmt_end(ast: [str], pos: i64) -> i64 {
                     else if tag == "BEGIN_LET" { "END_LET" }
                     else if tag == "BEGIN_EXPR_STMT" { "END_EXPR_STMT" }
                     else if tag == "BEGIN_IF" { "END_IF" }
+                    else if tag == "BEGIN_WHILE" { "END_WHILE" }
+                    else if tag == "BEGIN_ASSIGN" { "END_ASSIGN" }
                     else { "" }
     if end_token == "" { return pos + 1 }
     let mut p = pos + 1
@@ -116,8 +133,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 
     if tag == "BEGIN_LET" {
         let name = ast[pos + 1]
+        // Peek the first expression atom to infer C type
+        let first_atom = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
         let er = parse_expr_emit(ast, pos + 2)
-        return emit_let(cg, name, er.code)
+        let c_type = if first_atom == "FLOAT" { "double" }
+                     else if first_atom == "STR" { "const char*" }
+                     else { "int64_t" }
+        return emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))
     }
 
     if tag == "BEGIN_EXPR_STMT" {
@@ -147,17 +169,56 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         return emit_endif(cg2)
     }
 
+    if tag == "BEGIN_WHILE" {
+        let er = parse_expr_emit(ast, pos + 1)
+        let mut cg2 = emit_while(cg, er.code)
+        let mut p = er.pos
+        if ast[p] != "BEGIN_LOOP_BODY" { return cg2 }
+        p = p + 1
+        while p < n && ast[p] != "END_LOOP_BODY" {
+            cg2 = emit_stmt(ast, p, cg2)
+            p = stmt_end(ast, p)
+        }
+        return emit_endwhile(cg2)
+    }
+
+    if tag == "BEGIN_ASSIGN" {
+        let name = ast[pos + 1]
+        let er = parse_expr_emit(ast, pos + 2)
+        return emit_line(cg, concat!(name, " = ", er.code, ";"))
+    }
+
     cg
 }
 
 // Walk a function definition starting at pos.
+// AST shape: BEGIN_FN <name> BEGIN_PARAMS [<pname> <ptype>]* END_PARAMS
+//            RET_TYPE <ret_type> BEGIN_BODY <stmts> END_BODY END_FN
 pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     let n = to_int(len(ast))
     if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
     let name = ast[pos + 1]
-    let ret_type = ast[pos + 2]
-    let mut cg2 = emit_function(cg, name, [], ret_type)
-    let mut p = pos + 4  // past BEGIN_BODY
+    // Expect BEGIN_PARAMS at pos+2
+    let mut p = pos + 2
+    let mut param_pairs: [str] = []
+    if p < n && ast[p] == "BEGIN_PARAMS" {
+        p = p + 1
+        while p < n && ast[p] != "END_PARAMS" {
+            param_pairs = param_pairs.push(ast[p])  // name
+            param_pairs = param_pairs.push(ast[p + 1])  // type
+            p = p + 2
+        }
+        p = p + 1  // past END_PARAMS
+    }
+    // Expect RET_TYPE <type>
+    let mut ret_type = "i64"
+    if p < n && ast[p] == "RET_TYPE" {
+        ret_type = ast[p + 1]
+        p = p + 2
+    }
+    // Expect BEGIN_BODY
+    if p < n && ast[p] == "BEGIN_BODY" { p = p + 1 }
+    let mut cg2 = emit_function_typed(cg, name, param_pairs, ret_type)
     while p < n && ast[p] != "END_BODY" {
         cg2 = emit_stmt(ast, p, cg2)
         p = stmt_end(ast, p)
@@ -176,6 +237,71 @@ pub fn fn_end(ast: [str], pos: i64) -> i64 {
     p + 1
 }
 
+// Emit a `struct Name { ... }` as a C struct.
+// AST: BEGIN_STRUCT <name> [<fname> <ftype>]* END_STRUCT
+pub fn emit_struct(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_STRUCT" { return cg }
+    let name = ast[pos + 1]
+    let mut s = emit_line(cg, concat!("typedef struct {"))
+    s = indent(s)
+    let mut p = pos + 2
+    while p < n && ast[p] != "END_STRUCT" {
+        let fname = ast[p]
+        let ftype = ast[p + 1]
+        let c_t = map_type(ftype)
+        s = emit_line(s, concat!(c_t, " ", fname, ";"))
+        p = p + 2
+    }
+    s = dedent(s)
+    s = emit_line(s, concat!("} ", name, ";"))
+    s
+}
+
+pub fn struct_end(ast: [str], pos: i64) -> i64 {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_STRUCT" { return pos + 1 }
+    let mut p = pos + 1
+    while p < n && ast[p] != "END_STRUCT" {
+        p = p + 1
+    }
+    p + 1
+}
+
+// Emit a `enum Name { Variant, ... }` as a C enum.
+// AST: BEGIN_ENUM <name> <variants...> END_ENUM
+pub fn emit_enum(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_ENUM" { return cg }
+    let name = ast[pos + 1]
+    let mut s = emit_line(cg, concat!("typedef enum {"))
+    s = indent(s)
+    let mut p = pos + 2
+    let mut first = true
+    while p < n && ast[p] != "END_ENUM" {
+        let vname = ast[p]
+        let suffix = if first { "" } else { "," }
+        // Comma-on-previous-line style — easier: build all then emit
+        // For simplicity: emit each as `name_VARIANT,`
+        s = emit_line(s, concat!(name, "_", vname, ","))
+        first = false
+        p = p + 1
+    }
+    s = dedent(s)
+    s = emit_line(s, concat!("} ", name, ";"))
+    s
+}
+
+pub fn enum_end(ast: [str], pos: i64) -> i64 {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_ENUM" { return pos + 1 }
+    let mut p = pos + 1
+    while p < n && ast[p] != "END_ENUM" {
+        p = p + 1
+    }
+    p + 1
+}
+
 // Top-level emitter: walks the AST, returns full C source as a single string.
 pub fn emit_program(ast: [str]) -> str {
     let mut cg = new_codegen()
@@ -186,6 +312,12 @@ pub fn emit_program(ast: [str]) -> str {
         if ast[p] == "BEGIN_FN" {
             cg = emit_fn(ast, p, cg)
             p = fn_end(ast, p)
+        } else if ast[p] == "BEGIN_STRUCT" {
+            cg = emit_struct(ast, p, cg)
+            p = struct_end(ast, p)
+        } else if ast[p] == "BEGIN_ENUM" {
+            cg = emit_enum(ast, p, cg)
+            p = enum_end(ast, p)
         } else {
             p = p + 1
         }

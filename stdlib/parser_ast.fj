@@ -110,11 +110,38 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     if p >= n { return pr_err(ast, p, "ERR_EOF") }
 
     let c = src.substring(p, p + 1)
+    // String literal: "..."
+    if c == "\"" {
+        let mut q = p + 1
+        while q < n && src.substring(q, q + 1) != "\"" {
+            // Skip escaped chars
+            if src.substring(q, q + 1) == "\\" && q + 1 < n {
+                q = q + 2
+            } else {
+                q = q + 1
+            }
+        }
+        let body = src.substring(p + 1, q)
+        // Advance past closing quote
+        let end = if q < n { q + 1 } else { q }
+        let a = ast.push("STR").push(body)
+        return pr_ok(a, end)
+    }
     if is_digit_ast(c) {
-        let end = read_int(src, p)
-        let value = src.substring(p, end)
+        let int_end = read_int(src, p)
+        // Check for float (has `.` followed by more digits)
+        if int_end < n && src.substring(int_end, int_end + 1) == "." {
+            let after_dot = int_end + 1
+            if after_dot < n && is_digit_ast(src.substring(after_dot, after_dot + 1)) {
+                let float_end = read_int(src, after_dot)
+                let value = src.substring(p, float_end)
+                let a = ast.push("FLOAT").push(value)
+                return pr_ok(a, float_end)
+            }
+        }
+        let value = src.substring(p, int_end)
         let a = ast.push("INT").push(value)
-        pr_ok(a, end)
+        pr_ok(a, int_end)
     } else if is_alpha_ast(c) {
         let end = read_word(src, p)
         let word = src.substring(p, end)
@@ -147,6 +174,15 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 }
             }
         } else {
+            // Boolean literals
+            if word == "true" {
+                let a = ast.push("BOOL").push("1")
+                return pr_ok(a, end)
+            }
+            if word == "false" {
+                let a = ast.push("BOOL").push("0")
+                return pr_ok(a, end)
+            }
             let a = ast.push("IDENT").push(word)
             pr_ok(a, end)
         }
@@ -191,8 +227,13 @@ pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 // ─────────────────────────────────────────────────────────────────────
 
 pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
-    let p0 = skip_ws(src, pos)
+    let mut p0 = skip_ws(src, pos)
     let n = to_int(len(src))
+    if p0 >= n { return pr_ok(ast, p0) }
+    // Skip leading bare `;` (trailing separators between blocks)
+    while p0 < n && src.substring(p0, p0 + 1) == ";" {
+        p0 = skip_ws(src, p0 + 1)
+    }
     if p0 >= n { return pr_ok(ast, p0) }
 
     // Try `let`
@@ -279,6 +320,49 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         return pr_ok(a, p_after_then)
     }
 
+    // Try `while`
+    let after_while = expect_str(src, p0, "while")
+    if after_while > 0 {
+        let mut a = ast.push("BEGIN_WHILE")
+        let r = parse_expr_ast(src, after_while, a)
+        if r.error { return r }
+        a = r.ast
+        let p_brace = r.pos
+        let p_lb = expect_char(src, p_brace, "{")
+        if p_lb < 0 { return pr_err(a, p_brace, "ERR_WHILE_LB") }
+        a = a.push("BEGIN_LOOP_BODY")
+        let mut cur = skip_ws(src, p_lb)
+        while cur < n && src.substring(cur, cur + 1) != "}" {
+            let rs = parse_stmt_ast(src, cur, a)
+            if rs.error { return rs }
+            a = rs.ast
+            cur = skip_ws(src, rs.pos)
+        }
+        a = a.push("END_LOOP_BODY").push("END_WHILE")
+        return pr_ok(a, cur + 1)
+    }
+
+    // Try assignment statement: `name = expr` or `name op= expr`
+    // (This is needed because while loops typically have `i = i + 1` body.)
+    if is_alpha_ast(src.substring(p0, p0 + 1)) {
+        let id_end = read_word(src, p0)
+        let name = src.substring(p0, id_end)
+        let p_after_id = skip_ws(src, id_end)
+        // Check for `=` (single, not `==`)
+        if p_after_id < n && src.substring(p_after_id, p_after_id + 1) == "=" {
+            let next_ch = if p_after_id + 1 < n { src.substring(p_after_id + 1, p_after_id + 2) } else { "" }
+            if next_ch != "=" {
+                let mut a = ast.push("BEGIN_ASSIGN").push(name)
+                let r = parse_expr_ast(src, p_after_id + 1, a)
+                if r.error { return r }
+                a = r.ast.push("END_ASSIGN")
+                let mut p_after = skip_ws(src, r.pos)
+                if p_after < n && src.substring(p_after, p_after + 1) == ";" { p_after = p_after + 1 }
+                return pr_ok(a, p_after)
+            }
+        }
+    }
+
     // Default: expression-statement
     let mut a = ast.push("BEGIN_EXPR_STMT")
     let r = parse_expr_ast(src, p0, a)
@@ -293,6 +377,42 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 // Function and program entry
 // ─────────────────────────────────────────────────────────────────────
 
+// Parse parameter list `(name: type, name: type, ...)` starting at `p_lp` (just past `(`).
+// Returns (ast_with_BEGIN_PARAMS_block, pos_just_past_RP).
+fn parse_params(src: str, p_lp: i64, ast: [str]) -> ParseResult {
+    let n = to_int(len(src))
+    let mut a = ast.push("BEGIN_PARAMS")
+    let mut p = skip_ws(src, p_lp)
+    // Empty param list
+    if p < n && src.substring(p, p + 1) == ")" {
+        return pr_ok(a.push("END_PARAMS"), p + 1)
+    }
+    let mut more = true
+    while more {
+        p = skip_ws(src, p)
+        let id_end = read_word(src, p)
+        if id_end == p { return pr_err(a, p, "ERR_PARAM_NAME") }
+        let pname = src.substring(p, id_end)
+        let p_colon = expect_char(src, id_end, ":")
+        if p_colon < 0 { return pr_err(a, id_end, "ERR_PARAM_COLON") }
+        let p_t = skip_ws(src, p_colon)
+        let t_end = read_word(src, p_t)
+        if t_end == p_t { return pr_err(a, p_t, "ERR_PARAM_TYPE") }
+        let ptype = src.substring(p_t, t_end)
+        a = a.push(pname).push(ptype)
+        p = skip_ws(src, t_end)
+        if p < n && src.substring(p, p + 1) == "," {
+            p = p + 1
+        } else { more = false }
+    }
+    p = skip_ws(src, p)
+    if p < n && src.substring(p, p + 1) == ")" {
+        pr_ok(a.push("END_PARAMS"), p + 1)
+    } else {
+        pr_err(a, p, "ERR_PARAM_RP")
+    }
+}
+
 pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p0 = skip_ws(src, pos)
     let after_fn = expect_str(src, p0, "fn")
@@ -302,11 +422,13 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let name = src.substring(p1, id_end)
     let p_lp = expect_char(src, id_end, "(")
     if p_lp < 0 { return pr_err(ast, id_end, "ERR_FN_LP") }
-    let mut p = p_lp
     let n = to_int(len(src))
-    while p < n && src.substring(p, p + 1) != ")" { p = p + 1 }
-    if p >= n { return pr_err(ast, p, "ERR_FN_RP") }
-    p = p + 1
+    // BEGIN_FN <name> emit FIRST so params land between name and ret_type slot
+    let mut a = ast.push("BEGIN_FN").push(name)
+    let pr = parse_params(src, p_lp, a)
+    if pr.error { return pr }
+    a = pr.ast
+    let mut p = pr.pos
     let p_arrow = skip_ws(src, p)
     let mut ret_type = "i64"
     let after_arrow = expect_str(src, p_arrow, "->")
@@ -317,8 +439,8 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         p = t_end
     }
     let p_lb = expect_char(src, p, "{")
-    if p_lb < 0 { return pr_err(ast, p, "ERR_FN_BODY_LB") }
-    let mut a = ast.push("BEGIN_FN").push(name).push(ret_type).push("BEGIN_BODY")
+    if p_lb < 0 { return pr_err(a, p, "ERR_FN_BODY_LB") }
+    a = a.push("RET_TYPE").push(ret_type).push("BEGIN_BODY")
     let mut cur = skip_ws(src, p_lb)
     while cur < n && src.substring(cur, cur + 1) != "}" {
         let r = parse_stmt_ast(src, cur, a)
@@ -330,6 +452,85 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     pr_ok(a, cur + 1)
 }
 
+// Parse a `struct Name { f1: T1, f2: T2, ... }` declaration.
+pub fn parse_struct_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p0 = skip_ws(src, pos)
+    let after_kw = expect_str(src, p0, "struct")
+    if after_kw < 0 { return pr_err(ast, p0, "ERR_NO_STRUCT") }
+    let p1 = skip_ws(src, after_kw)
+    let id_end = read_word(src, p1)
+    let name = src.substring(p1, id_end)
+    let p_lb = expect_char(src, id_end, "{")
+    if p_lb < 0 { return pr_err(ast, id_end, "ERR_STRUCT_LB") }
+    let mut a = ast.push("BEGIN_STRUCT").push(name)
+    let n = to_int(len(src))
+    let mut p = skip_ws(src, p_lb)
+    // Empty body
+    if p < n && src.substring(p, p + 1) == "}" {
+        return pr_ok(a.push("END_STRUCT"), p + 1)
+    }
+    let mut more = true
+    while more {
+        p = skip_ws(src, p)
+        let f_end = read_word(src, p)
+        if f_end == p { return pr_err(a, p, "ERR_STRUCT_FIELD_NAME") }
+        let fname = src.substring(p, f_end)
+        let p_colon = expect_char(src, f_end, ":")
+        if p_colon < 0 { return pr_err(a, f_end, "ERR_STRUCT_FIELD_COLON") }
+        let p_t = skip_ws(src, p_colon)
+        let t_end = read_word(src, p_t)
+        if t_end == p_t { return pr_err(a, p_t, "ERR_STRUCT_FIELD_TYPE") }
+        let ftype = src.substring(p_t, t_end)
+        a = a.push(fname).push(ftype)
+        p = skip_ws(src, t_end)
+        if p < n && src.substring(p, p + 1) == "," {
+            p = p + 1
+        } else { more = false }
+    }
+    p = skip_ws(src, p)
+    if p < n && src.substring(p, p + 1) == "}" {
+        pr_ok(a.push("END_STRUCT"), p + 1)
+    } else {
+        pr_err(a, p, "ERR_STRUCT_RB")
+    }
+}
+
+// Parse `enum Name { Variant1, Variant2, ... }`. (Subset: no payloads.)
+pub fn parse_enum_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p0 = skip_ws(src, pos)
+    let after_kw = expect_str(src, p0, "enum")
+    if after_kw < 0 { return pr_err(ast, p0, "ERR_NO_ENUM") }
+    let p1 = skip_ws(src, after_kw)
+    let id_end = read_word(src, p1)
+    let name = src.substring(p1, id_end)
+    let p_lb = expect_char(src, id_end, "{")
+    if p_lb < 0 { return pr_err(ast, id_end, "ERR_ENUM_LB") }
+    let mut a = ast.push("BEGIN_ENUM").push(name)
+    let n = to_int(len(src))
+    let mut p = skip_ws(src, p_lb)
+    if p < n && src.substring(p, p + 1) == "}" {
+        return pr_ok(a.push("END_ENUM"), p + 1)
+    }
+    let mut more = true
+    while more {
+        p = skip_ws(src, p)
+        let v_end = read_word(src, p)
+        if v_end == p { return pr_err(a, p, "ERR_ENUM_VARIANT") }
+        let vname = src.substring(p, v_end)
+        a = a.push(vname)
+        p = skip_ws(src, v_end)
+        if p < n && src.substring(p, p + 1) == "," {
+            p = p + 1
+        } else { more = false }
+    }
+    p = skip_ws(src, p)
+    if p < n && src.substring(p, p + 1) == "}" {
+        pr_ok(a.push("END_ENUM"), p + 1)
+    } else {
+        pr_err(a, p, "ERR_ENUM_RB")
+    }
+}
+
 pub fn parse_to_ast(src: str) -> [str] {
     let mut a: [str] = []
     let mut p: i64 = 0
@@ -337,6 +538,21 @@ pub fn parse_to_ast(src: str) -> [str] {
     while p < n {
         p = skip_ws(src, p)
         if p >= n { break }
+        // Dispatch on top-level keyword
+        if expect_str(src, p, "struct") > 0 {
+            let r = parse_struct_ast(src, p, a)
+            a = r.ast
+            if r.error { return a }
+            p = r.pos
+            continue
+        }
+        if expect_str(src, p, "enum") > 0 {
+            let r = parse_enum_ast(src, p, a)
+            a = r.ast
+            if r.error { return a }
+            p = r.pos
+            continue
+        }
         let r = parse_fn_ast(src, p, a)
         a = r.ast
         if r.error { return a }

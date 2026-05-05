@@ -151,3 +151,101 @@ fn full_p8_subtract_and_compare() {
     );
     assert_eq!(r.status.code(), Some(99));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p9_cross_fn_call() {
+    // R8 closure: multi-fn programs with typed parameters and cross-fn call.
+    let r = compile_subset_program(
+        "full_p9",
+        "fn add(a: i64, b: i64) -> i64 { return a + b } fn main() -> i64 { return add(2, 3) }",
+    );
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p10_while_loop() {
+    let r = compile_subset_program(
+        "full_p10",
+        "fn main() -> i64 { let mut i = 0; while i < 5 { i = i + 1 }; return i }",
+    );
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p11_str_literal_println() {
+    let r = compile_subset_program(
+        "full_p11",
+        "fn main() -> i64 { println(\"hello\"); return 0 }",
+    );
+    assert_eq!(r.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&r.stdout).trim(), "hello");
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p12_bool_literal_branch() {
+    let r = compile_subset_program(
+        "full_p12",
+        "fn main() -> i64 { let flag = true; if flag { return 1 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p13_float_literal() {
+    // Float literal is stored in a typed `double` variable.
+    // Stage-1 ret type stays i64, returning a constant.
+    let r = compile_subset_program(
+        "full_p13",
+        "fn main() -> i64 { let pi = 3.14; let s = \"hi\"; return 7 }",
+    );
+    assert_eq!(r.status.code(), Some(7));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p14_cross_fn_with_loop() {
+    // Combine cross-fn + while-loop: factorial via accumulator.
+    let r = compile_subset_program(
+        "full_p14",
+        "fn fact(n: i64) -> i64 { let mut acc = 1; let mut i = 1; while i <= n { acc = acc * i; i = i + 1 }; return acc } fn main() -> i64 { return fact(5) }",
+    );
+    assert_eq!(r.status.code(), Some(120));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p15_struct_decl() {
+    // Struct declaration emits valid C; main returns a literal.
+    let r = compile_subset_program(
+        "full_p15",
+        "struct Point { x: i64, y: i64 } fn main() -> i64 { return 13 }",
+    );
+    assert_eq!(r.status.code(), Some(13));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p16_enum_decl() {
+    // Enum declaration emits typedef enum; main returns a literal.
+    let r = compile_subset_program(
+        "full_p16",
+        "enum Color { Red, Green, Blue } fn main() -> i64 { return 17 }",
+    );
+    assert_eq!(r.status.code(), Some(17));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p17_struct_and_enum_together() {
+    // Both decls + a main that uses neither (decls are valid C just by themselves).
+    let r = compile_subset_program(
+        "full_p17",
+        "struct V { a: i64 } enum E { X, Y } fn main() -> i64 { return 19 }",
+    );
+    assert_eq!(r.status.code(), Some(19));
+}

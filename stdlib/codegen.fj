@@ -155,6 +155,33 @@ pub fn emit_function(state: CodegenState, name: str, params: [str], ret_type: st
     s
 }
 
+/// Emits a function definition with typed parameters.
+/// `param_pairs` is a flat array: [name, type, name, type, ...]
+/// Used by the AST-driven codegen_driver (Phase 8+).
+pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], ret_type: str) -> CodegenState {
+    let mut s = state
+    let c_ret = map_type(ret_type)
+
+    let mut param_str = ""
+    let pn = to_int(len(param_pairs))
+    let mut i = 0
+    let mut first = true
+    while i + 1 < pn {
+        if !first { param_str = concat!(param_str, ", ") }
+        let pname = param_pairs[i]
+        let ptype = param_pairs[i + 1]
+        let c_t = map_type(ptype)
+        param_str = concat!(param_str, c_t, " ", pname)
+        first = false
+        i = i + 2
+    }
+    if pn == 0 { param_str = "void" }
+
+    s = emit_line(s, concat!(c_ret, " ", name, "(", param_str, ") {"))
+    s = indent(s)
+    s
+}
+
 /// Closes a function definition
 pub fn emit_function_end(state: CodegenState) -> CodegenState {
     let mut s = dedent(state)

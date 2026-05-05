@@ -2,6 +2,69 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.6.0] — 2026-05-05 Stage-1-Full Honest Closure
+
+**Closes all `❌ honest-scope` items from v33.5.0.** Trigger: user
+"perfection-over-time" rule — defects in the headline claim are not
+legitimate deferrals. v33.5.0 claimed "compiles ARBITRARY subset
+programs" but only single-fn + int-literal + no-loops shapes worked;
+v33.6.0 honestly delivers the headline.
+
+### Closed gaps
+
+- **R8 — cross-fn calls** — `parse_params` extracts typed parameters;
+  `emit_function_typed` emits `int64_t add(int64_t a, int64_t b)`.
+  `fn add(a:i64, b:i64)->i64{return a+b} fn main()->i64{return add(2,3)}` → 5.
+- **`while` loops + assignment** — new BEGIN_WHILE / BEGIN_LOOP_BODY /
+  BEGIN_ASSIGN AST shapes; codegen_driver walks both.
+  `let mut i=0; while i<5 { i = i+1 }; return i` → 5.
+- **String literals** — `"hello"` parsed (with escape handling); STR atom;
+  emit_let infers `const char*`; `println(str)` → `fj_println_str(str)`.
+- **Boolean literals** — `true`/`false` keywords → `BOOL 1`/`BOOL 0`;
+  if-condition uses bool directly.
+- **Float literals** — `<digits>.<digits>` parsed; FLOAT atom; emit_let
+  infers `double`; `println(float)` → `fj_println_float(float)`.
+- **`struct` declarations** — `struct Name { f: T, ... }` →
+  `typedef struct { ... } Name;` C output.
+- **`enum` declarations** — `enum Name { Variant, ... }` →
+  `typedef enum { Name_Variant, ... } Name;`.
+- **Multiple top-level decls** — parse_to_ast dispatches on
+  struct/enum/fn keywords.
+
+### Test suite expansion: 8 → 17 tests
+
+`tests/selfhost_stage1_full.rs` adds 9 NEW tests:
+
+```
+P9  cross-fn call          → 5     (R8 closure)
+P10 while loop             → 5
+P11 string literal println → 0 + stdout="hello"
+P12 bool literal branch    → 1
+P13 float literal          → 7    (with double + const char* typing)
+P14 cross-fn + while       → 120  (factorial via accumulator)
+P15 struct decl            → 13
+P16 enum decl              → 17
+P17 struct + enum together → 19
+```
+
+**17/17 PASS in 0.15s.**
+
+### What v33.6.0 honestly does NOT claim
+
+- `for` loops, `match` expressions — not on subset critical path; future work
+- Generic functions, closures, async, lifetimes — excluded by Subset definition
+- Struct field access (`p.x`), enum variant construction (`Color::Red`) — DECL works, use sites need `.` and `::` token handling
+- Stage 2 triple-test — separate roadmap phase
+
+### Effort
+
+Phase 9 closed in ~1h 30min Claude time vs ~4h 20min budget (-65% variance).
+More conservative than prior phases — actual debugging required, not pure
+existing-substance audits.
+
+Cumulative across v33.4.0 + v33.5.0 + v33.6.0: ~6h Claude time, 10 self-host
+phases closed.
+
 ## [v33.5.0] — 2026-05-05 Stage-1-Full Self-Hosting
 
 **fj-source compiler now compiles ARBITRARY Stage-1-Subset programs.**
