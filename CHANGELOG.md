@@ -2,6 +2,98 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.3.0] — 2026-05-05 FajarQuant Algorithm 100% Fajar Lang
+
+**FajarQuant algorithm crate ported to pure Fajar Lang stdlib.** 7
+algorithm modules (~2,649 LOC Rust) now available as `stdlib/fajarquant.fj`
+(986 LOC, 39 fj functions). Bit-equivalent verified vs Rust at full f64
+precision on 70+ I/O pairs across all 7 modules. Sister Rust crate
+continues to ship for `crates.io` distribution.
+
+### Added (stdlib/fajarquant.fj — 39 functions, 7 modules)
+
+- **`hierarchical`** — Exponential bit-decay schedule (`bits_for_age`,
+  `schedule_total_bits`, `schedule_avg_bits`, `schedule_bits_saved`,
+  `schedule_savings_percent`)
+- **`scalar_baseline`** — V31 ternary BitLinear (`decode_ternary_byte`,
+  `pack_ternary_v31`, `bitlinear_packed_scalar`, `absmax_quantize_i8`)
+- **`fused_attention`** — Codebook attention (`codebook_dot_product`,
+  `codebook_weighted_sum`, `fused_quantized_attention`)
+- **`turboquant`** — LCG PRNG + Beta sampling + Lloyd-Max codebook
+  (`lcg_next_state`, `lcg_to_f64`, `beta_pdf`, `find_bucket`,
+  `sample_beta_distribution`, `lloyd_max`, `quantize_mse_indices`,
+  `dequantize_mse_centroids`)
+- **`kivi`** — KIVI baseline per-channel/per-token quant
+  (`kivi_quantize_keys`, `kivi_dequantize_keys`, `kivi_quantize_values`,
+  `kivi_dequantize_values`, `kivi_memory_bytes`)
+- **`adaptive`** — PCA via power iteration (`compute_covariance`,
+  `matvec`, `vec_l2_norm`, `vec_dot`, `gram_schmidt`,
+  `power_iteration_eigenvectors`, `compute_pca_rotation`)
+- **Helpers** — `tensor_init_with_1d`, `tensor_init_with_2d`
+  (equivalent to ndarray Array1/Array2::from_shape_fn)
+
+### Added (compiler capability)
+
+- **Analyzer registers `wrapping_*` + `saturating_*` integer arithmetic
+  builtins** (`wrapping_mul`, `wrapping_add`, `wrapping_sub`,
+  `saturating_mul`, `saturating_add`, `saturating_sub`). Interpreter
+  always dispatched these correctly, but analyzer was missing the
+  signature registration. Surfaced by FajarQuant LCG port (R4 risk
+  closure). 6 lines in `src/analyzer/type_check/register.rs`.
+
+### Bit-equivalent verification
+
+Cross-validation against Rust reference outputs at FULL f64 precision
+(16-decimal exact match, not tolerance-banded):
+
+- hierarchical: 9 outputs (5 bits_for_age + 4 total_bits)
+- scalar_baseline: 10 outputs (decode + bitlinear + absmax_quant)
+- fused_attention: 3 outputs incl. `1.1165579545845175` exact 16/16
+- turboquant: 19 outputs (LCG sequence + sample_beta + lloyd_max
+  centroids/boundaries on 10K samples × 5 iter)
+- kivi: 30 outputs (3 scales + 3 zeros + 12 indices + 12 dequant)
+- adaptive: 18 outputs (9 cov + 9 eigenvectors with deterministic
+  perturbation init)
+
+Total **70+ bit-exact I/O pairs** — full f64 precision, no FP tolerance
+needed.
+
+### Added (regression tests)
+
+- `tests/fajarquant_fj_stdlib_bit_equivalent.rs` — 10 integration tests
+  exercising stdlib/fajarquant.fj on canonical I/O pairs. ~40 assertions
+  total. Catches numeric drift if anything in the algorithm or fj-lang
+  numerical stack regresses.
+- Existing 33 fajarquant integration tests (3 files) continue to pass —
+  Rust crate path coexists with new fj-lang stdlib path.
+
+### Effort
+
+Phase 0-7 cumulative: **~115 minutes Claude time** vs original plan
+estimate **10.5-17 days** (-99% variance). Pattern: Rust algorithm code
+mechanically translatable; fj-lang's 62 tensor builtins + math
+primitives + iterator-style closures cover everything; LCG seed
+reproducibility verified at scale (10K samples × 5 iter); PCA via
+power iteration with deterministic perturbation eliminates sign
+ambiguity.
+
+### What's NOT in this release (out of scope, locked-in)
+
+- **Python training scripts** (`python/phase_d`, `python/phase_e`) —
+  PyTorch/HuggingFace ecosystem, different lifecycle phase from
+  inference. Stays in fajarquant repo.
+- **Vendored microsoft/BitNet TL2 C++ kernel** (`cpu_kernels/tl2.rs`,
+  1,067 LOC; `tl2_encoder.rs`, 435 LOC) — F.11 chain PERMANENT-DEFERRED.
+- **Rust crate deprecation** — `fajarquant 0.4.0` continues to ship for
+  `crates.io` distribution / Rust ecosystem interop.
+
+### Stats
+
+- Tests: 8974 lib + 2498+ integ + 14 doc + **10 NEW fajarquant_fj_stdlib_bit_equivalent**
+  ≈ **11,496+ total**, 0 fail / 0 flake
+- 0 clippy / 0 fmt / 0 production unwrap / 0 rustdoc warning
+- stdlib/fajarquant.fj: 986 LOC, 39 fj functions
+
 ## [v33.2.0] — 2026-05-05 FAJAROS_100PCT_FJ_PLAN TERMINAL COMPLETE
 
 **TRUE 100% Fajar Lang.** ZERO non-fj LOC (.S/.c/.cpp) in fajaros-x86
