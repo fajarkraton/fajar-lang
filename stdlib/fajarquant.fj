@@ -756,3 +756,231 @@
     let zeros_bytes: i64 = (d_head + seq_len) * 8   // f64 zeros
     indices_bytes + scales_bytes + zeros_bytes
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 4 — adaptive.rs port (~518 LOC)
+// PCA-based rotation via power iteration with deflation + Gram-Schmidt.
+// FajarQuant Innovation 1: replaces TurboQuant random orthogonal rotation.
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/adaptive.rs lines 60-167
+// Algorithm: pure power iteration (no LAPACK/SVD).
+// Per Phase 0 finding: linalg "gap" was illusory; this is mechanical.
+
+/// Compute data covariance matrix C = (1/N) * Σ x_i x_i^T.
+/// Vectors are stored as flat row-major: vectors[t*dim + i].
+/// Returns flat row-major [dim*dim] f64.
+/// Mirrors Rust `compute_covariance`.
+@device fn compute_covariance(vectors_flat: [f64], n_vectors: i64, dim: i64) -> [f64] {
+    let n_f: f64 = n_vectors as f64
+    let mut cov: [f64] = []
+    let mut z: i64 = 0
+    while z < dim * dim {
+        cov = cov.push(0.0)
+        z = z + 1
+    }
+    let mut t: i64 = 0
+    while t < n_vectors {
+        let row_start: i64 = t * dim
+        let mut i: i64 = 0
+        while i < dim {
+            let xi: f64 = vectors_flat[row_start + i]
+            let mut j: i64 = i
+            while j < dim {
+                let xj: f64 = vectors_flat[row_start + j]
+                let v: f64 = xi * xj
+                cov[i * dim + j] = cov[i * dim + j] + v
+                if i != j {
+                    cov[j * dim + i] = cov[j * dim + i] + v
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        t = t + 1
+    }
+    let mut k: i64 = 0
+    while k < dim * dim {
+        cov[k] = cov[k] / n_f
+        k = k + 1
+    }
+    cov
+}
+
+/// Matrix-vector product: out = M * v where M is dim×dim flat row-major.
+@device fn matvec(matrix: [f64], v: [f64], dim: i64) -> [f64] {
+    let mut out: [f64] = []
+    let mut i: i64 = 0
+    while i < dim {
+        let mut s: f64 = 0.0
+        let row_start: i64 = i * dim
+        let mut j: i64 = 0
+        while j < dim {
+            s = s + matrix[row_start + j] * v[j]
+            j = j + 1
+        }
+        out = out.push(s)
+        i = i + 1
+    }
+    out
+}
+
+/// L2 norm of a vector.
+@device fn vec_l2_norm(v: [f64], dim: i64) -> f64 {
+    let mut sum_sq: f64 = 0.0
+    let mut i: i64 = 0
+    while i < dim {
+        sum_sq = sum_sq + v[i] * v[i]
+        i = i + 1
+    }
+    sqrt(sum_sq)
+}
+
+/// Dot product of two vectors of size dim.
+@device fn vec_dot(a: [f64], b: [f64], dim: i64) -> f64 {
+    let mut s: f64 = 0.0
+    let mut i: i64 = 0
+    while i < dim {
+        s = s + a[i] * b[i]
+        i = i + 1
+    }
+    s
+}
+
+/// Gram-Schmidt orthogonalization of rows of a dim×dim matrix (row-major flat).
+/// Mirrors Rust `gram_schmidt`.
+@device fn gram_schmidt(matrix: [f64], dim: i64) -> [f64] {
+    let mut m: [f64] = []
+    let mut z: i64 = 0
+    while z < dim * dim {
+        m = m.push(matrix[z])
+        z = z + 1
+    }
+    let mut i: i64 = 0
+    while i < dim {
+        // Subtract projections onto rows j < i
+        let mut j: i64 = 0
+        while j < i {
+            // dot = Σ_k m[i,k] * m[j,k]
+            let mut dot_v: f64 = 0.0
+            let mut k: i64 = 0
+            while k < dim {
+                dot_v = dot_v + m[i * dim + k] * m[j * dim + k]
+                k = k + 1
+            }
+            // m[i] -= dot * m[j]
+            k = 0
+            while k < dim {
+                m[i * dim + k] = m[i * dim + k] - dot_v * m[j * dim + k]
+                k = k + 1
+            }
+            j = j + 1
+        }
+        // Normalize row i
+        let mut sum_sq: f64 = 0.0
+        let mut k2: i64 = 0
+        while k2 < dim {
+            sum_sq = sum_sq + m[i * dim + k2] * m[i * dim + k2]
+            k2 = k2 + 1
+        }
+        let norm: f64 = sqrt(sum_sq)
+        if norm > 1.0e-12 {
+            k2 = 0
+            while k2 < dim {
+                m[i * dim + k2] = m[i * dim + k2] / norm
+                k2 = k2 + 1
+            }
+        }
+        i = i + 1
+    }
+    m
+}
+
+/// Power iteration with deflation. Returns d×d orthogonal eigenvector matrix
+/// (rows are eigenvectors of `cov` ordered by eigenvalue descending).
+/// `cov` is dim×dim flat row-major. `iterations` typically 50.
+/// Mirrors Rust `power_iteration_eigenvectors`.
+@device fn power_iteration_eigenvectors(cov: [f64], dim: i64, iterations: i64) -> [f64] {
+    // eigenvectors: dim × dim, init zero
+    let mut eigenvectors: [f64] = []
+    let mut z: i64 = 0
+    while z < dim * dim {
+        eigenvectors = eigenvectors.push(0.0)
+        z = z + 1
+    }
+    // deflated = cov.clone()
+    let mut deflated: [f64] = []
+    z = 0
+    while z < dim * dim {
+        deflated = deflated.push(cov[z])
+        z = z + 1
+    }
+
+    let mut k: i64 = 0
+    while k < dim {
+        // Initialize v = e_{k mod dim} + perturbation
+        let mut v: [f64] = []
+        let mut i: i64 = 0
+        while i < dim {
+            let mut val: f64 = 0.0
+            if (k % dim) == i { val = 1.0 }
+            // perturbation: 0.01 * ((i + k*7) % 13) / 13
+            let pert: f64 = 0.01 * (((i + k * 7) % 13) as f64) / 13.0
+            val = val + pert
+            v = v.push(val)
+            i = i + 1
+        }
+
+        // Power iteration: v ← deflated * v ; normalize
+        let mut iter: i64 = 0
+        while iter < iterations {
+            let new_v: [f64] = matvec(deflated, v, dim)
+            let norm: f64 = vec_l2_norm(new_v, dim)
+            if norm > 1.0e-12 {
+                let mut nv: [f64] = []
+                let mut p: i64 = 0
+                while p < dim {
+                    nv = nv.push(new_v[p] / norm)
+                    p = p + 1
+                }
+                v = nv
+            } else {
+                iter = iterations  // break
+            }
+            iter = iter + 1
+        }
+
+        // Store v as row k of eigenvectors
+        let mut p2: i64 = 0
+        while p2 < dim {
+            eigenvectors[k * dim + p2] = v[p2]
+            p2 = p2 + 1
+        }
+
+        // Deflate: C ← C - λ * v * v^T  where λ = v^T * (deflated * v)
+        let cv: [f64] = matvec(deflated, v, dim)
+        let eigenvalue: f64 = vec_dot(cv, v, dim)
+        let mut a: i64 = 0
+        while a < dim {
+            let mut b: i64 = 0
+            while b < dim {
+                deflated[a * dim + b] = deflated[a * dim + b] - eigenvalue * v[a] * v[b]
+                b = b + 1
+            }
+            a = a + 1
+        }
+        k = k + 1
+    }
+
+    // Re-orthogonalize via Gram-Schmidt
+    gram_schmidt(eigenvectors, dim)
+}
+
+/// Compute PCA rotation from calibration vectors.
+/// vectors_flat: [n_vectors * dim] row-major.
+/// Returns dim × dim orthogonal rotation flat row-major.
+/// Mirrors Rust `compute_pca_rotation`.
+@device fn compute_pca_rotation(vectors_flat: [f64], n_vectors: i64, dim: i64) -> [f64] {
+    let cov: [f64] = compute_covariance(vectors_flat, n_vectors, dim)
+    power_iteration_eigenvectors(cov, dim, 50)
+}
