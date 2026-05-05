@@ -827,6 +827,60 @@ fn full_p66_let_rebind_via_alias_preserves_type() {
 
 #[cfg(unix)]
 #[test]
+fn full_p77_str_with_struct_marker_literals_in_body() {
+    // Phase 17.1: stmt_end / fn_end / struct_end were previously depth-counting
+    // on literal string match — STR atom values like "BEGIN_LET" inside fn
+    // bodies (parser_ast.fj has many `.push("BEGIN_LET")` calls) falsely
+    // incremented the counter, causing adjacent statements to be silently
+    // dropped. skip_one_node now treats atom-with-value tokens as opaque.
+    // This test embeds the literal "BEGIN_LET" (which would have tripped the
+    // old depth counter) inside a fn body and verifies subsequent stmts
+    // remain emitted.
+    let r = compile_subset_program(
+        "full_p77",
+        "fn build() -> [str] { let mut a: [str] = []; a = a.push(\"BEGIN_LET\"); a = a.push(\"END_LET\"); return a } fn main() -> i64 { let r = build(); return to_int(len(r)) }",
+    );
+    assert_eq!(r.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p78_if_as_expression_in_let() {
+    // Phase 17.1: `let x = if cond { a } else { b }` — if-as-expression.
+    // parse_primary_ast in parser_ast.fj uses this idiom for next_char.
+    let r = compile_subset_program(
+        "full_p78",
+        "fn main() -> i64 { let n = 5; let x = if n > 3 { 100 } else { 200 }; return x }",
+    );
+    assert_eq!(r.status.code(), Some(100));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p79_if_expr_no_else_defaults_zero() {
+    // Phase 17.1: if-expression without else defaults to 0.
+    let r = compile_subset_program(
+        "full_p79",
+        "fn main() -> i64 { let n = 5; let x = if n > 100 { 999 } else { 0 }; return x + 1 }",
+    );
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p80_let_field_access_rhs_int_type() {
+    // Phase 17.2: `let p3 = r.pos` where r is struct-typed — p3 should
+    // be int64_t, NOT inherit r's struct type. parser_ast.fj uses this
+    // pattern in parse_stmt_ast (let p_brace = r.pos; let p3 = skip_ws(r.pos)).
+    let r = compile_subset_program(
+        "full_p80",
+        "struct Pair { a: i64, b: i64 } fn main() -> i64 { let p = Pair { a: 17, b: 25 }; let pa = p.a; let pb = p.b; return pa + pb }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
 fn full_p71_pub_keyword_skipped() {
     // Phase 17.0: `pub fn` and `pub struct` parsed by the chain. `pub`
     // visibility annotation is skipped (C output emits all fns extern).

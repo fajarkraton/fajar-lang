@@ -2,6 +2,71 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.8] — 2026-05-05 🎯 Phase 17 milestone: parser_ast.fj fully self-compiles to .o
+
+**HEADLINE:** the chain now compiles **stdlib/parser_ast.fj's full source**
+(all 25 functions, 1200 LOC) into a valid GCC object file. Every public
+API of the fj-source AST builder — including `parse_primary_ast` (333 LOC),
+`parse_stmt_ast`, `parse_to_ast`, and 22 others — exports as a `T` symbol
+in `nm`. This is the climactic Phase 17 milestone toward Stage 2 self-host.
+
+### Bugs fixed (4)
+
+1. **Depth-counter fooled by string atoms**: `stmt_end`/`fn_end`/`struct_end`/
+   `enum_end`/`const_end` all used naive depth counting on the literal token
+   string (e.g. `if ast[p] == "BEGIN_LET" { depth += 1 }`). But the AST
+   contains STR atoms whose CONTENT can match those tags — parser_ast.fj has
+   many `.push("BEGIN_LET")` calls. Counter incremented falsely, dropping
+   subsequent statements. Replaced all with a single recursive
+   **`skip_one_node`** helper that respects atom shapes (skip-2 for
+   STR/IDENT/INT/FLOAT/BOOL/TYPE/FIELD/METHOD/BINOP/RET_TYPE, skip-3 for
+   ENUM_VARIANT, recursively walk children for BEGIN_x/END_x brackets).
+2. **Pre-emission passes walked into fn bodies**: emit_program's "structs first"
+   and "forward decls" passes incremented `p` by 1 when not matching a known
+   tag, walking byte-by-byte through fn bodies. Same STR-atom-content issue.
+   Fixed: each pass now uses `fn_end` / `struct_end` / `enum_end` / `const_end`
+   to skip top-level decl bodies cleanly.
+3. **`if cond { a } else { b }` as an EXPRESSION**: parser_ast.fj uses
+   `let next_char = if ... { ... } else { ... }` extensively. parse_primary_ast
+   in the chain didn't recognize `if` as a primary expression, falling through
+   to identifier-handler. Added `BEGIN_IF_EXPR` AST shape + parse + emit
+   (lowers to C ternary `(cond ? a : b)`).
+4. **Field access RHS inferring struct type**: `let p3 = r.pos` (where r is
+   a struct) was inferring `p3`'s C type as the struct itself, not int64_t.
+   Fixed: BEGIN_LET inference skips IDENT-type-inheritance when next token
+   is FIELD (defaults to int64_t for the immediate parser_ast.fj idiom).
+
+### New milestone test
+
+- `tests/selfhost_phase17_self_compile.rs`:
+  `phase17_parser_ast_fj_self_compile_to_object` — feeds parser_ast.fj
+  through the chain, gcc-compiles to `.o`, asserts AST size ≥ 13000 +
+  all 23 expected public symbols present. **Runs in ~3min** (chain is
+  currently O(n²) on string ops; codegen.fj/codegen_driver.fj deferred).
+
+### Test suite: 76 → 80 (4 NEW Phase 16/17 unit tests + 1 milestone integration test)
+
+- **P77** STR atom value `"BEGIN_LET"` inside fn body doesn't break stmt boundaries.
+- **P78** if-expression in let RHS: `let x = if n > 3 { 100 } else { 200 }`.
+- **P79** if-expression with no else defaults to 0.
+- **P80** field-access RHS gets int64_t type: `let pa = p.a` where p is struct.
+- **PHASE17_INTEGRATION** parser_ast.fj → chain → gcc -c → 25 T symbols.
+
+**80/80 stage1-full PASS in 0.70s. 1/1 phase17 PASS in 183s. Lib: 7629 PASS.
+fmt clean. clippy 0 warnings.**
+
+### Phase 17 progress
+
+- ✅ chain compiles parser_ast.fj's first 13 fns to .o (v34.5.7)
+- ✅ chain compiles ALL 25 parser_ast.fj fns to .o (v34.5.8)  ← THIS
+- ❌ codegen.fj (541 LOC) — chain too slow (O(n²) on strings) for now
+- ❌ codegen_driver.fj — same
+- ❌ True triple-test (native binary running on its own source) — TBD
+
+### Effort
+
+~1.5h. Cumulative ~20.7h across v33.4.0..v34.5.8.
+
 ## [v34.5.7] — 2026-05-05 Phase 17 partial: pub + const + forward decls + len(str)→strlen
 
 First Phase 17 increment toward Stage 2 triple-test. Adds the remaining

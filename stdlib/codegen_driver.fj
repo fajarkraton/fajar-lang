@@ -179,6 +179,26 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         } else {
             exr(concat!(helper, "(", argstr, ")"), p2)
         }
+    } else if tag == "BEGIN_IF_EXPR" {
+        // Phase 17.1: lower `if cond { a } else { b }` (expr form) to a C
+        // ternary `(cond ? a : b)`. No-else form gets default `0`.
+        let r_cond = parse_expr_emit(ast, vars, pos + 1)
+        let mut p2 = r_cond.pos
+        if p2 >= n || ast[p2] != "BEGIN_THEN_EXPR" {
+            return exr("/* ERR_IF_EXPR_THEN */", p2)
+        }
+        let r_then = parse_expr_emit(ast, vars, p2 + 1)
+        p2 = r_then.pos
+        if p2 < n && ast[p2] == "END_THEN_EXPR" { p2 = p2 + 1 }
+        let mut else_code = "0"
+        if p2 < n && ast[p2] == "BEGIN_ELSE_EXPR" {
+            let r_else = parse_expr_emit(ast, vars, p2 + 1)
+            else_code = r_else.code
+            p2 = r_else.pos
+            if p2 < n && ast[p2] == "END_ELSE_EXPR" { p2 = p2 + 1 }
+        }
+        if p2 < n && ast[p2] == "END_IF_EXPR" { p2 = p2 + 1 }
+        exr(concat!("(", r_cond.code, " ? ", r_then.code, " : ", else_code, ")"), p2)
     } else if tag == "BEGIN_MATCH" {
         // GCC statement expression: ({ int64_t _match_<pos>; if ... ; _match_<pos>; })
         // Pos used as unique suffix to avoid collisions across nested matches.
@@ -342,7 +362,7 @@ fn is_atom_start(tag: str) -> bool {
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
     tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL" ||
     tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX" || tag == "BEGIN_MACRO_CALL" ||
-    tag == "BEGIN_UNARY"
+    tag == "BEGIN_UNARY" || tag == "BEGIN_IF_EXPR"
 }
 
 // Phase 15.1: linear scan of [name, type, name, type, ...] table.
@@ -480,29 +500,75 @@ pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64) -> ExprResult {
     }
 }
 
-// Compute end position of a statement starting at pos (skipping nested).
-pub fn stmt_end(ast: [str], pos: i64) -> i64 {
+// Phase 17.1: skip exactly ONE node starting at pos and return the
+// position AFTER it. Handles atom-value pairs (STR, IDENT, INT, etc. —
+// skip 2), ENUM_VARIANT (skip 3), single-tag markers (ARG_END,
+// FOR_RANGE_TO — skip 1), and BEGIN_x/END_x bracketed nodes (recursively
+// walk nested children until the matching END_x).
+//
+// CRITICAL: depth-counting on the BEGIN_x literal token is UNSAFE because
+// STR atom values inside fj source (e.g. parser_ast.fj has many
+// `.push("BEGIN_LET")` calls) will be stored verbatim in the AST and
+// would falsely match the BEGIN_x tag, throwing depth off and dropping
+// adjacent statements. Recursive node-walk via this helper avoids that.
+pub fn skip_one_node(ast: [str], pos: i64) -> i64 {
     let n = to_int(len(ast))
     if pos >= n { return n }
-    let tag = ast[pos]
-    let end_token = if tag == "BEGIN_RET" { "END_RET" }
-                    else if tag == "BEGIN_LET" { "END_LET" }
-                    else if tag == "BEGIN_EXPR_STMT" { "END_EXPR_STMT" }
-                    else if tag == "BEGIN_IF" { "END_IF" }
-                    else if tag == "BEGIN_WHILE" { "END_WHILE" }
-                    else if tag == "BEGIN_FOR" { "END_FOR" }
-                    else if tag == "BEGIN_ASSIGN" { "END_ASSIGN" }
+    let t = ast[pos]
+    // Skip-2 atom-with-value tokens
+    if t == "INT" || t == "FLOAT" || t == "BOOL" || t == "STR" || t == "IDENT" ||
+       t == "TYPE" || t == "FIELD" || t == "METHOD" || t == "BINOP" ||
+       t == "RET_TYPE" {
+        return pos + 2
+    }
+    // Skip-3 (ENUM_VARIANT enum_name variant_name)
+    if t == "ENUM_VARIANT" { return pos + 3 }
+    // Brackets — recursively skip children until matching end token
+    let end_token = if t == "BEGIN_LET" { "END_LET" }
+                    else if t == "BEGIN_RET" { "END_RET" }
+                    else if t == "BEGIN_EXPR_STMT" { "END_EXPR_STMT" }
+                    else if t == "BEGIN_IF" { "END_IF" }
+                    else if t == "BEGIN_WHILE" { "END_WHILE" }
+                    else if t == "BEGIN_FOR" { "END_FOR" }
+                    else if t == "BEGIN_ASSIGN" { "END_ASSIGN" }
+                    else if t == "BEGIN_FN" { "END_FN" }
+                    else if t == "BEGIN_STRUCT" { "END_STRUCT" }
+                    else if t == "BEGIN_ENUM" { "END_ENUM" }
+                    else if t == "BEGIN_CONST" { "END_CONST" }
+                    else if t == "BEGIN_CALL" { "END_CALL" }
+                    else if t == "BEGIN_METHOD_CALL" { "END_METHOD_CALL" }
+                    else if t == "BEGIN_STRUCT_LIT" { "END_STRUCT_LIT" }
+                    else if t == "BEGIN_INDEX" { "END_INDEX" }
+                    else if t == "BEGIN_ARRAY_LIT" { "END_ARRAY_LIT" }
+                    else if t == "BEGIN_MACRO_CALL" { "END_MACRO_CALL" }
+                    else if t == "BEGIN_UNARY" { "END_UNARY" }
+                    else if t == "BEGIN_MATCH" { "END_MATCH" }
+                    else if t == "BEGIN_IF_EXPR" { "END_IF_EXPR" }
+                    else if t == "BEGIN_THEN" { "END_THEN" }
+                    else if t == "BEGIN_ELSE" { "END_ELSE" }
+                    else if t == "BEGIN_THEN_EXPR" { "END_THEN_EXPR" }
+                    else if t == "BEGIN_ELSE_EXPR" { "END_ELSE_EXPR" }
+                    else if t == "BEGIN_LOOP_BODY" { "END_LOOP_BODY" }
+                    else if t == "BEGIN_BODY" { "END_BODY" }
+                    else if t == "BEGIN_PARAMS" { "END_PARAMS" }
+                    else if t == "BEGIN_ARM" { "END_ARM" }
+                    else if t == "BEGIN_DEFAULT" { "END_DEFAULT" }
                     else { "" }
-    if end_token == "" { return pos + 1 }
+    if end_token == "" {
+        // Plain single tag (ARG_END, FOR_RANGE_TO, FOR_RANGE_TO_INCL, etc.)
+        return pos + 1
+    }
     let mut p = pos + 1
-    let mut depth = 1
-    while p < n && depth > 0 {
-        if ast[p] == tag { depth = depth + 1 }
-        else if ast[p] == end_token { depth = depth - 1 }
-        if depth == 0 { return p + 1 }
-        p = p + 1
+    while p < n {
+        if ast[p] == end_token { return p + 1 }
+        p = skip_one_node(ast, p)
     }
     p
+}
+
+// Compute end position of a statement starting at pos (skipping nested).
+pub fn stmt_end(ast: [str], pos: i64) -> i64 {
+    skip_one_node(ast, pos)
 }
 
 // Emit a single statement; pos advancement is the caller's job (via stmt_end).
@@ -559,9 +625,15 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             else if first_atom == "IDENT" {
                 // Phase 16.3: rebind via simple alias `let mut a = v`. Look up
                 // v's recorded fj-type so the new let inherits it.
+                // Phase 17.2: ONLY when there's no FIELD chain — `let p3 = r.pos`
+                // shouldn't inherit r's struct type for p3 (p3 is the field's
+                // value type, typically int64_t for .pos in parser_ast.fj).
                 let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
-                let t = lookup_var_type_in_table(vars, src_name)
-                if t != "" { fj_type = t }
+                let next_after_ident = if p_after_name + 2 < to_int(len(ast)) { ast[p_after_name + 2] } else { "" }
+                if next_after_ident != "FIELD" {
+                    let t = lookup_var_type_in_table(vars, src_name)
+                    if t != "" { fj_type = t }
+                }
             }
         }
         let er = parse_expr_emit(ast, vars, p_after_name)
@@ -597,9 +669,15 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                      else if first_atom == "IDENT" {
                          // Phase 16.3: rebind via alias — derive C type from
                          // the source ident's recorded fj-type.
+                         // Phase 17.2: skip when FIELD follows (field access
+                         // resolves to a different type than the ident itself).
                          let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
-                         let t = lookup_var_type_in_table(vars, src_name)
-                         if t != "" { map_type_ctx(t, cg) } else { "int64_t" }
+                         let next_after_ident = if p_after_name + 2 < to_int(len(ast)) { ast[p_after_name + 2] } else { "" }
+                         if next_after_ident == "FIELD" { "int64_t" }
+                         else {
+                             let t = lookup_var_type_in_table(vars, src_name)
+                             if t != "" { map_type_ctx(t, cg) } else { "int64_t" }
+                         }
                      }
                      else { "int64_t" }
         }
@@ -783,13 +861,7 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 
 // Find end of a fn def starting at pos.
 pub fn fn_end(ast: [str], pos: i64) -> i64 {
-    let n = to_int(len(ast))
-    if pos >= n || ast[pos] != "BEGIN_FN" { return pos + 1 }
-    let mut p = pos + 1
-    while p < n && ast[p] != "END_FN" {
-        p = p + 1
-    }
-    p + 1
+    skip_one_node(ast, pos)
 }
 
 // Emit a `struct Name { ... }` as a C struct.
@@ -814,13 +886,7 @@ pub fn emit_struct(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 }
 
 pub fn struct_end(ast: [str], pos: i64) -> i64 {
-    let n = to_int(len(ast))
-    if pos >= n || ast[pos] != "BEGIN_STRUCT" { return pos + 1 }
-    let mut p = pos + 1
-    while p < n && ast[p] != "END_STRUCT" {
-        p = p + 1
-    }
-    p + 1
+    skip_one_node(ast, pos)
 }
 
 // Emit a `enum Name { Variant, ... }` as a C enum.
@@ -848,13 +914,7 @@ pub fn emit_enum(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 }
 
 pub fn enum_end(ast: [str], pos: i64) -> i64 {
-    let n = to_int(len(ast))
-    if pos >= n || ast[pos] != "BEGIN_ENUM" { return pos + 1 }
-    let mut p = pos + 1
-    while p < n && ast[p] != "END_ENUM" {
-        p = p + 1
-    }
-    p + 1
+    skip_one_node(ast, pos)
 }
 
 // Phase 17.0: emit `const NAME: TYPE = VALUE` as `static const TYPE NAME = VALUE;`
@@ -870,13 +930,7 @@ pub fn emit_const(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 }
 
 pub fn const_end(ast: [str], pos: i64) -> i64 {
-    let n = to_int(len(ast))
-    if pos >= n || ast[pos] != "BEGIN_CONST" { return pos + 1 }
-    let mut p = pos + 1
-    while p < n && ast[p] != "END_CONST" {
-        p = p + 1
-    }
-    p + 1
+    skip_one_node(ast, pos)
 }
 
 // Top-level emitter: walks the AST, returns full C source as a single string.
@@ -912,6 +966,8 @@ pub fn emit_program(ast: [str]) -> str {
     cg = emit_preamble(cg)
     // Phase 17.0: emit struct typedefs FIRST so all subsequent decls (fn
     // signatures + bodies) can refer to them.
+    // Phase 17.1: skip fn bodies — they contain STR-literal tokens like
+    // "BEGIN_STRUCT" that would otherwise be misread as top-level decls.
     let mut p_st = 0
     while p_st < n {
         if ast[p_st] == "BEGIN_STRUCT" {
@@ -920,17 +976,29 @@ pub fn emit_program(ast: [str]) -> str {
         } else if ast[p_st] == "BEGIN_ENUM" {
             cg = emit_enum(ast, p_st, cg)
             p_st = enum_end(ast, p_st)
+        } else if ast[p_st] == "BEGIN_FN" {
+            p_st = fn_end(ast, p_st)
+        } else if ast[p_st] == "BEGIN_CONST" {
+            p_st = const_end(ast, p_st)
         } else {
             p_st = p_st + 1
         }
     }
     // Phase 17.0: emit forward declarations of every fn so out-of-order
     // calls (e.g. parse_match_ast → parse_expr_ast defined later) compile.
+    // Same body-skip fix as struct pass — STR literal "BEGIN_FN" appears
+    // inside parser_ast.fj fn bodies.
     let mut p_fd = 0
     while p_fd < n {
         if ast[p_fd] == "BEGIN_FN" {
             cg = emit_fn_forward_decl(ast, p_fd, cg)
             p_fd = fn_end(ast, p_fd)
+        } else if ast[p_fd] == "BEGIN_STRUCT" {
+            p_fd = struct_end(ast, p_fd)
+        } else if ast[p_fd] == "BEGIN_ENUM" {
+            p_fd = enum_end(ast, p_fd)
+        } else if ast[p_fd] == "BEGIN_CONST" {
+            p_fd = const_end(ast, p_fd)
         } else {
             p_fd = p_fd + 1
         }
