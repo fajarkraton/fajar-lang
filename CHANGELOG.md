@@ -2,6 +2,76 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.3.1] — 2026-05-05 Phase 15 honest closure: var-type tracking
+
+Patch follow-up to v34.3.0 per perfection-over-time rule. v34.3.0
+shipped `[str]` arrays as PARTIAL — `arr[i]` always dispatched to
+`_fj_arr_get_i64` and `arr.push(IDENT)` defaulted to int helper
+when IDENT was str-typed. Two defects in headline-claim "[str]
+arrays". v34.3.1 closes both via var-type tracking.
+
+### Added (Phase 15.1)
+
+- **`var_types: [str]` field on CodegenState** — parallel
+  `[name, type, name, type, ...]` array. Updated all reconstruction
+  sites in codegen.fj (new_codegen, emit_line, indent, dedent,
+  fresh_tmp).
+- **3 helpers**: `record_var_type(state, name, type)`,
+  `clear_var_types(state)`, `lookup_var_type(state, name)`.
+- **`vars: [str]` threaded through `parse_atom` + `parse_expr_emit`**
+  — added as second arg in both signatures. Updated all 19 call
+  sites to pass `vars`.
+- **emit_fn clears var_types at fn boundary** + populates from fn
+  parameters (records each param's fj-type). Var scoping is per-fn,
+  preventing leak across functions.
+- **emit_let derives fj-type** (declared annotation wins, else
+  atom-based inference: STR → "str", INT → "i64", FLOAT → "f64",
+  BOOL → "bool", BEGIN_ARRAY_LIT → "[i64]" default, BEGIN_METHOD_CALL
+  with substring/concat → "str", BEGIN_MACRO_CALL → "str") and calls
+  `record_var_type` after emit.
+- **BEGIN_INDEX dispatch by lookup**: `arr[i]` → `_fj_arr_get_str`
+  if `arr` declared as `[str]`, else `_fj_arr_get_i64`.
+- **BEGIN_METHOD_CALL .push(IDENT) dispatch by lookup**: when arg
+  atom is IDENT and lookup returns "str" → `_fj_arr_push_str`,
+  else fall through to existing atom-based dispatch.
+
+### Bug fixed during refactor
+
+- Initial sed replacement injected `vars` param BEFORE `pos` in
+  function signature but kept call sites passing `pos` first. Caused
+  16 SE004 type mismatches. Resolved by reordering signature to
+  `(ast: [str], vars: [str], pos: i64)` matching call site order.
+
+### Test suite: 45 → 48 (3 NEW defect-closure tests)
+
+```
+P46 arr[i] auto-dispatch for [str]      → 7  (arr[1] = "bar")
+P47 .push(IDENT) where IDENT is str     → 9  (arr[0] = "alpha")
+P48 [str] in fn param + arr[i]          → 11 (passes through fn boundary)
+```
+
+**48/48 PASS in 0.27s.**
+
+### Defects closed (Phase 15 honest audit per perfection-over-time)
+
+- ✅ `arr[i]` for `[str]` auto-dispatched to `_fj_arr_get_str`
+  (defect #1 from audit)
+- ✅ `arr.push(IDENT)` where IDENT is str-typed → `_fj_arr_push_str`
+  (defect #2 from audit)
+
+### Honest scope still pending
+
+- ❌ Memory leaks (R15) — persists, OK for short-lived test programs
+- ❌ `concat!` int args type-error — string-only by design
+- ❌ Strict aliasing warnings under `-Wstrict-aliasing=2`
+- ❌ Phase 16 self-compile of stdlib/parser_ast.fj — separate scope
+
+### Effort
+
+Phase 15.1 closure ~45min Claude time. The bulk of work was
+mechanical signature threading (19 call sites) + sed misorder bug
+fix. Phase 15 is now honestly 100%.
+
 ## [v34.3.0] — 2026-05-05 concat! + conversions + [str] arrays (R14 third)
 
 Third R14 increment toward full Stage 2 triple-test. Adds `concat!`

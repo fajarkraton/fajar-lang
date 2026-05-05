@@ -43,7 +43,10 @@ struct CodegenState {
     // Whether we're inside main()
     in_main: bool,
     // Error count
-    errors: i64
+    errors: i64,
+    // Phase 15.1 var-type tracking: parallel array of [name, type, name, type, ...]
+    // Reset at fn boundary; used for arr[i] / .push(IDENT) element-type dispatch.
+    var_types: [str]
 }
 
 // Creates a new codegen state
@@ -53,7 +56,8 @@ fn new_codegen() -> CodegenState {
         indent: 0,
         next_tmp: 0,
         in_main: false,
-        errors: 0
+        errors: 0,
+        var_types: []
     }
 }
 
@@ -70,7 +74,8 @@ fn emit_line(state: CodegenState, line: str) -> CodegenState {
         indent: state.indent,
         next_tmp: state.next_tmp,
         in_main: state.in_main,
-        errors: state.errors
+        errors: state.errors,
+        var_types: state.var_types
     }
 }
 
@@ -81,7 +86,8 @@ fn indent(state: CodegenState) -> CodegenState {
         indent: state.indent + 1,
         next_tmp: state.next_tmp,
         in_main: state.in_main,
-        errors: state.errors
+        errors: state.errors,
+        var_types: state.var_types
     }
 }
 
@@ -92,7 +98,8 @@ fn dedent(state: CodegenState) -> CodegenState {
         indent: state.indent - 1,
         next_tmp: state.next_tmp,
         in_main: state.in_main,
-        errors: state.errors
+        errors: state.errors,
+        var_types: state.var_types
     }
 }
 
@@ -103,8 +110,45 @@ fn fresh_tmp(state: CodegenState) -> CodegenState {
         indent: state.indent,
         next_tmp: state.next_tmp + 1,
         in_main: state.in_main,
-        errors: state.errors
+        errors: state.errors,
+        var_types: state.var_types
     }
+}
+
+// Phase 15.1 var-type tracking helpers
+pub fn record_var_type(state: CodegenState, name: str, c_type: str) -> CodegenState {
+    let new_vt = state.var_types.push(name).push(c_type)
+    CodegenState {
+        lines: state.lines,
+        indent: state.indent,
+        next_tmp: state.next_tmp,
+        in_main: state.in_main,
+        errors: state.errors,
+        var_types: new_vt
+    }
+}
+
+pub fn clear_var_types(state: CodegenState) -> CodegenState {
+    CodegenState {
+        lines: state.lines,
+        indent: state.indent,
+        next_tmp: state.next_tmp,
+        in_main: state.in_main,
+        errors: state.errors,
+        var_types: []
+    }
+}
+
+// Look up variable's declared C type. Returns "" if not found.
+pub fn lookup_var_type(state: CodegenState, name: str) -> str {
+    let vt = state.var_types
+    let n = to_int(len(vt))
+    let mut i = 0
+    while i + 1 < n {
+        if vt[i] == name { return vt[i + 1] }
+        i = i + 2
+    }
+    ""
 }
 
 // ═══════════════════════════════════════════════════════════════════════

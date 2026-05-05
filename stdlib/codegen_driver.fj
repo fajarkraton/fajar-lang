@@ -19,7 +19,7 @@ fn exr(code: str, pos: i64) -> ExprResult {
 
 // Parse an atom (INT / IDENT / BEGIN_CALL ... END_CALL) starting at pos.
 // Returns (code, new_pos).
-fn parse_atom(ast: [str], pos: i64) -> ExprResult {
+fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
     let n = to_int(len(ast))
     if pos >= n { return exr("0", pos) }
 
@@ -61,7 +61,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let mut p2 = pos + 2
         let mut args: [str] = []
         while p2 < n && ast[p2] != "END_MACRO_CALL" {
-            let r = parse_expr_emit(ast, p2)
+            let r = parse_expr_emit(ast, vars, p2)
             args = args.push(r.code)
             p2 = r.pos
         }
@@ -89,7 +89,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let mut p2 = pos + 1
         let mut elems: [str] = []
         while p2 < n && ast[p2] != "END_ARRAY_LIT" {
-            let r = parse_expr_emit(ast, p2)
+            let r = parse_expr_emit(ast, vars, p2)
             elems = elems.push(r.code)
             p2 = r.pos
         }
@@ -108,11 +108,14 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
             exr(code, p2)
         }
     } else if tag == "BEGIN_INDEX" {
-        // arr[i] → _fj_arr_get_i64(arr, i)
+        // Phase 15.1: dispatch by declared array element type if known.
+        // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
+        //         _fj_arr_get_i64(arr, i) otherwise (default for [i64] or unknown)
         let arr_name = ast[pos + 1]
-        let r = parse_expr_emit(ast, pos + 2)
-        // Skip END_INDEX at r.pos
-        exr(concat!("_fj_arr_get_i64(", arr_name, ", ", r.code, ")"), r.pos + 1)
+        let r = parse_expr_emit(ast, vars, pos + 2)
+        let arr_type = lookup_var_type_in_table(vars, arr_name)
+        let helper = if arr_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
+        exr(concat!(helper, "(", arr_name, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
         // Shape: BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <method> <args...> END_METHOD_CALL
         let mut p2 = pos + 1
@@ -134,7 +137,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let first_arg_tag = if p2 < n { ast[p2] } else { "" }
         let mut args: [str] = []
         while p2 < n && ast[p2] != "END_METHOD_CALL" {
-            let r = parse_expr_emit(ast, p2)
+            let r = parse_expr_emit(ast, vars, p2)
             args = args.push(r.code)
             p2 = r.pos
         }
@@ -150,7 +153,25 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
                 let mname = find_method_name(ast, pos + 2)
                 mname == "substring" || mname == "concat"
             } else { false }
-            if arg_is_str || arg_method_str {
+            // Phase 15.1: IDENT arg → look up declared type
+            let arg_ident_str = if first_arg_tag == "IDENT" {
+                // Arg is at pos+2 (METHOD_CALL header is +0 BEGIN, +1 IDENT, +2 obj_name,
+                // ...) — for the FIRST arg we need to walk past method name. Args start
+                // after METHOD <name>. For .push the args follow directly.
+                // Find the arg IDENT name: ast[pos+2] is the "IDENT" tag, ast[pos+3] is name.
+                // But pos+2 here is in the OUTER scope of BEGIN_METHOD_CALL parsing — let me
+                // scan to find METHOD then read the next IDENT.
+                let mut q = pos + 1
+                while q + 1 < n && ast[q] != "METHOD" { q = q + 1 }
+                // q is at METHOD; q+2 should be first arg
+                let arg_name_pos = q + 2
+                if arg_name_pos + 1 < n && ast[arg_name_pos] == "IDENT" {
+                    let nm = ast[arg_name_pos + 1]
+                    let t = lookup_var_type_in_table(vars, nm)
+                    t == "str"
+                } else { false }
+            } else { false }
+            if arg_is_str || arg_method_str || arg_ident_str {
                 helper = "_fj_arr_push_str"
             } else {
                 helper = "_fj_arr_push_i64"
@@ -171,22 +192,22 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         // GCC statement expression: ({ int64_t _match_<pos>; if ... ; _match_<pos>; })
         // Pos used as unique suffix to avoid collisions across nested matches.
         let tmp_name = concat!("_match_", to_string(pos))
-        let r_subj = parse_expr_emit(ast, pos + 1)
+        let r_subj = parse_expr_emit(ast, vars, pos + 1)
         let mut p2 = r_subj.pos
         let mut body = concat!("({ int64_t ", tmp_name, "; ")
         let mut any_arm = false
         let mut has_default = false
         while p2 < n && ast[p2] != "END_MATCH" {
             if ast[p2] == "BEGIN_ARM" {
-                let r_pat = parse_expr_emit(ast, p2 + 1)
-                let r_body = parse_expr_emit(ast, r_pat.pos)
+                let r_pat = parse_expr_emit(ast, vars, p2 + 1)
+                let r_body = parse_expr_emit(ast, vars, r_pat.pos)
                 let cond = concat!("(", r_subj.code, " == ", r_pat.code, ")")
                 let prefix = if any_arm { "else if (" } else { "if (" }
                 body = concat!(body, prefix, cond, ") ", tmp_name, " = ", r_body.code, "; ")
                 any_arm = true
                 p2 = r_body.pos + 1  // past END_ARM
             } else if ast[p2] == "BEGIN_DEFAULT" {
-                let r_body = parse_expr_emit(ast, p2 + 1)
+                let r_body = parse_expr_emit(ast, vars, p2 + 1)
                 let prefix = if any_arm { "else " } else { "" }
                 body = concat!(body, prefix, tmp_name, " = ", r_body.code, "; ")
                 has_default = true
@@ -212,7 +233,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         while p2 < n && ast[p2] != "END_STRUCT_LIT" {
             let fname = ast[p2]
             p2 = p2 + 1
-            let r = parse_expr_emit(ast, p2)
+            let r = parse_expr_emit(ast, vars, p2)
             if !first { body = concat!(body, ", ") }
             body = concat!(body, ".", fname, " = ", r.code)
             first = false
@@ -240,7 +261,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let mut p = pos + 2
         let mut args: [str] = []
         while p < n && ast[p] != "END_CALL" {
-            let r = parse_expr_emit(ast, p)
+            let r = parse_expr_emit(ast, vars, p)
             args = args.push(r.code)
             p = r.pos
         }
@@ -273,6 +294,18 @@ fn is_atom_start(tag: str) -> bool {
     tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX" || tag == "BEGIN_MACRO_CALL"
 }
 
+// Phase 15.1: linear scan of [name, type, name, type, ...] table.
+// Returns "" if name not found.
+pub fn lookup_var_type_in_table(vars: [str], name: str) -> str {
+    let n = to_int(len(vars))
+    let mut i = 0
+    while i + 1 < n {
+        if vars[i] == name { return vars[i + 1] }
+        i = i + 2
+    }
+    ""
+}
+
 // Map fj method name → C runtime helper. Returns "" if no mapping known.
 // Caller emits the C helper definition in emit_preamble.
 fn map_method(method: str) -> str {
@@ -295,16 +328,16 @@ fn find_method_name(ast: [str], pos: i64) -> str {
     ""
 }
 
-pub fn parse_expr_emit(ast: [str], pos: i64) -> ExprResult {
+pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64) -> ExprResult {
     let n = to_int(len(ast))
     if pos >= n { return exr("0", pos) }
 
     let lhs_atom_tag = ast[pos]
-    let lhs = parse_atom(ast, pos)
+    let lhs = parse_atom(ast, vars, pos)
     let p = lhs.pos
     if p < n && is_atom_start(ast[p]) {
         let rhs_atom_tag = ast[p]
-        let rhs = parse_expr_emit(ast, p)
+        let rhs = parse_expr_emit(ast, vars, p)
         if rhs.pos + 1 < to_int(len(ast)) && ast[rhs.pos] == "BINOP" {
             let op = ast[rhs.pos + 1]
             // String comparison: if either operand is a STR atom, lower to strcmp.
@@ -353,6 +386,9 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     let n = to_int(len(ast))
     if pos >= n { return cg }
 
+    // Phase 15.1: var_types snapshot for parse_expr_emit / parse_atom dispatch
+    let vars = cg.var_types
+
     let tag = ast[pos]
 
     if tag == "BEGIN_RET" {
@@ -360,7 +396,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         if ast[p_inner] == "END_RET" {
             return emit_return(cg, "0")
         }
-        let er = parse_expr_emit(ast, p_inner)
+        let er = parse_expr_emit(ast, vars, p_inner)
         return emit_return(cg, er.code)
     }
 
@@ -374,7 +410,24 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             p_after_name = p_after_name + 2
         }
         let first_atom = if p_after_name < to_int(len(ast)) { ast[p_after_name] } else { "" }
-        let er = parse_expr_emit(ast, p_after_name)
+        // Phase 15.1: derive fj-type for var_types record (declared wins, else infer)
+        let mut fj_type = declared_type
+        if fj_type == "" {
+            if first_atom == "STR" { fj_type = "str" }
+            else if first_atom == "FLOAT" { fj_type = "f64" }
+            else if first_atom == "BOOL" { fj_type = "bool" }
+            else if first_atom == "INT" { fj_type = "i64" }
+            else if first_atom == "BEGIN_ARRAY_LIT" { fj_type = "[i64]" }  // default; declared annotation wins
+            else if first_atom == "BEGIN_METHOD_CALL" {
+                let m = find_method_name(ast, p_after_name)
+                if m == "substring" { fj_type = "str" }
+                else if m == "concat" { fj_type = "str" }
+                else if m == "push" { fj_type = "[i64]" }  // chainable rebind
+                else { fj_type = "i64" }
+            }
+            else if first_atom == "BEGIN_MACRO_CALL" { fj_type = "str" }
+        }
+        let er = parse_expr_emit(ast, vars, p_after_name)
 
         // C type priority: declared annotation wins (unless empty), then atom inference
         let mut c_type = ""
@@ -382,44 +435,35 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             c_type = map_type(declared_type)
         }
         if c_type == "" || c_type == "int64_t" {
-            // Fall back to atom-based inference
             c_type = if first_atom == "FLOAT" { "double" }
                      else if first_atom == "STR" { "const char*" }
                      else if first_atom == "BEGIN_METHOD_CALL" {
                          let method_name = find_method_name(ast, p_after_name)
                          if method_name == "substring" { "const char*" }
                          else if method_name == "concat" { "const char*" }
-                         else if method_name == "push" {
-                             // If declared type is [str], return _FjArrStr*
-                             if declared_type == "[str]" { "_FjArrStr*" }
-                             else { "_FjArr*" }
-                         }
+                         else if method_name == "push" { "_FjArr*" }
                          else { c_type }
                      }
                      else if first_atom == "BEGIN_STRUCT_LIT" {
                          if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "int64_t" }
                      }
-                     else if first_atom == "BEGIN_ARRAY_LIT" {
-                         if declared_type == "[str]" { "_FjArrStr*" }
-                         else { "_FjArr*" }
-                     }
-                     else if first_atom == "BEGIN_MACRO_CALL" {
-                         // concat! returns const char*
-                         "const char*"
-                     }
+                     else if first_atom == "BEGIN_ARRAY_LIT" { "_FjArr*" }
+                     else if first_atom == "BEGIN_MACRO_CALL" { "const char*" }
                      else { "int64_t" }
         }
         if c_type == "" { c_type = "int64_t" }
-        return emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))
+        // Phase 15.1: record fj-type for downstream lookups
+        let cg_after_emit = emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))
+        return record_var_type(cg_after_emit, name, fj_type)
     }
 
     if tag == "BEGIN_EXPR_STMT" {
-        let er = parse_expr_emit(ast, pos + 1)
+        let er = parse_expr_emit(ast, vars, pos + 1)
         return emit_line(cg, concat!(er.code, ";"))
     }
 
     if tag == "BEGIN_IF" {
-        let er = parse_expr_emit(ast, pos + 1)
+        let er = parse_expr_emit(ast, vars, pos + 1)
         let mut cg2 = emit_if(cg, er.code)
         let mut p = er.pos
         if ast[p] != "BEGIN_THEN" { return cg2 }
@@ -441,7 +485,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     }
 
     if tag == "BEGIN_WHILE" {
-        let er = parse_expr_emit(ast, pos + 1)
+        let er = parse_expr_emit(ast, vars, pos + 1)
         let mut cg2 = emit_while(cg, er.code)
         let mut p = er.pos
         if ast[p] != "BEGIN_LOOP_BODY" { return cg2 }
@@ -456,10 +500,10 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     if tag == "BEGIN_FOR" {
         // BEGIN_FOR <var> <start_expr> FOR_RANGE_TO <end_expr> BEGIN_LOOP_BODY <stmts> END_LOOP_BODY END_FOR
         let var_name = ast[pos + 1]
-        let r_start = parse_expr_emit(ast, pos + 2)
+        let r_start = parse_expr_emit(ast, vars, pos + 2)
         // Expect FOR_RANGE_TO at r_start.pos
         if ast[r_start.pos] != "FOR_RANGE_TO" { return cg }
-        let r_end = parse_expr_emit(ast, r_start.pos + 1)
+        let r_end = parse_expr_emit(ast, vars, r_start.pos + 1)
         // Emit C: for (int64_t var = start; var < end; var++) {
         let mut cg2 = emit_line(cg, concat!("for (int64_t ", var_name, " = ", r_start.code,
                                             "; ", var_name, " < ", r_end.code,
@@ -485,7 +529,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             lhs = concat!(lhs, ".", ast[p_lhs + 1])
             p_lhs = p_lhs + 2
         }
-        let er = parse_expr_emit(ast, p_lhs)
+        let er = parse_expr_emit(ast, vars, p_lhs)
         return emit_line(cg, concat!(lhs, " = ", er.code, ";"))
     }
 
@@ -499,6 +543,8 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     let n = to_int(len(ast))
     if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
     let name = ast[pos + 1]
+    // Phase 15.1: clear var_types at fn boundary; we'll re-populate from params + body lets
+    let mut cg_local = clear_var_types(cg)
     // Expect BEGIN_PARAMS at pos+2
     let mut p = pos + 2
     let mut param_pairs: [str] = []
@@ -507,6 +553,8 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         while p < n && ast[p] != "END_PARAMS" {
             param_pairs = param_pairs.push(ast[p])  // name
             param_pairs = param_pairs.push(ast[p + 1])  // type
+            // Record param fj-type for downstream lookups
+            cg_local = record_var_type(cg_local, ast[p], ast[p + 1])
             p = p + 2
         }
         p = p + 1  // past END_PARAMS
@@ -519,7 +567,8 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     }
     // Expect BEGIN_BODY
     if p < n && ast[p] == "BEGIN_BODY" { p = p + 1 }
-    let mut cg2 = emit_function_typed(cg, name, param_pairs, ret_type)
+    // Use cg_local (with cleared+param-populated var_types) instead of cg
+    let mut cg2 = emit_function_typed(cg_local, name, param_pairs, ret_type)
     while p < n && ast[p] != "END_BODY" {
         cg2 = emit_stmt(ast, p, cg2)
         p = stmt_end(ast, p)

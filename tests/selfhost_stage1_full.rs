@@ -566,3 +566,38 @@ fn full_p45_str_array_push_and_get() {
     // arr.len() = 2 after two pushes
     assert_eq!(r.status.code(), Some(2));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p46_str_array_index_auto_dispatch() {
+    // Phase 15.1: arr[i] on declared [str] should auto-dispatch to _fj_arr_get_str.
+    // No need for fj source to call the C helper directly anymore.
+    let r = compile_subset_program(
+        "full_p46",
+        "fn main() -> i64 { let mut arr: [str] = []; arr = arr.push(\"foo\"); arr = arr.push(\"bar\"); let s = arr[1]; if s == \"bar\" { return 7 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(7));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p47_str_array_push_ident_auto_dispatch() {
+    // Phase 15.1: arr.push(s) where s is str-typed var should auto-dispatch
+    // to _fj_arr_push_str (was defaulting to _i64).
+    let r = compile_subset_program(
+        "full_p47",
+        "fn main() -> i64 { let s = \"alpha\"; let mut arr: [str] = []; arr = arr.push(s); let r = arr[0]; if r == \"alpha\" { return 9 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(9));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p48_str_array_in_fn_param() {
+    // Phase 15.1: fn param of type [str] should be tracked + arr[i] dispatches correctly.
+    let r = compile_subset_program(
+        "full_p48",
+        "fn first(arr: [str]) -> str { return arr[0] } fn main() -> i64 { let mut xs: [str] = []; xs = xs.push(\"hello\"); let f = first(xs); if f == \"hello\" { return 11 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(11));
+}
