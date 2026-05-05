@@ -2,6 +2,67 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.10] — 2026-05-06 Phase 17.6: cg threading + struct field tracking + GCC stmt-expr lowering
+
+Infrastructure release toward closing codegen_driver.fj's self-compile.
+Three foundations land here:
+
+### 1. `cg` parameter threaded through parse_atom + parse_expr_emit (29 sites)
+
+Both expression-emitting fns now take `cg: CodegenState` so they can
+look up struct names + fn ret types + field types from anywhere in the
+expression tree. This is what unlocks proper inline-let lowering for
+if-expr-with-lets bodies.
+
+### 2. inline_let_emit + GCC stmt-expr lowering for if-expr-with-lets
+
+`{ let mname = find_method_name(...); mname == "X" }` (multi-stmt block
+as expression) now lowers to GCC statement expression
+`({ const char* mname = find_method_name(...); (mname == "X"); })`.
+
+Restored 3 idiomatic let-in-then patterns in codegen_driver.fj that
+were manually lifted in v34.5.7-v34.5.9 — they now compile naturally.
+
+### 3. Struct field type tracking (cg.struct_fields)
+
+Pre-scan in emit_program now registers each struct's field fj-types
+keyed by `<struct_name>.<field_name>`. BEGIN_LET inference for
+`let vars = cg.var_types` consults this map and declares `vars` as
+the field's actual type (`[str]` → `_FjArr*`) instead of defaulting
+to int64_t.
+
+This is what removes the LAST type-mismatch errors when compiling
+codegen_driver.fj VIA the chain — but only when CodegenState's struct
+decl is visible (i.e., compiling all 3 stdlib modules combined).
+
+### Honest scope (CLAUDE.md §6.6 R3)
+
+codegen_driver.fj-alone STILL fails gcc -c with 5 type errors because
+the chain (running on codegen_driver.fj alone) doesn't see CodegenState
+(defined in codegen.fj). The next milestone is **all-3-combined
+self-compile**: feed `codegen.fj + parser_ast.fj + codegen_driver.fj`
+as one fused source through the chain, where every struct + fn ret
+type is known. The chain's O(n²) string ops make this slow (>3min
+parse for 3000+ LOC combined), so this is deferred to a follow-up
+milestone after profiling/optimization.
+
+### Test suite
+
+**80/80 stage1-full PASS in 1.01s. 2/2 phase17 milestones PASS
+(parser_ast 3min + codegen 14s). Lib: 7629 PASS. fmt clean. clippy 0.**
+
+### Phase 17 progress
+
+- ✅ chain compiles parser_ast.fj (v34.5.8)
+- ✅ chain compiles codegen.fj (v34.5.9)
+- ⏸ codegen_driver.fj parses fully (11267 AST nodes); gcc -c needs
+  CodegenState visibility (combined-source compile) — next milestone
+- ❌ True triple-test (native binary on own source) — TBD
+
+### Effort
+
+~1.5h. Cumulative ~23.7h across v33.4.0..v34.5.10.
+
 ## [v34.5.9] — 2026-05-06 🎯 Phase 17 milestone #2: codegen.fj fully self-compiles to .o
 
 **HEADLINE:** the chain now compiles **stdlib/codegen.fj's full source**

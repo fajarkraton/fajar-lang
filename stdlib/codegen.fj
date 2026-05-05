@@ -53,7 +53,11 @@ struct CodegenState {
     struct_names: [str],
     // Phase 16.2: fn return types. Populated by pre-scan; flat [name, ret_type, ...].
     // Used at BEGIN_LET sites to derive C type when first_atom is BEGIN_CALL.
-    fn_ret_types: [str]
+    fn_ret_types: [str],
+    // Phase 17.6: struct field types. Populated by pre-scan; flat
+    // [struct_name + "." + field_name, fj_type, ...]. Used at let RHS
+    // `let vars = cg.var_types` so the new binding gets the correct C type.
+    struct_fields: [str]
 }
 
 // Creates a new codegen state
@@ -66,7 +70,8 @@ fn new_codegen() -> CodegenState {
         errors: 0,
         var_types: [],
         struct_names: [],
-        fn_ret_types: []
+        fn_ret_types: [],
+        struct_fields: []
     }
 }
 
@@ -86,7 +91,8 @@ fn emit_line(state: CodegenState, line: str) -> CodegenState {
         errors: state.errors,
         var_types: state.var_types,
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -100,7 +106,8 @@ fn indent(state: CodegenState) -> CodegenState {
         errors: state.errors,
         var_types: state.var_types,
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -114,7 +121,8 @@ fn dedent(state: CodegenState) -> CodegenState {
         errors: state.errors,
         var_types: state.var_types,
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -128,7 +136,8 @@ fn fresh_tmp(state: CodegenState) -> CodegenState {
         errors: state.errors,
         var_types: state.var_types,
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -143,7 +152,8 @@ pub fn record_var_type(state: CodegenState, name: str, c_type: str) -> CodegenSt
         errors: state.errors,
         var_types: new_vt,
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -156,7 +166,8 @@ pub fn clear_var_types(state: CodegenState) -> CodegenState {
         errors: state.errors,
         var_types: [],
         struct_names: state.struct_names,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -172,7 +183,8 @@ pub fn add_struct_name(state: CodegenState, name: str) -> CodegenState {
         errors: state.errors,
         var_types: state.var_types,
         struct_names: new_sn,
-        fn_ret_types: state.fn_ret_types
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -199,7 +211,8 @@ pub fn add_fn_ret_type(state: CodegenState, fn_name: str, ret_type: str) -> Code
         errors: state.errors,
         var_types: state.var_types,
         struct_names: state.struct_names,
-        fn_ret_types: new_rt
+        fn_ret_types: new_rt,
+        struct_fields: state.struct_fields
     }
 }
 
@@ -209,6 +222,36 @@ pub fn lookup_fn_ret_type(state: CodegenState, fn_name: str) -> str {
     let mut i = 0
     while i + 1 < n {
         if rt[i] == fn_name { return rt[i + 1] }
+        i = i + 2
+    }
+    ""
+}
+
+// Phase 17.6: register a struct field's fj-type so BEGIN_LET sees `let
+// vars = cg.var_types` and derives `[str]` for `vars` (instead of int64_t).
+pub fn add_struct_field(state: CodegenState, struct_name: str, field_name: str, field_type: str) -> CodegenState {
+    let key = concat!(struct_name, ".", field_name)
+    let new_sf = state.struct_fields.push(key).push(field_type)
+    CodegenState {
+        lines: state.lines,
+        indent: state.indent,
+        next_tmp: state.next_tmp,
+        in_main: state.in_main,
+        errors: state.errors,
+        var_types: state.var_types,
+        struct_names: state.struct_names,
+        fn_ret_types: state.fn_ret_types,
+        struct_fields: new_sf
+    }
+}
+
+pub fn lookup_struct_field(state: CodegenState, struct_name: str, field_name: str) -> str {
+    let key = concat!(struct_name, ".", field_name)
+    let sf = state.struct_fields
+    let n = to_int(len(sf))
+    let mut i = 0
+    while i + 1 < n {
+        if sf[i] == key { return sf[i + 1] }
         i = i + 2
     }
     ""
