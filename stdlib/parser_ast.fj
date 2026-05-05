@@ -251,6 +251,35 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let end = read_word(src, p)
         let word = src.substring(p, end)
         let after = skip_ws(src, end)
+        // Macro call: IDENT!(args)
+        if after < n && src.substring(after, after + 1) == "!" {
+            let after_bang = after + 1
+            // Tolerate ws between `!` and `(`
+            let p_lp = skip_ws(src, after_bang)
+            if p_lp < n && src.substring(p_lp, p_lp + 1) == "(" {
+                let mut a = ast.push("BEGIN_MACRO_CALL").push(word)
+                let mut cur = p_lp + 1
+                cur = skip_ws(src, cur)
+                if cur < n && src.substring(cur, cur + 1) == ")" {
+                    return pr_ok(a.push("END_MACRO_CALL"), cur + 1)
+                }
+                let mut more_m = true
+                while more_m {
+                    let r = parse_expr_ast(src, cur, a)
+                    if r.error { return r }
+                    a = r.ast
+                    cur = skip_ws(src, r.pos)
+                    if cur < n && src.substring(cur, cur + 1) == "," {
+                        cur = cur + 1
+                    } else { more_m = false }
+                }
+                cur = skip_ws(src, cur)
+                if cur < n && src.substring(cur, cur + 1) == ")" {
+                    return pr_ok(a.push("END_MACRO_CALL"), cur + 1)
+                }
+                return pr_err(a, cur, "ERR_MACRO_RP")
+            }
+        }
         if after < n && src.substring(after, after + 1) == "(" {
             // Function call: BEGIN_CALL <name> <args...> END_CALL
             let mut a = ast.push("BEGIN_CALL").push(word)
@@ -470,12 +499,11 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let name = src.substring(p_name2, id_end)
         let after_id = skip_ws(src, id_end)
         let mut p2 = after_id
+        let mut declared_type = ""
         if p2 < n && src.substring(p2, p2 + 1) == ":" {
             p2 = skip_ws(src, p2 + 1)
-            // Type annotation can be: bare ident (i64, Foo) OR `[type]` (array)
-            // OR `&type` / `&mut type` (ref) — for Phase 14, support bare + array.
+            let p_type_start = p2
             if p2 < n && src.substring(p2, p2 + 1) == "[" {
-                // Scan to matching `]` (no nested generics in subset)
                 let mut depth = 1
                 p2 = p2 + 1
                 while p2 < n && depth > 0 {
@@ -487,10 +515,14 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
             } else {
                 p2 = read_word(src, p2)
             }
+            declared_type = src.substring(p_type_start, p2)
         }
         let p_eq = expect_char(src, p2, "=")
         if p_eq < 0 { return pr_err(ast, p2, "ERR_LET_EQ") }
         let mut a = ast.push("BEGIN_LET").push(name)
+        if declared_type != "" {
+            a = a.push("TYPE").push(declared_type)
+        }
         let r = parse_expr_ast(src, p_eq, a)
         if r.error { return r }
         a = r.ast.push("END_LET")

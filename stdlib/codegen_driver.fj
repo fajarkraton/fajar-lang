@@ -55,6 +55,34 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let enum_name = ast[pos + 1]
         let variant = ast[pos + 2]
         exr(concat!(enum_name, "_", variant), pos + 3)
+    } else if tag == "BEGIN_MACRO_CALL" {
+        // name!(args) — currently supports concat!(...) → nested _fj_concat2
+        let name = ast[pos + 1]
+        let mut p2 = pos + 2
+        let mut args: [str] = []
+        while p2 < n && ast[p2] != "END_MACRO_CALL" {
+            let r = parse_expr_emit(ast, p2)
+            args = args.push(r.code)
+            p2 = r.pos
+        }
+        p2 = p2 + 1  // past END_MACRO_CALL
+        let m = to_int(len(args))
+        if name == "concat" {
+            if m == 0 { exr("\"\"", p2) }
+            else if m == 1 { exr(args[0], p2) }
+            else {
+                // Nest right-associatively: _fj_concat2(a0, _fj_concat2(a1, ...))
+                let mut code = args[m - 1]
+                let mut k = m - 2
+                while k >= 0 {
+                    code = concat!("_fj_concat2(", args[k], ", ", code, ")")
+                    k = k - 1
+                }
+                exr(code, p2)
+            }
+        } else {
+            exr(concat!("/* unknown macro ", name, " */"), p2)
+        }
     } else if tag == "BEGIN_ARRAY_LIT" {
         // [a, b, c] → _fj_arr_push_i64(_fj_arr_push_i64(_fj_arr_new(), a), b)... chain
         // Or for empty []: just _fj_arr_new()
@@ -87,27 +115,23 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         exr(concat!("_fj_arr_get_i64(", arr_name, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
         // Shape: BEGIN_METHOD_CALL IDENT <obj> [FIELD <f>]* METHOD <method> <args...> END_METHOD_CALL
-        // Build subject expr from IDENT + optional FIELD chain.
         let mut p2 = pos + 1
-        // Expect IDENT
         if p2 >= n || ast[p2] != "IDENT" {
             return exr("/* ERR_METHOD_CALL_NO_IDENT */", pos + 1)
         }
         let mut subj = ast[p2 + 1]
         p2 = p2 + 2
-        // Field chain
         while p2 + 1 < n && ast[p2] == "FIELD" {
             subj = concat!(subj, ".", ast[p2 + 1])
             p2 = p2 + 2
         }
-        // Expect METHOD <name>
         if p2 + 1 >= n || ast[p2] != "METHOD" {
             return exr("/* ERR_METHOD_CALL_NO_METHOD */", p2)
         }
         let method = ast[p2 + 1]
         p2 = p2 + 2
-        let helper = map_method(method)
-        // Collect arg expression strings
+        // Collect args + remember each first-arg atom tag for dispatch
+        let first_arg_tag = if p2 < n { ast[p2] } else { "" }
         let mut args: [str] = []
         while p2 < n && ast[p2] != "END_METHOD_CALL" {
             let r = parse_expr_emit(ast, p2)
@@ -115,15 +139,29 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
             p2 = r.pos
         }
         p2 = p2 + 1  // past END_METHOD_CALL
-        // Emit C call: helper(subj, arg1, arg2) if helper known, else fall back to method-as-fn-call
-        let fn_name = if helper == "" { concat!(subj, ".", method) } else { helper }
+        // Dispatch helper based on method name + (for push) first arg type
+        let mut helper = map_method(method)
+        if method == "push" {
+            // STR atom or string-returning method/macro → push_str; else push_i64
+            let arg_is_str = first_arg_tag == "STR" ||
+                (first_arg_tag == "BEGIN_MACRO_CALL")
+            // For BEGIN_METHOD_CALL with str-returning method:
+            let arg_method_str = if first_arg_tag == "BEGIN_METHOD_CALL" {
+                let mname = find_method_name(ast, pos + 2)
+                mname == "substring" || mname == "concat"
+            } else { false }
+            if arg_is_str || arg_method_str {
+                helper = "_fj_arr_push_str"
+            } else {
+                helper = "_fj_arr_push_i64"
+            }
+        }
         let mut argstr = subj
         let mut k = 0
         while k < to_int(len(args)) {
             argstr = concat!(argstr, ", ", args[k])
             k = k + 1
         }
-        // For helper form, args go after subj. For fall-back fn-style (a.b(x)), C doesn't allow this — only emit when helper known.
         if helper == "" {
             exr(concat!("/* unknown method ", method, " */"), p2)
         } else {
@@ -194,6 +232,11 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
             else if first_arg_tag == "BOOL" { name = "fj_println_bool" }
             else { name = "fj_println_int" }
         }
+        // Phase 15: type conversions
+        if raw_name == "to_int" { name = "_fj_to_int" }
+        if raw_name == "to_string" { name = "_fj_to_string" }
+        // strlen is C stdlib; pass through unchanged
+        // (already worked in Phase 13 — no rename needed)
         let mut p = pos + 2
         let mut args: [str] = []
         while p < n && ast[p] != "END_CALL" {
@@ -227,7 +270,7 @@ fn is_atom_start(tag: str) -> bool {
     tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
     tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL" ||
-    tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX"
+    tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX" || tag == "BEGIN_MACRO_CALL"
 }
 
 // Map fj method name → C runtime helper. Returns "" if no mapping known.
@@ -323,29 +366,50 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 
     if tag == "BEGIN_LET" {
         let name = ast[pos + 1]
-        // Peek the first expression atom to infer C type
-        let first_atom = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
-        let er = parse_expr_emit(ast, pos + 2)
-        // Struct literal → use the struct type name
-        let c_type = if first_atom == "FLOAT" { "double" }
+        // Optional TYPE <type_str> after name
+        let mut p_after_name = pos + 2
+        let mut declared_type = ""
+        if p_after_name + 1 < to_int(len(ast)) && ast[p_after_name] == "TYPE" {
+            declared_type = ast[p_after_name + 1]
+            p_after_name = p_after_name + 2
+        }
+        let first_atom = if p_after_name < to_int(len(ast)) { ast[p_after_name] } else { "" }
+        let er = parse_expr_emit(ast, p_after_name)
+
+        // C type priority: declared annotation wins (unless empty), then atom inference
+        let mut c_type = ""
+        if declared_type != "" {
+            c_type = map_type(declared_type)
+        }
+        if c_type == "" || c_type == "int64_t" {
+            // Fall back to atom-based inference
+            c_type = if first_atom == "FLOAT" { "double" }
                      else if first_atom == "STR" { "const char*" }
                      else if first_atom == "BEGIN_METHOD_CALL" {
-                         // Heuristic: method calls returning string types
-                         // (substring, concat, etc.) — return const char*.
-                         // .push returns the array (chainable); .len returns int.
-                         let method_name = find_method_name(ast, pos + 2)
+                         let method_name = find_method_name(ast, p_after_name)
                          if method_name == "substring" { "const char*" }
                          else if method_name == "concat" { "const char*" }
-                         else if method_name == "push" { "_FjArr*" }
-                         else { "int64_t" }
+                         else if method_name == "push" {
+                             // If declared type is [str], return _FjArrStr*
+                             if declared_type == "[str]" { "_FjArrStr*" }
+                             else { "_FjArr*" }
+                         }
+                         else { c_type }
                      }
                      else if first_atom == "BEGIN_STRUCT_LIT" {
-                         if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "int64_t" }
+                         if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "int64_t" }
                      }
                      else if first_atom == "BEGIN_ARRAY_LIT" {
-                         "_FjArr*"
+                         if declared_type == "[str]" { "_FjArrStr*" }
+                         else { "_FjArr*" }
+                     }
+                     else if first_atom == "BEGIN_MACRO_CALL" {
+                         // concat! returns const char*
+                         "const char*"
                      }
                      else { "int64_t" }
+        }
+        if c_type == "" { c_type = "int64_t" }
         return emit_line(cg, concat!(c_type, " ", name, " = ", er.code, ";"))
     }
 

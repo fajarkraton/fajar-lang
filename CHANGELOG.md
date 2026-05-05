@@ -2,6 +2,84 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.3.0] — 2026-05-05 concat! + conversions + [str] arrays (R14 third)
+
+Third R14 increment toward full Stage 2 triple-test. Adds `concat!`
+variadic macro, `to_int`/`to_string` conversions, `[str]` dynamic
+arrays via unified `_FjArr` C type. Programs combining string
+manipulation, conversions, and string arrays compile end-to-end.
+
+### Added (Phase 15)
+
+- **Unified `_FjArr` C type (void**-based)**: refactored Phase 14's
+  separate `_FjArr` to use `void**` data so both `[i64]` and `[str]`
+  share one C type. push/get helpers cast at use site:
+  - `_fj_arr_push_i64(a, v)` casts int64 → void*
+  - `_fj_arr_push_str(a, s)` stores const char* directly
+  - `_fj_arr_get_i64(a, i)` casts void* → int64
+  - `_fj_arr_get_str(a, i)` casts void* → const char*
+  - `_fj_arr_len(a)` works uniformly for both
+  Phase 14's 51 prior tests all PASS after refactor (no regression).
+
+- **`concat!` variadic macro** in parser_ast: detect `IDENT!(args)` →
+  `BEGIN_MACRO_CALL <name> <args>* END_MACRO_CALL` AST. Codegen
+  for concat! emits right-associative `_fj_concat2` chain:
+  - 0 args → `""`
+  - 1 arg → arg as-is
+  - 2 args → `_fj_concat2(a, b)`
+  - 3+ args → `_fj_concat2(a, _fj_concat2(b, _fj_concat2(c, d)))`
+
+- **`to_int` / `to_string` conversions** via name remap in BEGIN_CALL:
+  `to_int(s)` → `_fj_to_int(s)` (atoll wrapper); `to_string(n)` →
+  `_fj_to_string(n)` (snprintf to malloc'd buffer).
+
+- **`.push(arg)` dispatch by arg atom**: STR/MACRO_CALL/str-returning-
+  method args → `_fj_arr_push_str`; otherwise `_fj_arr_push_i64`.
+
+- **TYPE marker in BEGIN_LET**: parse_let preserves type annotation
+  in AST (`BEGIN_LET <name> TYPE <type_str> <expr> END_LET`). emit_let
+  prefers declared type over atom-based inference. Lets `let arr:
+  [str] = []` correctly type as `_FjArr*` with [str] semantics.
+
+### Test suite: 40 → 45
+
+```
+P41 to_int("42")                          → 42
+P42 strlen(to_string(12345))              → 5
+P43 concat!("hi ", "world") == "hi world" → 1 (str eq)
+P44 strlen(concat!("a","b","c"))          → 3
+P45 [str] push + _fj_arr_get_str          → 2 (arr.len)
+```
+
+**45/45 PASS in 0.24s.**
+
+### Stage 2 R14 progress
+
+| Increment | Phase | Status |
+|---|---|---|
+| String scalars + .substring + ==/!= | 13 | ✅ |
+| Dynamic [i64] arrays + push + len + index | 14 | ✅ |
+| concat! + to_int/to_string + [str] partial | 15 | ✅ |
+| Var-type tracking for full [str] dispatch | 16 | ⏳ |
+| Self-compile stdlib/parser_ast | 16/17 | ⏳ |
+| Stage 1 == Stage 2 byte-equal | 17 | ⏳ |
+
+### Honest scope (CLAUDE.md §6.6 R3)
+
+- ✅ concat!, to_int, to_string work E2E
+- ✅ [str] arrays construct correctly with `.push("...")`
+- ❌ `arr[i]` for `[str]` arrays NOT auto-dispatched — fj source
+  must call `_fj_arr_get_str(arr, i)` explicitly. Phase 16 work.
+- ❌ `arr.push(some_var)` where var is str-typed — push arg atom
+  is IDENT, defaults to _i64 helper. Phase 16 var-type tracking.
+- ❌ `concat!` int args would type-error in C — string-only.
+- ❌ R15 leak class persists (acceptable for short-lived tests).
+
+### Effort
+
+Phase 15 closed in ~1h Claude time vs ~3h budget (-67%). 17 self-host
+phases CLOSED cumulative; ~12h total across v33.4.0..v34.3.0.
+
 ## [v34.2.0] — 2026-05-05 Dynamic [i64] arrays (R14 second increment)
 
 Second R14 increment toward full Stage 2 triple-test. fj-source

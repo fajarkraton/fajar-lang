@@ -509,3 +509,60 @@ fn full_p40_array_passed_to_fn() {
     // 10+20+30+40 = 100
     assert_eq!(r.status.code(), Some(100));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p41_to_int_conversion() {
+    // Phase 15: to_int(s) → atoll(s) wrapper.
+    let r = compile_subset_program("full_p41", "fn main() -> i64 { return to_int(\"42\") }");
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p42_to_string_then_strlen() {
+    // Phase 15: to_string(n) → snprintf wrapper. Verify by passing through strlen.
+    let r = compile_subset_program(
+        "full_p42",
+        "fn main() -> i64 { let s = to_string(12345); return strlen(s) }",
+    );
+    // "12345" has length 5
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p43_concat_macro_two_args() {
+    // Phase 15: concat!(a, b) → _fj_concat2(a, b).
+    let r = compile_subset_program(
+        "full_p43",
+        "fn main() -> i64 { let s = concat!(\"hi \", \"world\"); if s == \"hi world\" { return 1 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p44_concat_macro_three_args() {
+    // Phase 15: concat! with 3 args → nested _fj_concat2 calls.
+    let r = compile_subset_program(
+        "full_p44",
+        "fn main() -> i64 { let s = concat!(\"a\", \"b\", \"c\"); return strlen(s) }",
+    );
+    // "abc" → 3
+    assert_eq!(r.status.code(), Some(3));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p45_str_array_push_and_get() {
+    // Phase 15: [str] dynamic array — push string + read back via _fj_arr_get_str.
+    // Note: arr[i] indexing always emits _fj_arr_get_i64 currently (Phase 16 work
+    // for proper element-type dispatch). Use the lower-level helper directly.
+    let r = compile_subset_program(
+        "full_p45",
+        "fn main() -> i64 { let mut arr: [str] = []; arr = arr.push(\"hello\"); arr = arr.push(\"world\"); let h = _fj_arr_get_str(arr, 0); if h == \"hello\" { return arr.len() } else { return 0 } }",
+    );
+    // arr.len() = 2 after two pushes
+    assert_eq!(r.status.code(), Some(2));
+}

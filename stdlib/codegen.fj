@@ -145,22 +145,42 @@ pub fn emit_preamble(state: CodegenState) -> CodegenState {
     s = emit_line(s, "    return out;")
     s = emit_line(s, "}")
     s = emit_line(s, "")
-    // Phase 14 R14 dynamic int64 array (Stage 2 prerequisite)
-    s = emit_line(s, "// Dynamic [i64] array helpers (Phase 14)")
-    s = emit_line(s, "typedef struct _FjArr { int64_t* data; size_t len; size_t cap; } _FjArr;")
+    // Phase 14 R14 dynamic array (Stage 2 prerequisite). Unified void** layout.
+    // Both `[i64]` and `[str]` use the same _FjArr* C type; element type
+    // is determined by which push/get helper is called.
+    s = emit_line(s, "// Dynamic array (Phase 14+15) — unified void** layout for both [i64] and [str]")
+    s = emit_line(s, "typedef struct _FjArr { void** data; size_t len; size_t cap; } _FjArr;")
     s = emit_line(s, "static _FjArr* _fj_arr_new(void) {")
     s = emit_line(s, "    _FjArr* a = (_FjArr*)malloc(sizeof(_FjArr));")
     s = emit_line(s, "    a->data = NULL; a->len = 0; a->cap = 0; return a;")
     s = emit_line(s, "}")
-    s = emit_line(s, "static _FjArr* _fj_arr_push_i64(_FjArr* a, int64_t v) {")
+    s = emit_line(s, "static _FjArr* _fj_arr_grow(_FjArr* a) {")
     s = emit_line(s, "    if (a->len >= a->cap) {")
     s = emit_line(s, "        a->cap = a->cap == 0 ? 8 : a->cap * 2;")
-    s = emit_line(s, "        a->data = (int64_t*)realloc(a->data, a->cap * sizeof(int64_t));")
+    s = emit_line(s, "        a->data = (void**)realloc(a->data, a->cap * sizeof(void*));")
     s = emit_line(s, "    }")
-    s = emit_line(s, "    a->data[a->len++] = v; return a;")
+    s = emit_line(s, "    return a;")
     s = emit_line(s, "}")
-    s = emit_line(s, "static int64_t _fj_arr_get_i64(_FjArr* a, int64_t i) { return a->data[i]; }")
+    s = emit_line(s, "static _FjArr* _fj_arr_push_i64(_FjArr* a, int64_t v) {")
+    s = emit_line(s, "    a = _fj_arr_grow(a);")
+    s = emit_line(s, "    a->data[a->len++] = (void*)(intptr_t)v; return a;")
+    s = emit_line(s, "}")
+    s = emit_line(s, "static _FjArr* _fj_arr_push_str(_FjArr* a, const char* v) {")
+    s = emit_line(s, "    a = _fj_arr_grow(a);")
+    s = emit_line(s, "    a->data[a->len++] = (void*)v; return a;")
+    s = emit_line(s, "}")
+    s = emit_line(s, "static int64_t _fj_arr_get_i64(_FjArr* a, int64_t i) { return (int64_t)(intptr_t)a->data[i]; }")
+    s = emit_line(s, "static const char* _fj_arr_get_str(_FjArr* a, int64_t i) { return (const char*)a->data[i]; }")
     s = emit_line(s, "static int64_t _fj_arr_len(_FjArr* a) { return (int64_t)a->len; }")
+    s = emit_line(s, "")
+    // Phase 15 R14 conversions
+    s = emit_line(s, "// Conversions (Phase 15)")
+    s = emit_line(s, "static int64_t _fj_to_int(const char* s) { return (int64_t)atoll(s); }")
+    s = emit_line(s, "static const char* _fj_to_string(int64_t n) {")
+    s = emit_line(s, "    char* out = (char*)malloc(32);")
+    s = emit_line(s, "    snprintf(out, 32, \"%lld\", (long long)n);")
+    s = emit_line(s, "    return out;")
+    s = emit_line(s, "}")
     s = emit_line(s, "")
     s
 }
@@ -297,8 +317,9 @@ fn map_type(ty: str) -> str {
         C_TYPE_STR
     } else if ty == "void" || ty == "" {
         C_TYPE_VOID
-    } else if ty == "[i64]" || ty == "[int]" || ty == "[i32]" {
-        // Phase 14: dynamic int array
+    } else if ty == "[i64]" || ty == "[int]" || ty == "[i32]" || ty == "[str]" {
+        // Phase 14+15: unified dynamic array (void** layout); element type
+        // determined by push/get helper at use site, not by C type.
         "_FjArr*"
     } else {
         C_TYPE_INT
