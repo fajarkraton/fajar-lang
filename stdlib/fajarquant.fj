@@ -1,0 +1,99 @@
+// FajarQuant — Adaptive Vector Quantization for LLM KV Cache
+// Pure Fajar Lang port of fajarquant Rust crate v0.4.0
+// FAJARQUANT_RUST_TO_FJ_PLAN Phase 1+2 (started 2026-05-05)
+//
+// Source: github.com/fajarkraton/fajarquant @ commit 192c14d
+// Companion docs:
+//   docs/FAJARQUANT_RUST_TO_FJ_PLAN.md (master plan)
+//   docs/FAJARQUANT_FJ_PORT_PHASE_0_FINDINGS.md (audit)
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 1.A — tensor_init_with helpers
+// ═══════════════════════════════════════════════════════════════════════
+// Equivalent to ndarray's Array1::from_shape_fn / Array2::from_shape_fn.
+
+/// Creates a 1D tensor of size `n` where element[i] = f(i).
+/// Usage: `let t = tensor_init_with_1d(10, |i| (i as f64) * 2.0)`
+@device fn tensor_init_with_1d(n: i64, f: fn(i64) -> f64) -> tensor {
+    let mut data: [f64] = []
+    let mut i: i64 = 0
+    while i < n {
+        data = data.push(f(i))
+        i = i + 1
+    }
+    from_data(data, [n])
+}
+
+/// Creates a 2D tensor of shape [rows, cols] where element[r,c] = f(r, c).
+@device fn tensor_init_with_2d(rows: i64, cols: i64, f: fn(i64, i64) -> f64) -> tensor {
+    let mut data: [f64] = []
+    let mut r: i64 = 0
+    while r < rows {
+        let mut c: i64 = 0
+        while c < cols {
+            data = data.push(f(r, c))
+            c = c + 1
+        }
+        r = r + 1
+    }
+    from_data(data, [rows, cols])
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 2.B — hierarchical.rs port (BitSchedule + tiers)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/hierarchical.rs lines 1-401
+// Algorithm: allocates more bits to recent tokens, exponentially decaying
+// to fewer bits as tokens age. 48.7% bit savings at 10K context per paper.
+//
+// Rust uses `Vec<(usize, u8)>` tiers cache; fj port uses parallel arrays
+// of (max_age, bits) pairs for simplicity. Same semantics.
+
+/// Computes bit-width for a token at given `age` using exponential decay.
+/// `base_bits`: starting bit-width (e.g. 8); `min_bits`: floor (e.g. 2);
+/// `decay`: rate constant (e.g. 0.001). Mirror of Rust `bits_for(age)`.
+@device fn bits_for_age(base_bits: i64, min_bits: i64, decay: f64, age: i64) -> i64 {
+    if age < 0 { return base_bits }
+    let bits_f: f64 = (base_bits as f64) * exp(-decay * (age as f64))
+    let bits: i64 = round(bits_f) as i64
+    if bits < min_bits { return min_bits }
+    if bits > base_bits { return base_bits }
+    bits
+}
+
+/// Total bits used for a sequence of length `seq_len` under exponential
+/// decay schedule. Equivalent to Rust BitSchedule::total_bits.
+@device fn schedule_total_bits(seq_len: i64, base_bits: i64, min_bits: i64, decay: f64) -> i64 {
+    let mut total: i64 = 0
+    let mut age: i64 = 0
+    while age < seq_len {
+        total = total + bits_for_age(base_bits, min_bits, decay, age)
+        age = age + 1
+    }
+    total
+}
+
+/// Average bits per token under hierarchical schedule.
+/// Equivalent to Rust BitSchedule::avg_bits.
+@device fn schedule_avg_bits(seq_len: i64, base_bits: i64, min_bits: i64, decay: f64) -> f64 {
+    if seq_len <= 0 { return 0.0 }
+    let total: i64 = schedule_total_bits(seq_len, base_bits, min_bits, decay)
+    (total as f64) / (seq_len as f64)
+}
+
+/// Bit savings vs flat-allocation baseline (all positions at base_bits).
+/// Returns saved bits. Equivalent to (baseline - actual).
+@device fn schedule_bits_saved(seq_len: i64, base_bits: i64, min_bits: i64, decay: f64) -> i64 {
+    let baseline: i64 = seq_len * base_bits
+    let actual: i64 = schedule_total_bits(seq_len, base_bits, min_bits, decay)
+    baseline - actual
+}
+
+/// Savings as percent. Returns 0..100.
+@device fn schedule_savings_percent(seq_len: i64, base_bits: i64, min_bits: i64, decay: f64) -> i64 {
+    let baseline: i64 = seq_len * base_bits
+    if baseline <= 0 { return 0 }
+    let saved: i64 = schedule_bits_saved(seq_len, base_bits, min_bits, decay)
+    saved * 100 / baseline
+}
