@@ -2,6 +2,41 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.1] — 2026-05-05 Phase 16 deepening: skip_ws/read_word/read_int compile
+
+Patch follow-up to v34.5.0. Adds smart `to_int(x)` dispatch:
+- `to_int(s)` where s is str-typed → `_fj_to_int(s)` (atoll wrapper)
+- `to_int(n)` where n is numeric (e.g., `strlen(s)`) → `(int64_t)(n)` cast
+
+This unblocks the standard `let n = to_int(strlen(src))` idiom used
+throughout parser_ast.fj scanning helpers.
+
+### Test added
+
+P58: `skip_spaces`, `read_word`, `read_int_at` — three more
+parser_ast.fj-style helpers compile through chain end-to-end.
+Verifies `skip_spaces("   abc", 0) = 3`, `read_word("hello123 world",
+0) = 8`, `read_int_at("42abc", 0) = 2`. Total return 13. ✅
+
+### Test suite: 57 → 58 (1 NEW)
+
+**58/58 PASS in 0.61s.**
+
+### Stage 2 Phase 16 progress
+
+Helpers from `stdlib/parser_ast.fj` that now compile via chain:
+- ✅ `is_digit_ast`, `is_alpha_ast`, `is_alnum_ast` (P57)
+- ✅ `skip_ws` (simplified), `read_word`, `read_int` (P58)
+
+Remaining for Phase 16 FULL:
+- ❌ `tokenize` (uses match with payload extract `Ok(c) => c`)
+- ❌ `parse_*` family (state-passing struct patterns)
+- ❌ `emit_*` family (chained method calls)
+
+### Effort
+
+P58 + to_int dispatch ~15min. Cumulative ~15.5h across v33.4.0..v34.5.1.
+
 ## [v34.5.0] — 2026-05-05 Phase 16 partial: Pratt precedence + parens + parser_ast helpers compile
 
 Phase 16 partial milestone toward Stage 2 self-compile. Adds:

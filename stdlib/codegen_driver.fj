@@ -285,7 +285,25 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             else { name = "fj_println_int" }
         }
         // Phase 15: type conversions
-        if raw_name == "to_int" { name = "_fj_to_int" }
+        // to_int dispatch: if arg is str-typed → atoll wrapper; else cast.
+        if raw_name == "to_int" {
+            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let arg_is_str = arg_tag == "STR" ||
+                (arg_tag == "IDENT" && pos + 3 < to_int(len(ast)) &&
+                 lookup_var_type_in_table(vars, ast[pos + 3]) == "str") ||
+                (arg_tag == "BEGIN_METHOD_CALL" && {
+                    let m = find_method_name(ast, pos + 2)
+                    m == "substring" || m == "concat"
+                }) ||
+                (arg_tag == "BEGIN_MACRO_CALL")
+            if arg_is_str {
+                name = "_fj_to_int"
+            } else {
+                // Numeric arg (e.g. strlen() result) — cast to int64_t.
+                // Special-case via prefix; handled below by emitting `(int64_t)(...)`.
+                name = "(int64_t)"
+            }
+        }
         if raw_name == "to_string" { name = "_fj_to_string" }
         // strlen is C stdlib; pass through unchanged
         // (already worked in Phase 13 — no rename needed)

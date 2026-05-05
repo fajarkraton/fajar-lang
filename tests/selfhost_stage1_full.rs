@@ -696,12 +696,23 @@ fn full_p57_parser_ast_helpers_subset() {
     // is_alpha_ast, is_alnum_ast) compile through the chain and produce
     // correct results. Validates that fj-source compiler can compile a
     // meaningful chunk of the fj-source compiler's own source code.
-    // (is_ws_ast omitted from this test to avoid \n\t\r escape complexity
-    // through the test rig — but compiles fine standalone.)
     let r = compile_subset_program(
         "full_p57",
         "fn is_digit_ast(c: str) -> bool { return c >= \"0\" && c <= \"9\" } fn is_alpha_ast(c: str) -> bool { return c == \"_\" || (c >= \"a\" && c <= \"z\") || (c >= \"A\" && c <= \"Z\") } fn is_alnum_ast(c: str) -> bool { return is_alpha_ast(c) || is_digit_ast(c) } fn main() -> i64 { let mut count = 0; if is_digit_ast(\"5\") { count = count + 1 }; if is_alpha_ast(\"a\") { count = count + 2 }; if is_alnum_ast(\"_\") { count = count + 4 }; return count }",
     );
     // 1+2+4 = 7
     assert_eq!(r.status.code(), Some(7));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p58_skip_ws_read_word_read_int() {
+    // Phase 16: skip_ws + read_word + read_int helpers from parser_ast.fj
+    // compile + run correctly. Adds the to_int(strlen(s)) cast dispatch.
+    let r = compile_subset_program(
+        "full_p58",
+        "fn is_digit_ast(c: str) -> bool { return c >= \"0\" && c <= \"9\" } fn is_alpha_ast(c: str) -> bool { return c == \"_\" || (c >= \"a\" && c <= \"z\") || (c >= \"A\" && c <= \"Z\") } fn is_alnum_ast(c: str) -> bool { return is_alpha_ast(c) || is_digit_ast(c) } fn skip_spaces(src: str, pos: i64) -> i64 { let n = to_int(strlen(src)); let mut p = pos; while p < n { let c = src.substring(p, p + 1); if c == \" \" { p = p + 1 } else { return p } }; return p } fn read_word(src: str, pos: i64) -> i64 { let n = to_int(strlen(src)); let mut p = pos; while p < n && is_alnum_ast(src.substring(p, p + 1)) { p = p + 1 }; return p } fn read_int_at(src: str, pos: i64) -> i64 { let n = to_int(strlen(src)); let mut p = pos; while p < n && is_digit_ast(src.substring(p, p + 1)) { p = p + 1 }; return p } fn main() -> i64 { let p1 = skip_spaces(\"   abc\", 0); let p2 = read_word(\"hello123 world\", 0); let p3 = read_int_at(\"42abc\", 0); return p1 + p2 + p3 }",
+    );
+    // 3 + 8 + 2 = 13
+    assert_eq!(r.status.code(), Some(13));
 }
