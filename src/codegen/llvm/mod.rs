@@ -7890,6 +7890,22 @@ impl<'ctx> LlvmCompiler<'ctx> {
             .iter()
             .any(|o| matches!(o, crate::parser::ast::AsmOption::Nostack));
 
+        // V33.P6.6 Phase 8 follow-up: honor `options(att_syntax)`. Was
+        // previously hard-coded to None (= LLVM module default = Intel
+        // on x86). The Intel parser accepts some AT&T-style register
+        // names (`%rax`) by accident but rejects strict AT&T constructs
+        // like `%dil` (sub-register) and `1:`/`2:` numeric local labels.
+        // Multi-instruction asm bodies that use these constructs would
+        // emit "error: invalid operand" and produce a 0-byte .o file.
+        let dialect = if options
+            .iter()
+            .any(|o| matches!(o, crate::parser::ast::AsmOption::AttSyntax))
+        {
+            Some(inkwell::InlineAsmDialect::ATT)
+        } else {
+            None
+        };
+
         // Build LLVM inline asm
         let asm_ty = if !output_constraints.is_empty() {
             i64_ty.fn_type(
@@ -7915,7 +7931,7 @@ impl<'ctx> LlvmCompiler<'ctx> {
             constraint_str,
             has_side_effects,
             align_stack,
-            None,  // dialect
+            dialect,
             false, // can_throw
         );
 
