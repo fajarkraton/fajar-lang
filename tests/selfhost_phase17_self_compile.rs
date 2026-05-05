@@ -43,6 +43,88 @@ fn cat_files(files: &[&str]) -> String {
     s
 }
 
+/// Common helper: run the chain on a stdlib file, write its C output,
+/// gcc -c it, return the path to the .o.
+#[cfg(unix)]
+fn chain_compile_to_object(label: &str, stdlib_path: &str) -> std::path::PathBuf {
+    let driver = format!(
+        r#"
+fn main() {{
+    let src_result = read_file("{stdlib_path}")
+    let src = match src_result {{
+        Ok(content) => content,
+        Err(_) => {{
+            println("read_file failed for {stdlib_path}")
+            return
+        }}
+    }}
+    let ast = parse_to_ast(src)
+    let c_src = emit_program(ast)
+    let _ = write_file("/tmp/{label}_self_compile.c", c_src)
+    println(f"AST size: {{to_int(len(ast))}}")
+}}
+"#
+    );
+    let combined = format!(
+        "{}{}",
+        cat_files(&[
+            "stdlib/codegen.fj",
+            "stdlib/parser_ast.fj",
+            "stdlib/codegen_driver.fj"
+        ]),
+        driver
+    );
+    let tmp_fj = std::env::temp_dir().join(format!("{label}_self_compile.fj"));
+    std::fs::write(&tmp_fj, &combined).unwrap();
+
+    let out = Command::new(fj_binary())
+        .args(["run", tmp_fj.to_str().unwrap()])
+        .current_dir(workspace())
+        .output()
+        .expect("fj run");
+    assert!(
+        out.status.success(),
+        "fj run failed for {label}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let c_path = std::env::temp_dir().join(format!("{label}_self_compile.c"));
+    let o_path = std::env::temp_dir().join(format!("{label}_self_compile.o"));
+    assert!(
+        c_path.exists(),
+        "chain failed to write C output for {label}"
+    );
+
+    let cc = Command::new("gcc")
+        .args([
+            c_path.to_str().unwrap(),
+            "-c",
+            "-o",
+            o_path.to_str().unwrap(),
+            "-w",
+        ])
+        .output()
+        .expect("gcc");
+    assert!(
+        cc.status.success(),
+        "gcc -c failed for {label}:\n{}",
+        String::from_utf8_lossy(&cc.stderr)
+    );
+    o_path
+}
+
+#[cfg(unix)]
+fn assert_object_exports(o_path: &std::path::Path, required: &[&str]) {
+    let nm = Command::new("nm").arg(o_path).output().expect("nm");
+    let nm_out = String::from_utf8_lossy(&nm.stdout);
+    for sym in required {
+        assert!(
+            nm_out.contains(&format!(" T {sym}")),
+            "missing exported symbol: {sym}\nnm output:\n{nm_out}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn phase17_parser_ast_fj_self_compile_to_object() {
@@ -162,4 +244,48 @@ fn main() {
             "missing exported symbol: {sym}\nnm output:\n{nm_out}"
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn phase17_codegen_fj_self_compile_to_object() {
+    // Phase 17 milestone — sister to parser_ast.fj. The chain compiles
+    // stdlib/codegen.fj's full source (~541 LOC, 33 fns) into a valid
+    // GCC object file. This is the SECOND of three stdlib modules to
+    // self-compile cleanly via the chain.
+    let o_path = chain_compile_to_object("codegen", "stdlib/codegen.fj");
+    let required = [
+        "new_codegen",
+        "emit_line",
+        "indent",
+        "dedent",
+        "record_var_type",
+        "clear_var_types",
+        "add_struct_name",
+        "is_struct_name",
+        "add_fn_ret_type",
+        "lookup_fn_ret_type",
+        "map_type_ctx",
+        "lookup_var_type",
+        "emit_preamble",
+        "emit_function",
+        "emit_function_typed",
+        "emit_function_end",
+        "emit_let",
+        "emit_return",
+        "emit_if",
+        "emit_else",
+        "emit_endif",
+        "emit_while",
+        "emit_endwhile",
+        "emit_call",
+        "emit_println",
+        "map_binop",
+        "generate_c",
+        "c_type_for",
+        "c_operator",
+        "line_count",
+        "generate_hello_c",
+    ];
+    assert_object_exports(&o_path, &required);
 }

@@ -17,6 +17,7 @@ fn exr(code: str, pos: i64) -> ExprResult {
     ExprResult { code: code, pos: pos }
 }
 
+
 // Parse an atom (INT / IDENT / BEGIN_CALL ... END_CALL) starting at pos.
 // Returns (code, new_pos).
 fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
@@ -118,13 +119,20 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         exr(concat!("(", op, r.code, ")"), p2)
     } else if tag == "BEGIN_INDEX" {
         // Phase 15.1: dispatch by declared array element type if known.
+        // Phase 17.4: support FIELD chain on subject (e.g. state.lines[i]).
         // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
         //         _fj_arr_get_i64(arr, i) otherwise (default for [i64] or unknown)
         let arr_name = ast[pos + 1]
-        let r = parse_expr_emit(ast, vars, pos + 2)
+        let mut p_subj = pos + 2
+        let mut subj = arr_name
+        while p_subj + 1 < n && ast[p_subj] == "FIELD" {
+            subj = concat!(subj, ".", ast[p_subj + 1])
+            p_subj = p_subj + 2
+        }
+        let r = parse_expr_emit(ast, vars, p_subj)
         let arr_type = lookup_var_type_in_table(vars, arr_name)
         let helper = if arr_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
-        exr(concat!(helper, "(", arr_name, ", ", r.code, ")"), r.pos + 1)
+        exr(concat!(helper, "(", subj, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
         // Phase 16.5: subject can be ANY expression (incl. nested
         // BEGIN_METHOD_CALL for chained calls). Parse subject via
@@ -151,17 +159,15 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         let mut helper = map_method(method)
         if method == "push" {
             // STR atom or string-returning method/macro → push_str; else push_i64
+            // Phase 17.4: lifted intermediate `let`s out of if-expr bodies so
+            // the chain (which only handles single-expression if-expr branches)
+            // can compile codegen_driver.fj itself.
             let arg_is_str = first_arg_tag == "STR" ||
                 (first_arg_tag == "BEGIN_MACRO_CALL")
-            let arg_method_str = if first_arg_tag == "BEGIN_METHOD_CALL" {
-                let mname = find_method_name(ast, first_arg_pos)
-                mname == "substring" || mname == "concat" || mname == "push"
-            } else { false }
-            let arg_ident_str = if first_arg_tag == "IDENT" {
-                let arg_name = if first_arg_pos + 1 < n { ast[first_arg_pos + 1] } else { "" }
-                let t = lookup_var_type_in_table(vars, arg_name)
-                t == "str"
-            } else { false }
+            let mname_for_arg = if first_arg_tag == "BEGIN_METHOD_CALL" { find_method_name(ast, first_arg_pos) } else { "" }
+            let arg_method_str = mname_for_arg == "substring" || mname_for_arg == "concat" || mname_for_arg == "push"
+            let arg_name_for_dispatch = if first_arg_pos + 1 < n { ast[first_arg_pos + 1] } else { "" }
+            let arg_ident_str = first_arg_tag == "IDENT" && lookup_var_type_in_table(vars, arg_name_for_dispatch) == "str"
             if arg_is_str || arg_method_str || arg_ident_str {
                 helper = "_fj_arr_push_str"
             } else {
@@ -182,17 +188,33 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
     } else if tag == "BEGIN_IF_EXPR" {
         // Phase 17.1: lower `if cond { a } else { b }` (expr form) to a C
         // ternary `(cond ? a : b)`. No-else form gets default `0`.
+        // Phase 17.5: skip past optional preceding BEGIN_LET nodes inside
+        // then/else blocks (parser supports the syntax). For now we IGNORE
+        // them in codegen and just use the trailing expression — works when
+        // the let bindings aren't actually referenced by the trailing expr
+        // (the parser allows but the user must still write self-contained
+        // trailing exprs in this transitional state). Full GCC stmt-expr
+        // lowering requires threading cg through parse_atom.
         let r_cond = parse_expr_emit(ast, vars, pos + 1)
         let mut p2 = r_cond.pos
         if p2 >= n || ast[p2] != "BEGIN_THEN_EXPR" {
             return exr("/* ERR_IF_EXPR_THEN */", p2)
         }
-        let r_then = parse_expr_emit(ast, vars, p2 + 1)
+        p2 = p2 + 1
+        // Skip preceding lets — codegen doesn't yet emit them inline.
+        while p2 < n && ast[p2] == "BEGIN_LET" {
+            p2 = skip_one_node(ast, p2)
+        }
+        let r_then = parse_expr_emit(ast, vars, p2)
         p2 = r_then.pos
         if p2 < n && ast[p2] == "END_THEN_EXPR" { p2 = p2 + 1 }
         let mut else_code = "0"
         if p2 < n && ast[p2] == "BEGIN_ELSE_EXPR" {
-            let r_else = parse_expr_emit(ast, vars, p2 + 1)
+            p2 = p2 + 1
+            while p2 < n && ast[p2] == "BEGIN_LET" {
+                p2 = skip_one_node(ast, p2)
+            }
+            let r_else = parse_expr_emit(ast, vars, p2)
             else_code = r_else.code
             p2 = r_else.pos
             if p2 < n && ast[p2] == "END_ELSE_EXPR" { p2 = p2 + 1 }
@@ -206,13 +228,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         let r_subj = parse_expr_emit(ast, vars, pos + 1)
         // R12 closure: detect string-typed subject so cond uses _fj_streq instead of raw ==
         // Subject is string if its atom tag is STR (literal) or IDENT with declared type "str".
+        // Phase 17.4: lifted intermediate let out of if-expr body.
         let subj_atom_tag = if pos + 1 < n { ast[pos + 1] } else { "" }
-        let subj_is_str = if subj_atom_tag == "STR" { true }
-                          else if subj_atom_tag == "IDENT" {
-                              let nm = if pos + 2 < n { ast[pos + 2] } else { "" }
-                              lookup_var_type_in_table(vars, nm) == "str"
-                          }
-                          else { false }
+        let subj_ident_name = if pos + 2 < n { ast[pos + 2] } else { "" }
+        let subj_is_str = subj_atom_tag == "STR"
+            || (subj_atom_tag == "IDENT" && lookup_var_type_in_table(vars, subj_ident_name) == "str")
         let mut p2 = r_subj.pos
         let mut body = concat!("({ int64_t ", tmp_name, "; ")
         let mut any_arm = false
@@ -288,14 +308,14 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         // Phase 15: type conversions
         // to_int dispatch: if arg is str-typed → atoll wrapper; else cast.
         if raw_name == "to_int" {
+            // Phase 17.4: lifted intermediate `let` out of block-as-expression
+            // so the chain (no block-expr support) can compile codegen_driver.
             let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let arg_method_name = if arg_tag == "BEGIN_METHOD_CALL" { find_method_name(ast, pos + 2) } else { "" }
             let arg_is_str = arg_tag == "STR" ||
                 (arg_tag == "IDENT" && pos + 3 < to_int(len(ast)) &&
                  lookup_var_type_in_table(vars, ast[pos + 3]) == "str") ||
-                (arg_tag == "BEGIN_METHOD_CALL" && {
-                    let m = find_method_name(ast, pos + 2)
-                    m == "substring" || m == "concat"
-                }) ||
+                (arg_tag == "BEGIN_METHOD_CALL" && (arg_method_name == "substring" || arg_method_name == "concat")) ||
                 (arg_tag == "BEGIN_MACRO_CALL")
             if arg_is_str {
                 name = "_fj_to_int"

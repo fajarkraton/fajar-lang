@@ -2,6 +2,65 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.9] — 2026-05-06 🎯 Phase 17 milestone #2: codegen.fj fully self-compiles to .o
+
+**HEADLINE:** the chain now compiles **stdlib/codegen.fj's full source**
+(541 LOC, 33 functions) into a valid GCC object file. This is the second
+of three stdlib modules to self-compile cleanly via the chain.
+
+Combined with v34.5.8 (parser_ast.fj):
+- parser_ast.fj: 25 fns ✅ (~3min runtime)
+- codegen.fj: 33 fns ✅ (~11s runtime)
+- codegen_driver.fj: parses fully ✅ (gcc -c output too slow to verify in CI)
+
+### Bugs fixed (5)
+
+1. **Substring fast path for byte indexing**: substring fallback was
+   `chars().skip(byte_offset)` which conflated byte and char offsets. For
+   ASCII source this happened to work; for codegen.fj's `═` Unicode
+   section dividers (3-byte each), the byte loop counter went out of
+   sync with the char iterator. Fixed: byte-indexed fast path; when
+   indices straddle UTF-8 char boundaries, return empty string.
+2. **Field-then-index** `state.lines[i]`: parser only allowed
+   `IDENT[expr]`, not `IDENT.field[expr]`. Both parser_ast.fj's
+   parse_primary_ast and codegen_driver.fj's BEGIN_INDEX handler now
+   support a FIELD chain on the subject.
+3. **`else if` chain in if-expression**: parser previously errored at
+   `else if cond {...}` requiring `else { ... }` literal brace. Now
+   recurses into a nested BEGIN_IF_EXPR for the chain.
+4. **Block-with-trailing-expression in if-expr** (parser-side): supports
+   `{ let X = ...; <trailing_expr> }` syntax. Codegen currently SKIPS
+   the preceding lets (a known gap; full GCC stmt-expr lowering is the
+   next increment after threading cg through parse_atom).
+5. **Manual let-lifts in codegen_driver.fj** (3 sites): hoisted intermediate
+   `let mname = find_method_name(...)` etc. out of if-expr-then bodies so
+   the trailing expr in each branch is self-contained without referencing
+   the (codegen-skipped) preceding lets.
+
+### Tests added
+
+- `phase17_codegen_fj_self_compile_to_object` (11s) — chain → gcc -c
+  → 33 T symbols verified.
+- Reusable helper `chain_compile_to_object(label, stdlib_path)` extracted
+  to share between parser_ast.fj and codegen.fj integration tests.
+
+### Test suite: 80 stage1-full PASS + 2 phase17 milestones PASS
+
+**80/80 stage1-full PASS in 0.99s. 2/2 phase17 PASS (3min + 11s).
+Lib: 7629 PASS. fmt clean. clippy 0 warnings.**
+
+### Phase 17 progress
+
+- ✅ chain compiles parser_ast.fj (1200 LOC, 25 fns) (v34.5.8)
+- ✅ chain compiles codegen.fj (541 LOC, 33 fns) (v34.5.9)  ← THIS
+- ⏸ chain parses codegen_driver.fj fully (10745+ AST nodes); gcc -c is
+  still slow + may have remaining type-inference gaps. Next session.
+- ❌ True triple-test (native binary running on its own source) — TBD
+
+### Effort
+
+~1.5h. Cumulative ~22.2h across v33.4.0..v34.5.9.
+
 ## [v34.5.8] — 2026-05-05 🎯 Phase 17 milestone: parser_ast.fj fully self-compiles to .o
 
 **HEADLINE:** the chain now compiles **stdlib/parser_ast.fj's full source**

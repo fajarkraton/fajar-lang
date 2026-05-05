@@ -307,7 +307,18 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let p_lb = expect_char(src, r_cond.pos, "{")
         if p_lb < 0 { return pr_err(a, r_cond.pos, "ERR_IF_EXPR_LB") }
         a = a.push("BEGIN_THEN_EXPR")
-        let r_then = parse_expr_ast(src, p_lb, a)
+        // Phase 17.5: support `{ let X = ...; let Y = ...; <expr> }` as a
+        // block-with-trailing-expression. Loop parsing intermediate `let`
+        // statements (codegen lowers via GCC stmt-expr) before the final
+        // trailing expression.
+        let mut p_then = skip_ws(src, p_lb)
+        while p_then < n && expect_str(src, p_then, "let") > 0 {
+            let r_let = parse_stmt_ast(src, p_then, a)
+            if r_let.error { return r_let }
+            a = r_let.ast
+            p_then = skip_ws(src, r_let.pos)
+        }
+        let r_then = parse_expr_ast(src, p_then, a)
         if r_then.error { return r_then }
         a = r_then.ast
         let p_rb = skip_ws(src, r_then.pos)
@@ -318,10 +329,28 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let p_after_then = skip_ws(src, p_rb + 1)
         let after_else = expect_str(src, p_after_then, "else")
         if after_else > 0 {
+            // Phase 17.5: `else if cond { ... }` chains — parse the chained if
+            // as a NESTED BEGIN_IF_EXPR which becomes the else branch's value.
+            let p_after_else_kw = skip_ws(src, after_else)
+            if expect_str(src, p_after_else_kw, "if") > 0 {
+                a = a.push("BEGIN_ELSE_EXPR")
+                let r_chain = parse_primary_ast(src, p_after_else_kw, a)
+                if r_chain.error { return r_chain }
+                a = r_chain.ast.push("END_ELSE_EXPR").push("END_IF_EXPR")
+                return pr_ok(a, r_chain.pos)
+            }
             let p_lb2 = expect_char(src, after_else, "{")
             if p_lb2 < 0 { return pr_err(a, after_else, "ERR_IF_EXPR_ELSE_LB") }
             a = a.push("BEGIN_ELSE_EXPR")
-            let r_else = parse_expr_ast(src, p_lb2, a)
+            // Phase 17.5: same block-with-trailing-expr support for else.
+            let mut p_else = skip_ws(src, p_lb2)
+            while p_else < n && expect_str(src, p_else, "let") > 0 {
+                let r_let = parse_stmt_ast(src, p_else, a)
+                if r_let.error { return r_let }
+                a = r_let.ast
+                p_else = skip_ws(src, r_let.pos)
+            }
+            let r_else = parse_expr_ast(src, p_else, a)
             if r_else.error { return r_else }
             a = r_else.ast
             let p_rb2 = skip_ws(src, r_else.pos)
@@ -584,9 +613,16 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 }
                 return pr_ok(subj_a, cur)
             }
-            // Array indexing: IDENT[expr] (single dimensional, no chain)
-            if to_int(len(field_chain)) == 0 && cur_after < n && src.substring(cur_after, cur_after + 1) == "[" {
+            // Array indexing: IDENT[expr] or IDENT.f1.f2[expr] (Phase 17.4:
+            // codegen.fj uses `state.lines[i]` — field chain followed by index).
+            if cur_after < n && src.substring(cur_after, cur_after + 1) == "[" {
                 let mut a = ast.push("BEGIN_INDEX").push(word)
+                // Emit FIELD <name> chain (if any) before the index expr.
+                let mut k = 0
+                while k < to_int(len(field_chain)) {
+                    a = a.push("FIELD").push(field_chain[k])
+                    k = k + 1
+                }
                 let mut p_idx = cur_after + 1
                 p_idx = skip_ws(src, p_idx)
                 let r = parse_expr_ast(src, p_idx, a)

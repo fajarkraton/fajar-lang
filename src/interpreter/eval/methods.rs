@@ -277,12 +277,25 @@ impl Interpreter {
                     Some(Value::Int(n)) => *n as usize,
                     _ => s.len(),
                 };
-                let result: String = s
-                    .chars()
-                    .skip(start)
-                    .take(end.saturating_sub(start))
-                    .collect();
-                Ok(Value::Str(result))
+                // Phase 17.3: BYTE-indexed substring. Critical for the
+                // fj-source-compiler chain — parser_ast.fj's `n = len(src)`
+                // returns BYTE length, and tight loops advance `p` by 1
+                // BYTE per iteration. The previous chars()-based fallback
+                // treated the index as a CHAR offset, which gave wrong
+                // results once a Unicode multi-byte char appeared in the
+                // input (e.g. `═` in codegen.fj's section dividers).
+                //
+                // Behavior:
+                //   - Both indices on UTF-8 char boundaries → return that slice.
+                //   - Either index mid-char → return empty string. Callers
+                //     compare with "\n" / " " / etc. and naturally skip
+                //     across the multi-byte char one byte at a time.
+                let clamped_end = end.min(s.len());
+                let clamped_start = start.min(clamped_end);
+                if s.is_char_boundary(clamped_start) && s.is_char_boundary(clamped_end) {
+                    return Ok(Value::Str(s[clamped_start..clamped_end].to_string()));
+                }
+                Ok(Value::Str(String::new()))
             }
             (Value::Str(s), "parse_int") => match s.trim().parse::<i64>() {
                 Ok(n) => Ok(Value::Enum {
