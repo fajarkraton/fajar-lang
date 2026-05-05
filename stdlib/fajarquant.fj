@@ -97,3 +97,141 @@
     let saved: i64 = schedule_bits_saved(seq_len, base_bits, min_bits, decay)
     saved * 100 / baseline
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 2.C — cpu_kernels/scalar_baseline.rs port (~263 LOC)
+// V31 Phase D ternary BitLinear scalar baseline.
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/cpu_kernels/scalar_baseline.rs
+// Algorithm: 2-bit packed ternary weights ({-1, 0, +1}, code 0b11
+// reserved=0) × i8 activations → i64 accumulator per output channel.
+//
+// Wire format: V31 packed at 2 bits/element, 4 elements/byte little-endian
+// within byte. Encoding: 00=-1, 01=0, 10=+1, 11=reserved.
+// Layout: row-major (out_features, in_features), in_features inner stride.
+//
+// Used as bit-exact reference for TL2 LUT path parity tests.
+
+/// Decode a 2-bit ternary code into {-1, 0, +1}.
+/// 0b11 (reserved) treated as 0 per spec.
+@device fn decode_ternary_code(code: i64) -> i64 {
+    let masked: i64 = code & 3
+    if masked == 0 { return -1 }
+    if masked == 1 { return 0 }
+    if masked == 2 { return 1 }
+    0
+}
+
+/// Decode 4 ternary weights from a packed byte.
+/// Returns array [w0, w1, w2, w3] each in {-1, 0, +1}.
+/// Mirrors Rust `decode_ternary_byte`.
+@device fn decode_ternary_byte(b: i64) -> [i64; 4] {
+    [
+        decode_ternary_code(b),
+        decode_ternary_code(b >> 2),
+        decode_ternary_code(b >> 4),
+        decode_ternary_code(b >> 6),
+    ]
+}
+
+/// V31 ternary pack: encode i64 array of {-1, 0, +1} into bytes.
+/// 4 weights per byte, little-endian within byte. Mirrors the
+/// `pack_v31` test helper in scalar_baseline.rs.
+@device fn pack_ternary_v31(weights: [i64], n_weights: i64) -> [i64] {
+    let n_bytes: i64 = (n_weights + 3) / 4
+    let mut packed: [i64] = []
+    let mut b: i64 = 0
+    while b < n_bytes {
+        packed = packed.push(0)
+        b = b + 1
+    }
+    let mut i: i64 = 0
+    while i < n_weights {
+        let w: i64 = weights[i]
+        let mut code: i64 = 1  // 0 → 01
+        if w == -1 { code = 0 }     // 00
+        if w == 1 { code = 2 }      // 10
+        let byte_idx: i64 = i / 4
+        let lane: i64 = i % 4
+        packed[byte_idx] = packed[byte_idx] | (code << (lane * 2))
+        i = i + 1
+    }
+    packed
+}
+
+/// Compute per-output-channel i64 accumulator for one BitLinear matmul.
+///   y[j] = Σ_i W[j, i] * x[i]   with ternary W (V31-packed) and i8 x.
+///
+/// Returns empty array on size mismatch or buffer underflow (substitutes
+/// for Rust's `Option<Vec<i64>>` since fj-lang doesn't have Option).
+/// Caller checks `result.len() > 0`.
+///
+/// Mirrors Rust `bitlinear_packed_scalar`.
+@device fn bitlinear_packed_scalar(
+    weights_packed: [i64],
+    activations_i8: [i64],
+    out_features: i64,
+    in_features: i64,
+) -> [i64] {
+    if (activations_i8.len() as i64) != in_features { return [] }
+    let total_weights: i64 = out_features * in_features
+    let required_bytes: i64 = (total_weights + 3) / 4
+    if (weights_packed.len() as i64) < required_bytes { return [] }
+
+    let mut out: [i64] = []
+    let mut j: i64 = 0
+    while j < out_features {
+        let mut accum: i64 = 0
+        let row_start: i64 = j * in_features
+        let mut i: i64 = 0
+        while i < in_features {
+            let weight_idx: i64 = row_start + i
+            let byte: i64 = weights_packed[weight_idx / 4]
+            let lane: i64 = weight_idx % 4
+            let code: i64 = (byte >> (lane * 2)) & 3
+            let w: i64 = decode_ternary_code(code)
+            let x: i64 = activations_i8[i]
+            accum = accum + w * x
+            i = i + 1
+        }
+        out = out.push(accum)
+        j = j + 1
+    }
+    out
+}
+
+/// Absmax quantize float activations to i8 ({-127..+127}).
+///   gamma_x = 127.0 / max(|x|)        (1.0 if all-zero to avoid div-by-zero)
+///   q[i]    = round(x[i] * gamma_x).clamp(-127, 127)
+///
+/// Returns concatenated [gamma_x_bits_as_f64, q[0], q[1], ...] — first
+/// element is the scale, remaining are i64-extended i8 quantized values.
+/// Caller splits.
+///
+/// Mirrors Rust `absmax_quantize_i8` (which returns (Vec<i8>, f32) tuple).
+@device fn absmax_quantize_i8(activations: [f64], n: i64) -> [f64] {
+    // Find max(|x|)
+    let mut max_abs: f64 = 0.0
+    let mut i: i64 = 0
+    while i < n {
+        let v: f64 = activations[i]
+        let av: f64 = if v < 0.0 { -v } else { v }
+        if av > max_abs { max_abs = av }
+        i = i + 1
+    }
+    let gamma_x: f64 = if max_abs > 0.0 { 127.0 / max_abs } else { 1.0 }
+
+    // Quantize: q[i] = round(x[i] * gamma_x).clamp(-127, 127)
+    let mut result: [f64] = [gamma_x]
+    i = 0
+    while i < n {
+        let scaled: f64 = activations[i] * gamma_x
+        let mut q: i64 = round(scaled) as i64
+        if q < -127 { q = -127 }
+        if q > 127 { q = 127 }
+        result = result.push(q as f64)
+        i = i + 1
+    }
+    result
+}
