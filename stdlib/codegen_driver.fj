@@ -107,6 +107,13 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             }
             exr(code, p2)
         }
+    } else if tag == "BEGIN_UNARY" {
+        // Shape: BEGIN_UNARY <op> <operand_expr> END_UNARY
+        let op = ast[pos + 1]
+        let r = parse_expr_emit(ast, vars, pos + 2)
+        // Skip END_UNARY at r.pos
+        let p2 = if r.pos < n && ast[r.pos] == "END_UNARY" { r.pos + 1 } else { r.pos }
+        exr(concat!("(", op, r.code, ")"), p2)
     } else if tag == "BEGIN_INDEX" {
         // Phase 15.1: dispatch by declared array element type if known.
         // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
@@ -193,6 +200,15 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         // Pos used as unique suffix to avoid collisions across nested matches.
         let tmp_name = concat!("_match_", to_string(pos))
         let r_subj = parse_expr_emit(ast, vars, pos + 1)
+        // R12 closure: detect string-typed subject so cond uses _fj_streq instead of raw ==
+        // Subject is string if its atom tag is STR (literal) or IDENT with declared type "str".
+        let subj_atom_tag = if pos + 1 < n { ast[pos + 1] } else { "" }
+        let subj_is_str = if subj_atom_tag == "STR" { true }
+                          else if subj_atom_tag == "IDENT" {
+                              let nm = if pos + 2 < n { ast[pos + 2] } else { "" }
+                              lookup_var_type_in_table(vars, nm) == "str"
+                          }
+                          else { false }
         let mut p2 = r_subj.pos
         let mut body = concat!("({ int64_t ", tmp_name, "; ")
         let mut any_arm = false
@@ -201,7 +217,13 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             if ast[p2] == "BEGIN_ARM" {
                 let r_pat = parse_expr_emit(ast, vars, p2 + 1)
                 let r_body = parse_expr_emit(ast, vars, r_pat.pos)
-                let cond = concat!("(", r_subj.code, " == ", r_pat.code, ")")
+                // R12: string equality dispatch — if subject OR pattern is STR-typed, use strcmp
+                let pat_atom_tag = if p2 + 1 < n { ast[p2 + 1] } else { "" }
+                let cond = if subj_is_str || pat_atom_tag == "STR" {
+                    concat!("_fj_streq(", r_subj.code, ", ", r_pat.code, ")")
+                } else {
+                    concat!("(", r_subj.code, " == ", r_pat.code, ")")
+                }
                 let prefix = if any_arm { "else if (" } else { "if (" }
                 body = concat!(body, prefix, cond, ") ", tmp_name, " = ", r_body.code, "; ")
                 any_arm = true
@@ -291,7 +313,8 @@ fn is_atom_start(tag: str) -> bool {
     tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
     tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH" || tag == "BEGIN_METHOD_CALL" ||
-    tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX" || tag == "BEGIN_MACRO_CALL"
+    tag == "BEGIN_ARRAY_LIT" || tag == "BEGIN_INDEX" || tag == "BEGIN_MACRO_CALL" ||
+    tag == "BEGIN_UNARY"
 }
 
 // Phase 15.1: linear scan of [name, type, name, type, ...] table.

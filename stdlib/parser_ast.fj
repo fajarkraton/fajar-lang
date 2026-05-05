@@ -188,6 +188,17 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     if p >= n { return pr_err(ast, p, "ERR_EOF") }
 
     let c = src.substring(p, p + 1)
+    // Unary prefix operators: `-x` and `!x`
+    // Emit BEGIN_UNARY <op> <operand_expr> END_UNARY
+    if c == "-" || c == "!" {
+        // Avoid grabbing `-` when it's a binop — but parse_primary is called for atoms only;
+        // binop `-` is detected after lhs in parse_expr_ast. So leading `-` here is unary.
+        let mut a = ast.push("BEGIN_UNARY").push(c)
+        let r = parse_primary_ast(src, p + 1, a)
+        if r.error { return r }
+        a = r.ast.push("END_UNARY")
+        return pr_ok(a, r.pos)
+    }
     // Array literal: `[]` or `[a, b, c]`
     if c == "[" {
         let mut a = ast.push("BEGIN_ARRAY_LIT")

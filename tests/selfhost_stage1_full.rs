@@ -601,3 +601,61 @@ fn full_p48_str_array_in_fn_param() {
     );
     assert_eq!(r.status.code(), Some(11));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p49_match_string_subject_dispatches_strcmp() {
+    // R12 closure: match with string-typed subject lowers cond to _fj_streq, not raw ==.
+    let r = compile_subset_program(
+        "full_p49",
+        "fn classify(s: str) -> i64 { return match s { \"hello\" => 1, \"world\" => 2, _ => 0 } } fn main() -> i64 { return classify(\"world\") }",
+    );
+    assert_eq!(r.status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p50_match_string_default() {
+    // R12: string match with no matching arm → default.
+    let r = compile_subset_program(
+        "full_p50",
+        "fn classify(s: str) -> i64 { return match s { \"alpha\" => 10, \"beta\" => 20, _ => 99 } } fn main() -> i64 { return classify(\"gamma\") }",
+    );
+    assert_eq!(r.status.code(), Some(99));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p51_match_string_literal_subject() {
+    // R12: match where SUBJECT is a string literal (not an ident).
+    let r = compile_subset_program(
+        "full_p51",
+        "fn main() -> i64 { return match \"yes\" { \"no\" => 0, \"yes\" => 42, _ => 99 } }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p52_unary_negation_int() {
+    // Closure: unary `-` prefix operator. Use 200 then add 50 (positive result).
+    // Must use `let neg = 0 - 50` since C exit codes are unsigned-ish; instead test
+    // that `-x` parses + emits as `(-x)` correctly.
+    let r = compile_subset_program(
+        "full_p52",
+        "fn main() -> i64 { let x = -50; let y = 100; return y + x }",
+    );
+    // 100 + (-50) = 50
+    assert_eq!(r.status.code(), Some(50));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p53_unary_logical_not() {
+    // Closure: unary `!` prefix operator (logical not).
+    let r = compile_subset_program(
+        "full_p53",
+        "fn main() -> i64 { let f = false; if !f { return 7 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(7));
+}

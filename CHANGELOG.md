@@ -2,6 +2,66 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.4.0] — 2026-05-05 R12 closure: match string patterns + unary prefix ops
+
+Closure of two silent gaps surfaced in cross-phase honest audit:
+**R12 (Phase 11 leftover) — string match patterns** + **unary
+prefix operators (`-x`, `!x`)** which weren't on any prior gap list
+but blocked common idioms (P52 `-50`, P53 `!flag`).
+
+### Closed
+
+- **R12 — match with string-typed subject** now lowers cond to
+  `_fj_streq(subj, pat)` instead of raw `==` (which was pointer
+  compare in C). Detection logic in BEGIN_MATCH codegen:
+  - Subject atom is `STR` literal → use strcmp
+  - Subject atom is `IDENT` with `lookup_var_type == "str"` → use strcmp
+  - Pattern atom is `STR` literal → use strcmp
+  - Otherwise → raw `==` (correct for int/enum patterns)
+
+- **Unary prefix operators**: `-x` (numeric negation) and `!x`
+  (logical not) now parse + emit. New AST `BEGIN_UNARY <op>
+  <operand_expr> END_UNARY`. Codegen emits `(op operand)` directly
+  (C semantics).
+
+### Test suite: 48 → 53 (5 NEW)
+
+```
+P49 match string subject (ident)        → 2  (R12 closure)
+P50 match string fall-through default   → 99 (R12 default arm)
+P51 match string literal subject        → 42 (literal-as-subject)
+P52 unary minus: y + (-50)              → 50 (numeric negation)
+P53 unary !: if !false                  → 7  (logical not)
+```
+
+**53/53 PASS in 0.44s.**
+
+### Honest audit context
+
+User asked: "Apakah Phase sebelumnya juga 100%?" The audit revealed
+**Phase 11 R12 was a real defect** (match string subject → pointer
+compare) that survived through v34.3.1. Closed in this release per
+perfection-over-time rule. Plus unary minus/not surfaced as
+adjacent gaps when a test triggered the missing parse path.
+
+Earlier patches (v33.6.0 / v33.7.0 / v33.7.1 / v33.7.2 / v33.8.0)
+similarly closed iterative gaps. Pattern: each phase tagged with
+inflated headline → audit surfaces gaps → patch → 100% honest.
+
+### Honest scope still pending after v34.4.0
+
+- ❌ R15 memory leaks (acceptable for short-lived test programs)
+- ❌ Phase 3 T4 dup-fn detection (placeholder `var_{idx}` —
+  Stage-1-Full+ analyzer enhancement, gating none)
+- ❌ Phase 16 self-compile of stdlib/parser_ast.fj (separate scope)
+- ❌ Phase 17 Stage 1 == Stage 2 byte-equal triple-test
+- ❌ Strict aliasing warnings under `-Wstrict-aliasing=2`
+
+### Effort
+
+R12 + unary closure ~25min Claude time. 18 self-host phases
+CLOSED cumulative; ~13.5h total across v33.4.0..v34.4.0.
+
 ## [v34.3.1] — 2026-05-05 Phase 15 honest closure: var-type tracking
 
 Patch follow-up to v34.3.0 per perfection-over-time rule. v34.3.0
