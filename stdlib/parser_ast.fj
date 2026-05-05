@@ -129,12 +129,70 @@ fn expect_str(src: str, pos: i64, s: str) -> i64 {
 // Expression parser
 // ─────────────────────────────────────────────────────────────────────
 
+// Parse a match expression: `match subject { pat => body, ..., _ => body }`.
+// AST shape:
+//   BEGIN_MATCH <subject_expr>
+//     [BEGIN_ARM <pat_expr> <body_expr> END_ARM]*
+//     [BEGIN_DEFAULT <body_expr> END_DEFAULT]?
+//   END_MATCH
+pub fn parse_match_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let n = to_int(len(src))
+    let mut a = ast.push("BEGIN_MATCH")
+    let r_subj = parse_expr_ast(src, pos, a)
+    if r_subj.error { return r_subj }
+    a = r_subj.ast
+    let p_lb = expect_char(src, r_subj.pos, "{")
+    if p_lb < 0 { return pr_err(a, r_subj.pos, "ERR_MATCH_LB") }
+    let mut p = skip_ws(src, p_lb)
+    while p < n && src.substring(p, p + 1) != "}" {
+        // Pattern: either `_` (wildcard) or an expression
+        if src.substring(p, p + 1) == "_" {
+            // Verify the underscore stands alone (not part of identifier)
+            let after_under = p + 1
+            let next_char = if after_under < n { src.substring(after_under, after_under + 1) } else { " " }
+            if !is_alnum_ast(next_char) {
+                a = a.push("BEGIN_DEFAULT")
+                let p_arrow = expect_str(src, after_under, "=>")
+                if p_arrow < 0 { return pr_err(a, after_under, "ERR_MATCH_ARROW") }
+                let r_body = parse_expr_ast(src, p_arrow, a)
+                if r_body.error { return r_body }
+                a = r_body.ast.push("END_DEFAULT")
+                p = skip_ws(src, r_body.pos)
+                if p < n && src.substring(p, p + 1) == "," { p = skip_ws(src, p + 1) }
+                continue
+            }
+        }
+        // Regular arm: pattern => body
+        a = a.push("BEGIN_ARM")
+        let r_pat = parse_expr_ast(src, p, a)
+        if r_pat.error { return r_pat }
+        a = r_pat.ast
+        let p_arrow = expect_str(src, r_pat.pos, "=>")
+        if p_arrow < 0 { return pr_err(a, r_pat.pos, "ERR_MATCH_ARROW") }
+        let r_body = parse_expr_ast(src, p_arrow, a)
+        if r_body.error { return r_body }
+        a = r_body.ast.push("END_ARM")
+        p = skip_ws(src, r_body.pos)
+        if p < n && src.substring(p, p + 1) == "," { p = skip_ws(src, p + 1) }
+    }
+    if p < n && src.substring(p, p + 1) == "}" {
+        a = a.push("END_MATCH")
+        return pr_ok(a, p + 1)
+    }
+    pr_err(a, p, "ERR_MATCH_RB")
+}
+
 pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p = skip_ws(src, pos)
     let n = to_int(len(src))
     if p >= n { return pr_err(ast, p, "ERR_EOF") }
 
     let c = src.substring(p, p + 1)
+    // `match subject { ... }` expression
+    let after_match = expect_str(src, p, "match")
+    if after_match > 0 {
+        return parse_match_ast(src, after_match, ast)
+    }
     // String literal: "..."
     if c == "\"" {
         let mut q = p + 1

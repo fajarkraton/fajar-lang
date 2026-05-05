@@ -352,3 +352,58 @@ fn full_p26_block_comment() {
     );
     assert_eq!(r.status.code(), Some(13));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p27_match_enum_variants() {
+    // Match over enum variants with default `_`.
+    let r = compile_subset_program(
+        "full_p27",
+        "enum Color { Red, Green, Blue } fn main() -> i64 { let c = Color::Green; let v = match c { Color::Red => 100, Color::Green => 200, Color::Blue => 50, _ => 0 }; return v }",
+    );
+    assert_eq!(r.status.code(), Some(200));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p28_match_int_literals() {
+    // Match over integer literals.
+    let r = compile_subset_program(
+        "full_p28",
+        "fn main() -> i64 { let n = 3; let v = match n { 1 => 10, 2 => 20, 3 => 30, _ => 99 }; return v }",
+    );
+    assert_eq!(r.status.code(), Some(30));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p29_match_wildcard_only() {
+    // Match where subject doesn't match any specific arm; falls to default.
+    let r = compile_subset_program(
+        "full_p29",
+        "fn main() -> i64 { let n = 99; let v = match n { 1 => 10, 2 => 20, _ => 77 }; return v }",
+    );
+    assert_eq!(r.status.code(), Some(77));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p30_match_in_return() {
+    // `return match { ... }` — match directly as expression.
+    let r = compile_subset_program(
+        "full_p30",
+        "enum Mode { On, Off } fn main() -> i64 { let m = Mode::On; return match m { Mode::On => 1, Mode::Off => 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p31_match_in_arithmetic() {
+    // Match used inside arithmetic — proves it composes as a regular atom.
+    let r = compile_subset_program(
+        "full_p31",
+        "fn main() -> i64 { let x = 2; let r = match x { 1 => 10, 2 => 20, _ => 0 } + 5; return r }",
+    );
+    assert_eq!(r.status.code(), Some(25));
+}

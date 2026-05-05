@@ -32,7 +32,7 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v33.7.0, 2026-05-05 — Stage-1 Use-Site Closure)
+### Completion Status (v33.8.0, 2026-05-05 — match expression — fundamental control flow)
 
 **54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs.
 Every public mod has a callable surface from `.fj` or `fj` CLI. 39 CLI

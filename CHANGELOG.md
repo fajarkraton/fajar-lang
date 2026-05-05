@@ -2,6 +2,76 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.8.0] — 2026-05-05 match expression — fundamental control flow
+
+Closes the borderline-case from v33.7.x deferred list. `match` was
+the only "honest deferred" item that survived the perfection-rule
+self-check ("would a reasonable user be surprised?" — YES, match is
+fundamental control flow). Now closed.
+
+### Added
+
+- **`match` expression** — `match subject { pat => body, _ => default }`
+  as a regular expression atom. Supports:
+  - Enum variant patterns: `Color::Red => ...`
+  - Integer literal patterns: `1 => 10, 2 => 20`
+  - Wildcard `_` for default
+  - Composes anywhere expressions are valid (let-rhs, return-arg,
+    inside arithmetic — see P31)
+
+- **Codegen via GCC statement expression** — match lowers to
+  ```c
+  ({ int64_t _match_<pos>;
+     if ((subj == pat1)) _match_<pos> = body1;
+     else if ((subj == pat2)) _match_<pos> = body2;
+     else _match_<pos> = default;
+     _match_<pos>; })
+  ```
+  Position-based tmp naming guarantees uniqueness across nested
+  matches. Defensive `else = 0` added when no `_` arm to avoid UB.
+
+- **AST shape:**
+  ```
+  BEGIN_MATCH <subject_expr>
+    [BEGIN_ARM <pat_expr> <body_expr> END_ARM]*
+    [BEGIN_DEFAULT <body_expr> END_DEFAULT]?
+  END_MATCH
+  ```
+
+### Test suite expansion: 26 → 31 (5 NEW)
+
+```
+P27 match enum variants     (Color::Green) → 200
+P28 match int literals      (n=3)          → 30
+P29 match wildcard fallback (n=99)         → 77
+P30 match in return position (Mode::On)    → 1
+P31 match in arithmetic     (match + 5)    → 25  (composability)
+```
+
+**31/31 PASS in 0.21s.**
+
+### What v33.8.0 still doesn't claim
+
+- ❌ Match patterns with payload extraction (`Some(x) => use x`) —
+  Stage-1-Subset enums excluded payloads by design; needs Stage-1-Full+.
+- ❌ Guard clauses (`x if x > 5 => ...`) — minor extension.
+- ❌ Nested patterns (`Pair(Some(x), None) => ...`) — needs full
+  pattern compilation.
+- ❌ Inclusive ranges `..=`, step ranges — minor.
+- ❌ Generics, closures, async, lifetimes — Subset-excluded by design.
+- ❌ Stage 2 triple-test — separate roadmap.
+
+These are honestly deferred — pattern-payload + guards needs payload
+support in enum DECL first, which itself is a Stage-1-Full+ feature.
+
+### Effort
+
+Phase 11 (match) closed in ~30min Claude time vs 1-2h estimate. The
+gcc statement-expression approach was the leverage that made this small.
+
+Cumulative across v33.4.0..v33.8.0: ~8h Claude time, 13 self-host
+phases CLOSED.
+
 ## [v33.7.2] — 2026-05-05 Silent gaps closed: else-if + comments
 
 Two silent gaps surfaced by perfection-rule audit and closed:

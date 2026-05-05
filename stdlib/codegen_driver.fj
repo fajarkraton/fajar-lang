@@ -55,6 +55,42 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
         let enum_name = ast[pos + 1]
         let variant = ast[pos + 2]
         exr(concat!(enum_name, "_", variant), pos + 3)
+    } else if tag == "BEGIN_MATCH" {
+        // GCC statement expression: ({ int64_t _match_<pos>; if ... ; _match_<pos>; })
+        // Pos used as unique suffix to avoid collisions across nested matches.
+        let tmp_name = concat!("_match_", to_string(pos))
+        let r_subj = parse_expr_emit(ast, pos + 1)
+        let mut p2 = r_subj.pos
+        let mut body = concat!("({ int64_t ", tmp_name, "; ")
+        let mut any_arm = false
+        let mut has_default = false
+        while p2 < n && ast[p2] != "END_MATCH" {
+            if ast[p2] == "BEGIN_ARM" {
+                let r_pat = parse_expr_emit(ast, p2 + 1)
+                let r_body = parse_expr_emit(ast, r_pat.pos)
+                let cond = concat!("(", r_subj.code, " == ", r_pat.code, ")")
+                let prefix = if any_arm { "else if (" } else { "if (" }
+                body = concat!(body, prefix, cond, ") ", tmp_name, " = ", r_body.code, "; ")
+                any_arm = true
+                p2 = r_body.pos + 1  // past END_ARM
+            } else if ast[p2] == "BEGIN_DEFAULT" {
+                let r_body = parse_expr_emit(ast, p2 + 1)
+                let prefix = if any_arm { "else " } else { "" }
+                body = concat!(body, prefix, tmp_name, " = ", r_body.code, "; ")
+                has_default = true
+                any_arm = true
+                p2 = r_body.pos + 1  // past END_DEFAULT
+            } else {
+                p2 = p2 + 1
+            }
+        }
+        // Defensive default to avoid UB when no `_` arm provided
+        if !has_default {
+            let prefix = if any_arm { "else " } else { "" }
+            body = concat!(body, prefix, tmp_name, " = 0; ")
+        }
+        body = concat!(body, tmp_name, "; })")
+        exr(body, p2 + 1)  // past END_MATCH
     } else if tag == "BEGIN_STRUCT_LIT" {
         // Type { f1: e1, f2: e2 } → C99: (Type){.f1 = e1, .f2 = e2}
         let type_name = ast[pos + 1]
@@ -116,7 +152,7 @@ fn parse_atom(ast: [str], pos: i64) -> ExprResult {
 fn is_atom_start(tag: str) -> bool {
     tag == "INT" || tag == "IDENT" || tag == "FLOAT" || tag == "BOOL" ||
     tag == "STR" || tag == "ENUM_VARIANT" || tag == "BEGIN_CALL" ||
-    tag == "BEGIN_STRUCT_LIT"
+    tag == "BEGIN_STRUCT_LIT" || tag == "BEGIN_MATCH"
 }
 
 pub fn parse_expr_emit(ast: [str], pos: i64) -> ExprResult {
