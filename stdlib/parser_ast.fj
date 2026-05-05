@@ -1072,12 +1072,59 @@ pub fn parse_enum_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     }
 }
 
+// Parse `const NAME: TYPE = VALUE` declaration.
+// AST shape: BEGIN_CONST <name> <type> <expr> END_CONST
+pub fn parse_const_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    let p0 = skip_ws(src, pos)
+    let after_kw = expect_str(src, p0, "const")
+    if after_kw < 0 { return pr_err(ast, p0, "ERR_NO_CONST") }
+    let p1 = skip_ws(src, after_kw)
+    let id_end = read_word(src, p1)
+    if id_end == p1 { return pr_err(ast, p1, "ERR_CONST_NAME") }
+    let name = src.substring(p1, id_end)
+    let p_colon = expect_char(src, id_end, ":")
+    if p_colon < 0 { return pr_err(ast, id_end, "ERR_CONST_COLON") }
+    let p_t = skip_ws(src, p_colon)
+    let n = to_int(len(src))
+    let mut t_end: i64 = 0
+    if p_t < n && src.substring(p_t, p_t + 1) == "[" {
+        let mut depth = 1
+        let mut q = p_t + 1
+        while q < n && depth > 0 {
+            let cc = src.substring(q, q + 1)
+            if cc == "[" { depth = depth + 1 }
+            else if cc == "]" { depth = depth - 1 }
+            q = q + 1
+        }
+        t_end = q
+    } else {
+        t_end = read_word(src, p_t)
+    }
+    if t_end == p_t { return pr_err(ast, p_t, "ERR_CONST_TYPE") }
+    let ctype = src.substring(p_t, t_end)
+    let p_eq = expect_char(src, t_end, "=")
+    if p_eq < 0 { return pr_err(ast, t_end, "ERR_CONST_EQ") }
+    let mut a = ast.push("BEGIN_CONST").push(name).push(ctype)
+    let r = parse_expr_ast(src, p_eq, a)
+    if r.error { return r }
+    a = r.ast.push("END_CONST")
+    let mut p_after = skip_ws(src, r.pos)
+    if p_after < n && src.substring(p_after, p_after + 1) == ";" { p_after = p_after + 1 }
+    pr_ok(a, p_after)
+}
+
 pub fn parse_to_ast(src: str) -> [str] {
     let mut a: [str] = []
     let mut p: i64 = 0
     let n = to_int(len(src))
     while p < n {
         p = skip_ws(src, p)
+        if p >= n { break }
+        // Phase 17.0: skip optional `pub` modifier (visibility annotation
+        // is informational at codegen level — emitted fns are extern by
+        // default in C). Applies before fn / struct / enum / const.
+        let after_pub = expect_str(src, p, "pub")
+        if after_pub > 0 { p = skip_ws(src, after_pub) }
         if p >= n { break }
         // Dispatch on top-level keyword
         if expect_str(src, p, "struct") > 0 {
@@ -1089,6 +1136,14 @@ pub fn parse_to_ast(src: str) -> [str] {
         }
         if expect_str(src, p, "enum") > 0 {
             let r = parse_enum_ast(src, p, a)
+            a = r.ast
+            if r.error { return a }
+            p = r.pos
+            continue
+        }
+        // Phase 17.0: const decls — `const NAME: TYPE = VALUE`
+        if expect_str(src, p, "const") > 0 {
+            let r = parse_const_ast(src, p, a)
             a = r.ast
             if r.error { return a }
             p = r.pos

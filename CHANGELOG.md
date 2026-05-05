@@ -2,6 +2,63 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.7] — 2026-05-05 Phase 17 partial: pub + const + forward decls + len(str)→strlen
+
+First Phase 17 increment toward Stage 2 triple-test. Adds the remaining
+language features needed to parse parser_ast.fj's full source, plus C
+forward declarations so out-of-order calls compile.
+
+**Headline milestone:** the chain now successfully **compiles parser_ast.fj's
+first 13 functions** (pr_ok, pr_err, is_digit_ast, is_alpha_ast, is_alnum_ast,
+is_ws_ast, skip_ws, read_word, read_int, expect_char, expect_str,
+count_method_chain_after, parse_match_ast) into a valid `.o` object file
+via `gcc -c`. Honest scope: parse_primary_ast (~333 lines) and later fns
+still trip the chain on some advanced construct (next session's blocker).
+
+### Features added
+
+1. **`pub` modifier**: `pub fn`, `pub struct`, `pub enum`, `pub const` all
+   parsed. The visibility annotation is informational at codegen level
+   (C output emits all symbols extern).
+2. **`const NAME: TYPE = VALUE` declarations**: lower to
+   `static const TYPE NAME = VALUE;`. AST shape:
+   `BEGIN_CONST <name> <type> <expr> END_CONST`. Used by codegen.fj's
+   `C_TYPE_INT` / `C_TYPE_FLOAT` / etc.
+3. **Forward declarations**: `emit_program` does a pre-pass emitting
+   every fn's signature (`RetType name(params);`) BEFORE any body. Out-of-order
+   calls (e.g. `parse_match_ast` calling `parse_expr_ast` defined later)
+   now compile.
+4. **Struct typedef ordering**: structs/enums emitted FIRST (in source-order)
+   so subsequent forward decls and bodies can refer to them.
+5. **`len(s)` → `strlen(s)` for str args**: parser_ast.fj uses
+   `to_int(len(src))` 25× across helpers (skip_ws, read_word, etc.) where
+   `src` is `str`-typed. Now lowers to the C `strlen` extern.
+
+### Tests added (6 NEW)
+
+- **P71** `pub fn` + `pub struct`: 21 + 21 = 42.
+- **P72** `const ANSWER: i64 = 42` → `return ANSWER` = 42.
+- **P73** `const PREFIX: str = "hello"` → `to_int(strlen(PREFIX))` = 5.
+- **P74** out-of-order call: `early_caller(20) → later_callee(20) * 2 + 1` = 41.
+- **P75** out-of-order struct-returning call:
+  `use_pair → make_pair() → Pair{a:10, b:7}.a + .b` = 17.
+- **P76** `len(s)` on str param → `strlen(s)` = 11 for "hello world".
+
+### Test suite: 70 → 76 (6 NEW)
+
+**76/76 PASS in 0.62s.** Lib tests: 7629/7629 PASS. fmt clean. clippy 0.
+
+### Phase 17 Stage 2 triple-test progress
+
+- ✅ chain produces valid `.o` for parser_ast.fj's first 13 fns
+- ❌ parse_primary_ast (~333 lines, complex constructs) — NEXT BLOCKER
+- ❌ codegen.fj / codegen_driver.fj also still trip the chain
+- ❌ True triple-test (chain compiles itself + verify byte-identical) — TBD
+
+### Effort
+
+~1h. Cumulative ~19.2h across v33.4.0..v34.5.7.
+
 ## [v34.5.6] — 2026-05-05 Phase 16 sub-task 5: string escape preservation (test driver fix)
 
 Closes the last documented Phase 16 gap. Pre-flight audit (CLAUDE.md

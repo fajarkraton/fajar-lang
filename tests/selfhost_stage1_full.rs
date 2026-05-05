@@ -827,6 +827,78 @@ fn full_p66_let_rebind_via_alias_preserves_type() {
 
 #[cfg(unix)]
 #[test]
+fn full_p71_pub_keyword_skipped() {
+    // Phase 17.0: `pub fn` and `pub struct` parsed by the chain. `pub`
+    // visibility annotation is skipped (C output emits all fns extern).
+    let r = compile_subset_program(
+        "full_p71",
+        "pub fn twice_it(x: i64) -> i64 { x + x } pub struct Box { v: i64 } fn main() -> i64 { let b = Box { v: 21 }; return twice_it(b.v) }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p72_const_decl_int() {
+    // Phase 17.0: `const NAME: i64 = N` lowers to `static const int64_t NAME = N;`.
+    let r = compile_subset_program(
+        "full_p72",
+        "const ANSWER: i64 = 42 fn main() -> i64 { return ANSWER }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p73_const_decl_str() {
+    // Phase 17.0: const str — used by codegen.fj's C_TYPE_INT etc.
+    let r = compile_subset_program(
+        "full_p73",
+        "const PREFIX: str = \"hello\" fn main() -> i64 { return to_int(strlen(PREFIX)) }",
+    );
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p74_forward_decl_out_of_order_call() {
+    // Phase 17.0: out-of-order calls compile thanks to forward decls.
+    // `early_caller` calls `later_callee` defined LATER in the source.
+    let r = compile_subset_program(
+        "full_p74",
+        "fn early_caller(x: i64) -> i64 { return later_callee(x) + 1 } fn later_callee(y: i64) -> i64 { return y * 2 } fn main() -> i64 { return early_caller(20) }",
+    );
+    // 20 * 2 + 1 = 41
+    assert_eq!(r.status.code(), Some(41));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p75_forward_decl_struct_returning_out_of_order() {
+    // Phase 17.0: struct-returning fn called from another fn defined
+    // BEFORE it in source. Forward decls must include struct ret type.
+    let r = compile_subset_program(
+        "full_p75",
+        "struct Pair { a: i64, b: i64 } fn use_pair() -> i64 { let p = make_pair(); return p.a + p.b } fn make_pair() -> Pair { return Pair { a: 10, b: 7 } } fn main() -> i64 { return use_pair() }",
+    );
+    assert_eq!(r.status.code(), Some(17));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p76_len_on_str_param_lowers_to_strlen() {
+    // Phase 17.0: free `len(s)` where s is str-typed lowers to strlen(s).
+    // Critical for parser_ast.fj which uses `to_int(len(src))` 25× across
+    // helper fns (skip_ws, read_word, expect_char, etc.).
+    let r = compile_subset_program(
+        "full_p76",
+        "fn check(s: str) -> i64 { return to_int(len(s)) } fn main() -> i64 { return check(\"hello world\") }",
+    );
+    assert_eq!(r.status.code(), Some(11));
+}
+
+#[cfg(unix)]
+#[test]
 fn full_p69_string_escape_preservation() {
     // Phase 16 sub-task 5: `c == "\n"` (where source has 2 chars `\` + `n`)
     // must compile to a C string literal containing the same 2 chars (not

@@ -286,9 +286,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             }
         }
         if raw_name == "to_string" { name = "_fj_to_string" }
-        // Phase 16.3: free `len(arr)` on a [str]/[i64]-typed arg lowers to
-        // `_fj_arr_len(arr)`. Otherwise it's the unmapped fj `len` (e.g.
-        // `len(state.lines)` — handled in P30 area as plain pass-through).
+        // Phase 16.3 / 17.0: free `len(x)` lowers based on x's fj-type:
+        //   [T]-typed IDENT → _fj_arr_len(x)
+        //   str-typed IDENT → strlen(x)
+        //   STR literal     → strlen(x)
+        //   other          → unmapped (compile error surfaces if wrong)
         if raw_name == "len" {
             let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
             let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
@@ -296,7 +298,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
                 let t = lookup_var_type_in_table(vars, arg_name)
                 if t == "[str]" || t == "[i64]" || t == "[int]" || t == "[i32]" {
                     name = "_fj_arr_len"
+                } else if t == "str" {
+                    name = "strlen"
                 }
+            } else if arg_tag == "STR" {
+                name = "strlen"
             }
         }
         // strlen is C stdlib; pass through unchanged
@@ -682,6 +688,44 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     cg
 }
 
+// Phase 17.0: emit forward declaration `RetType name(params);` for a fn.
+// Used by emit_program's pre-pass so out-of-order calls compile in C.
+pub fn emit_fn_forward_decl(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
+    let name = ast[pos + 1]
+    let mut p = pos + 2
+    let mut param_pairs: [str] = []
+    if p < n && ast[p] == "BEGIN_PARAMS" {
+        p = p + 1
+        while p < n && ast[p] != "END_PARAMS" {
+            param_pairs = param_pairs.push(ast[p]).push(ast[p + 1])
+            p = p + 2
+        }
+    }
+    let mut ret_type = "i64"
+    while p < n && ast[p] != "BEGIN_BODY" && ast[p] != "END_FN" {
+        if ast[p] == "RET_TYPE" {
+            ret_type = ast[p + 1]
+            p = p + 2
+        } else { p = p + 1 }
+    }
+    let c_ret = map_type_ctx(ret_type, cg)
+    let mut param_str = ""
+    let pn = to_int(len(param_pairs))
+    let mut i = 0
+    let mut first = true
+    while i + 1 < pn {
+        if !first { param_str = concat!(param_str, ", ") }
+        let c_t = map_type_ctx(param_pairs[i + 1], cg)
+        param_str = concat!(param_str, c_t, " ", param_pairs[i])
+        first = false
+        i = i + 2
+    }
+    if pn == 0 { param_str = "void" }
+    emit_line(cg, concat!(c_ret, " ", name, "(", param_str, ");"))
+}
+
 // Walk a function definition starting at pos.
 // AST shape: BEGIN_FN <name> BEGIN_PARAMS [<pname> <ptype>]* END_PARAMS
 //            RET_TYPE <ret_type> BEGIN_BODY <stmts> END_BODY END_FN
@@ -813,6 +857,28 @@ pub fn enum_end(ast: [str], pos: i64) -> i64 {
     p + 1
 }
 
+// Phase 17.0: emit `const NAME: TYPE = VALUE` as `static const TYPE NAME = VALUE;`
+// AST: BEGIN_CONST <name> <type> <expr> END_CONST
+pub fn emit_const(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_CONST" { return cg }
+    let name = ast[pos + 1]
+    let fj_type = ast[pos + 2]
+    let c_type = map_type_ctx(fj_type, cg)
+    let er = parse_expr_emit(ast, cg.var_types, pos + 3)
+    emit_line(cg, concat!("static const ", c_type, " ", name, " = ", er.code, ";"))
+}
+
+pub fn const_end(ast: [str], pos: i64) -> i64 {
+    let n = to_int(len(ast))
+    if pos >= n || ast[pos] != "BEGIN_CONST" { return pos + 1 }
+    let mut p = pos + 1
+    while p < n && ast[p] != "END_CONST" {
+        p = p + 1
+    }
+    p + 1
+}
+
 // Top-level emitter: walks the AST, returns full C source as a single string.
 pub fn emit_program(ast: [str]) -> str {
     let mut cg = new_codegen()
@@ -844,17 +910,45 @@ pub fn emit_program(ast: [str]) -> str {
         }
     }
     cg = emit_preamble(cg)
+    // Phase 17.0: emit struct typedefs FIRST so all subsequent decls (fn
+    // signatures + bodies) can refer to them.
+    let mut p_st = 0
+    while p_st < n {
+        if ast[p_st] == "BEGIN_STRUCT" {
+            cg = emit_struct(ast, p_st, cg)
+            p_st = struct_end(ast, p_st)
+        } else if ast[p_st] == "BEGIN_ENUM" {
+            cg = emit_enum(ast, p_st, cg)
+            p_st = enum_end(ast, p_st)
+        } else {
+            p_st = p_st + 1
+        }
+    }
+    // Phase 17.0: emit forward declarations of every fn so out-of-order
+    // calls (e.g. parse_match_ast → parse_expr_ast defined later) compile.
+    let mut p_fd = 0
+    while p_fd < n {
+        if ast[p_fd] == "BEGIN_FN" {
+            cg = emit_fn_forward_decl(ast, p_fd, cg)
+            p_fd = fn_end(ast, p_fd)
+        } else {
+            p_fd = p_fd + 1
+        }
+    }
+    // Now emit fn bodies + const decls in source order. Skip structs/enums
+    // since we already emitted them above.
     let mut p = 0
     while p < n {
         if ast[p] == "BEGIN_FN" {
             cg = emit_fn(ast, p, cg)
             p = fn_end(ast, p)
         } else if ast[p] == "BEGIN_STRUCT" {
-            cg = emit_struct(ast, p, cg)
             p = struct_end(ast, p)
         } else if ast[p] == "BEGIN_ENUM" {
-            cg = emit_enum(ast, p, cg)
             p = enum_end(ast, p)
+        } else if ast[p] == "BEGIN_CONST" {
+            cg = emit_const(ast, p, cg)
+            p = const_end(ast, p)
         } else {
             p = p + 1
         }
