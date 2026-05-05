@@ -2,6 +2,72 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.4] — 2026-05-05 Phase 16 sub-task 3 partial: array types in struct fields + fn ret + IDENT-rebind + len() free fn
+
+Patch addresses a cluster of small Phase 16 gaps surfaced by probing
+larger chunks of `parser_ast.fj` through the chain after v34.5.3.
+
+### Gaps closed
+
+1. **`parse_struct_ast` accepts `[T]` field types.** Previously
+   `struct Bag { items: [str] }` parsed to `ERR_STRUCT_FIELD_TYPE` and
+   `emit_struct` crashed with index out of bounds on the malformed AST.
+   Now mirrors `parse_params` depth-tracking handler.
+2. **`parse_fn_ast` accepts `[T]` return types.** `fn f() -> [str]`
+   previously had `read_word` return empty (since `[` is not alnum), so
+   `ret_type = ""`. Now uses the same `[T]` extraction as parse_params.
+3. **`BEGIN_LET` IDENT-type inference.** `let mut a = v` where `v` is a
+   parameter or earlier let — looks up `v`'s recorded fj-type so the
+   new binding inherits the correct C type (e.g. `_FjArr*` for `[str]`,
+   `ParseResult` for struct-typed binds). Without this, rebinds via
+   alias defaulted to `int64_t`.
+4. **Free `len(arr)` lowering.** When the argument is an `[T]`-typed
+   `IDENT`, `len(arr)` lowers to `_fj_arr_len(arr)` instead of the
+   unmapped fj `len` (which would emit `len` as undefined extern).
+
+### Tests added (2 NEW)
+
+- **P65** struct with `[str]` field: `struct Bag { items: [str], count: i64 }`
+  + struct-literal construction. Returns `b.count = 3`.
+- **P66** rebind via alias: `fn copy_and_extend(v: [str]) -> [str]`,
+  body `let mut a = v; a = a.push("new"); return a`. Validates IDENT-type
+  inference, `[T]` return type, free `len()`, and struct field array.
+  `to_int(len(b)) = 1`.
+
+### Test suite: 64 → 66 (2 NEW)
+
+**66/66 PASS in 0.71s.** Lib tests: 7629/7629 PASS. fmt clean. clippy 0.
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+This patch closes 4 of 6 Phase 16 sub-task 3 (state-passing) gaps. Two
+remain genuinely-deferred for next session:
+
+- **Chained method calls in assignment.** `a = a.push(x).push(y)` —
+  outer `.push(y)` not currently picked up. Affects parser_ast.fj's
+  `pr_err` and others.
+- **String escape preservation.** `c == "\n"` in source — chain emits
+  literal newline (not `\n`) in C output → `is_ws_ast` body breaks gcc.
+
+These are surfaced as documented gaps in the next session's protocol
+(see MEMORY.md).
+
+### Stage 2 Phase 16 progress
+
+- ✅ Pratt precedence + parens (v34.5.0)
+- ✅ to_int smart dispatch (v34.5.1)
+- ✅ Implicit-return-from-expr-body (v34.5.2)
+- ✅ Struct-typed fn signatures (v34.5.3)
+- ✅ Array types in struct fields + fn ret + IDENT-rebind + free len (v34.5.4)  ← THIS
+- ❌ Chained method calls in assignment — next session
+- ❌ String escape preservation — next session
+- ❌ Phase 17 Stage 2 triple-test (~1d)
+
+### Effort
+
+~30min (continuation of v34.5.3 work). Cumulative ~17h across
+v33.4.0..v34.5.4.
+
 ## [v34.5.3] — 2026-05-05 Phase 16 sub-task 2 (reprioritized): struct-typed fn signatures
 
 Pre-flight audit (CLAUDE.md §6.8 R1) of `parser_ast.fj` revealed that the

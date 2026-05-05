@@ -787,6 +787,33 @@ fn full_p63_state_passing_struct_through_chain() {
 
 #[cfg(unix)]
 #[test]
+fn full_p65_struct_with_array_field() {
+    // Phase 16 sub-task 3: parse_struct_ast accepts `[T]` field types
+    // (mirrors parse_params handling). Without this, struct field types
+    // like `val: [str]` parsed to ERR_STRUCT_FIELD_TYPE and emit_struct
+    // crashed with index out of bounds.
+    let r = compile_subset_program(
+        "full_p65",
+        "struct Bag { items: [str], count: i64 } fn main() -> i64 { let arr: [str] = []; let b = Bag { items: arr, count: 3 }; return b.count }",
+    );
+    assert_eq!(r.status.code(), Some(3));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p66_let_rebind_via_alias_preserves_type() {
+    // Phase 16 sub-task 3: `let mut a = v` where v is an `[str]` parameter
+    // — IDENT-type inference at BEGIN_LET looks up v in var_types so the
+    // new let inherits the [str] fj-type and declares as _FjArr*.
+    let r = compile_subset_program(
+        "full_p66",
+        "fn copy_and_extend(v: [str]) -> [str] { let mut a = v; a = a.push(\"new\"); return a } fn main() -> i64 { let arr: [str] = []; let b = copy_and_extend(arr); return to_int(len(b)) }",
+    );
+    assert_eq!(r.status.code(), Some(1));
+}
+
+#[cfg(unix)]
+#[test]
 fn full_p64_struct_typed_let_via_call_no_annotation() {
     // Phase 16 sub-task 2: `let r = struct_returning_fn(...)` (no explicit
     // type annotation) — lookup_fn_ret_type derives the struct typedef.

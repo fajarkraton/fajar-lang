@@ -305,6 +305,19 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             }
         }
         if raw_name == "to_string" { name = "_fj_to_string" }
+        // Phase 16.3: free `len(arr)` on a [str]/[i64]-typed arg lowers to
+        // `_fj_arr_len(arr)`. Otherwise it's the unmapped fj `len` (e.g.
+        // `len(state.lines)` — handled in P30 area as plain pass-through).
+        if raw_name == "len" {
+            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+            if arg_tag == "IDENT" {
+                let t = lookup_var_type_in_table(vars, arg_name)
+                if t == "[str]" || t == "[i64]" || t == "[int]" || t == "[i32]" {
+                    name = "_fj_arr_len"
+                }
+            }
+        }
         // strlen is C stdlib; pass through unchanged
         // (already worked in Phase 13 — no rename needed)
         let mut p = pos + 2
@@ -545,6 +558,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                 let r = lookup_fn_ret_type(cg, callee)
                 if r != "" { fj_type = r }
             }
+            else if first_atom == "IDENT" {
+                // Phase 16.3: rebind via simple alias `let mut a = v`. Look up
+                // v's recorded fj-type so the new let inherits it.
+                let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                let t = lookup_var_type_in_table(vars, src_name)
+                if t != "" { fj_type = t }
+            }
         }
         let er = parse_expr_emit(ast, vars, p_after_name)
 
@@ -575,6 +595,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                          if r != "" && is_struct_name(cg, r) { r }
                          else if r != "" { map_type_ctx(r, cg) }
                          else { "int64_t" }
+                     }
+                     else if first_atom == "IDENT" {
+                         // Phase 16.3: rebind via alias — derive C type from
+                         // the source ident's recorded fj-type.
+                         let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                         let t = lookup_var_type_in_table(vars, src_name)
+                         if t != "" { map_type_ctx(t, cg) } else { "int64_t" }
                      }
                      else { "int64_t" }
         }

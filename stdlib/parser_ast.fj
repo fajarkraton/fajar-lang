@@ -838,7 +838,21 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let after_arrow = expect_str(src, p_arrow, "->")
     if after_arrow > 0 {
         let p_t = skip_ws(src, after_arrow)
-        let t_end = read_word(src, p_t)
+        // Accept either bare ident type (i64, ParseResult) or `[type]` (array).
+        let mut t_end: i64 = 0
+        if p_t < to_int(len(src)) && src.substring(p_t, p_t + 1) == "[" {
+            let mut depth = 1
+            let mut q = p_t + 1
+            while q < to_int(len(src)) && depth > 0 {
+                let cc = src.substring(q, q + 1)
+                if cc == "[" { depth = depth + 1 }
+                else if cc == "]" { depth = depth - 1 }
+                q = q + 1
+            }
+            t_end = q
+        } else {
+            t_end = read_word(src, p_t)
+        }
         ret_type = src.substring(p_t, t_end)
         p = t_end
     }
@@ -882,7 +896,23 @@ pub fn parse_struct_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let p_colon = expect_char(src, f_end, ":")
         if p_colon < 0 { return pr_err(a, f_end, "ERR_STRUCT_FIELD_COLON") }
         let p_t = skip_ws(src, p_colon)
-        let t_end = read_word(src, p_t)
+        // Accept either bare ident type (i64, ParseResult) or `[type]` (array).
+        // Mirrors parse_params handling so struct fields can declare arrays
+        // and struct-of-struct.
+        let mut t_end: i64 = 0
+        if p_t < n && src.substring(p_t, p_t + 1) == "[" {
+            let mut depth = 1
+            let mut q = p_t + 1
+            while q < n && depth > 0 {
+                let cc = src.substring(q, q + 1)
+                if cc == "[" { depth = depth + 1 }
+                else if cc == "]" { depth = depth - 1 }
+                q = q + 1
+            }
+            t_end = q
+        } else {
+            t_end = read_word(src, p_t)
+        }
         if t_end == p_t { return pr_err(a, p_t, "ERR_STRUCT_FIELD_TYPE") }
         let ftype = src.substring(p_t, t_end)
         a = a.push(fname).push(ftype)
