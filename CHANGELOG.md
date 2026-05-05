@@ -2,6 +2,22 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.7.1] — 2026-05-05 R10 closure: mutable struct field writes
+
+Trivial follow-up to v33.7.0 per perfection-over-time rule. v33.7.0
+shipped struct field READ (`p.x`) but not WRITE (`p.x = 5`). R10 was
+the open ext (~15 LOC fj). Now closed:
+
+- parse_stmt_ast assignment branch detects `name.field = expr` and
+  `name.field.field = expr` LHS (postfix `.<ident>` chain before `=`)
+- BEGIN_ASSIGN AST extended: `BEGIN_ASSIGN <name> [FIELD <fname>]* <expr> END_ASSIGN`
+- codegen_driver concatenates LHS chain with `.` for C output
+
+Test suite 22 → 23: P23 `let mut p = Point{x:1,y:2}; p.x=50; p.y=70; return p.x+p.y` → 120.
+**23/23 PASS in 0.17s.**
+
+R10 RESOLVED. Effort: ~10min Claude time vs ~15min budget (-33%).
+
 ## [v33.7.0] — 2026-05-05 Stage-1 Use-Site Closure (struct/enum/for)
 
 **Closes the "DECL hollow" gaps from v33.6.0.** Trigger: same

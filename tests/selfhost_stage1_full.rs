@@ -307,3 +307,15 @@ fn full_p22_enum_variant_in_branch() {
     );
     assert_eq!(r.status.code(), Some(100));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p23_struct_field_write() {
+    // R10 closure: mutable struct field writes work alongside reads.
+    // Note: exit codes are 8-bit on Unix, so keep result < 256.
+    let r = compile_subset_program(
+        "full_p23",
+        "struct Point { x: i64, y: i64 } fn main() -> i64 { let mut p = Point { x: 1, y: 2 }; p.x = 50; p.y = 70; return p.x + p.y }",
+    );
+    assert_eq!(r.status.code(), Some(120));
+}

@@ -257,8 +257,15 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 
     if tag == "BEGIN_ASSIGN" {
         let name = ast[pos + 1]
-        let er = parse_expr_emit(ast, pos + 2)
-        return emit_line(cg, concat!(name, " = ", er.code, ";"))
+        // Optional FIELD <fname> chain after name
+        let mut p_lhs = pos + 2
+        let mut lhs = name
+        while p_lhs + 1 < n && ast[p_lhs] == "FIELD" {
+            lhs = concat!(lhs, ".", ast[p_lhs + 1])
+            p_lhs = p_lhs + 2
+        }
+        let er = parse_expr_emit(ast, p_lhs)
+        return emit_line(cg, concat!(lhs, " = ", er.code, ";"))
     }
 
     cg

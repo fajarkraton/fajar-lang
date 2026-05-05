@@ -447,17 +447,35 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         return pr_ok(a, cur + 1)
     }
 
-    // Try assignment statement: `name = expr` or `name op= expr`
-    // (This is needed because while loops typically have `i = i + 1` body.)
+    // Try assignment statement: `name = expr`, `name.f = expr`, `name.f.g = expr`.
+    // (Required because while loops typically have `i = i + 1` body, and
+    // struct field writes need `p.x = 5`.)
     if is_alpha_ast(src.substring(p0, p0 + 1)) {
         let id_end = read_word(src, p0)
         let name = src.substring(p0, id_end)
-        let p_after_id = skip_ws(src, id_end)
+        // Optional `.field.field...` chain
+        let mut chain: [str] = []
+        let mut p_cur = id_end
+        let mut p_after_id = skip_ws(src, p_cur)
+        while p_after_id < n && src.substring(p_after_id, p_after_id + 1) == "." {
+            let p_field = skip_ws(src, p_after_id + 1)
+            let f_end = read_word(src, p_field)
+            if f_end == p_field { break }
+            chain = chain.push(src.substring(p_field, f_end))
+            p_cur = f_end
+            p_after_id = skip_ws(src, p_cur)
+        }
         // Check for `=` (single, not `==`)
         if p_after_id < n && src.substring(p_after_id, p_after_id + 1) == "=" {
             let next_ch = if p_after_id + 1 < n { src.substring(p_after_id + 1, p_after_id + 2) } else { "" }
             if next_ch != "=" {
                 let mut a = ast.push("BEGIN_ASSIGN").push(name)
+                // Emit FIELD <fname> markers in order
+                let mut k = 0
+                while k < to_int(len(chain)) {
+                    a = a.push("FIELD").push(chain[k])
+                    k = k + 1
+                }
                 let r = parse_expr_ast(src, p_after_id + 1, a)
                 if r.error { return r }
                 a = r.ast.push("END_ASSIGN")
