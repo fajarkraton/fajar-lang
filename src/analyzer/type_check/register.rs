@@ -848,6 +848,18 @@ impl TypeChecker {
             ("abs_tensor", vec![dyn_t.clone()], dyn_t.clone()),
             ("exp", vec![Type::F64], Type::F64),
             ("gamma", vec![Type::F64], Type::F64),
+            // ── Integer wrapping arithmetic (FAJARQUANT_RUST_TO_FJ_PLAN
+            // Phase 3.B / R4 LCG seed reproducibility — port of Rust's
+            // u64::wrapping_mul/add/sub. Operands and result are i64;
+            // wrap is mod 2^64 since fj-lang i64 is 64-bit. Surfaced
+            // by lcg_next_f64 port; see commit chain in
+            // docs/FAJARQUANT_FJ_PORT_PHASE_3_FINDINGS.md.
+            ("wrapping_mul", vec![Type::I64, Type::I64], Type::I64),
+            ("wrapping_add", vec![Type::I64, Type::I64], Type::I64),
+            ("wrapping_sub", vec![Type::I64, Type::I64], Type::I64),
+            ("saturating_mul", vec![Type::I64, Type::I64], Type::I64),
+            ("saturating_add", vec![Type::I64, Type::I64], Type::I64),
+            ("saturating_sub", vec![Type::I64, Type::I64], Type::I64),
             (
                 "clamp_tensor",
                 vec![dyn_t.clone(), Type::F64, Type::F64],

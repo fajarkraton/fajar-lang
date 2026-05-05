@@ -235,3 +235,207 @@
     }
     result
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 3.A — fused_attention.rs port (~320 LOC)
+// Quantized KV cache codebook attention (zero-dequantize attention).
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/fused_attention.rs lines 80-152
+// Innovation: compute attention scores DIRECTLY on quantized KV via
+// codebook dot products. Skips dequantize buffer entirely.
+// 524,288× memory reduction at 16K context per paper.
+//
+// Storage: codebook is [f64] of centroids (size = 2^bit_width).
+// Quantized vectors are [i64] of indices into codebook.
+
+/// Codebook dot product: score = Σ_j query[j] * codebook[k_indices[j]]
+/// WITHOUT dequantizing the key vector.
+/// Mirrors Rust `codebook_dot_product`.
+@device fn codebook_dot_product(
+    query: [f64],
+    k_indices: [i64],
+    codebook: [f64],
+    dim: i64,
+) -> f64 {
+    let cb_size: i64 = codebook.len() as i64
+    let mut sum: f64 = 0.0
+    let mut j: i64 = 0
+    while j < dim {
+        let idx: i64 = k_indices[j]
+        let centroid: f64 = if idx >= 0 && idx < cb_size { codebook[idx] } else { 0.0 }
+        sum = sum + query[j] * centroid
+        j = j + 1
+    }
+    sum
+}
+
+/// Codebook weighted sum: output[j] = Σ_i weights[i] * codebook[v_indices[i*dim+j]]
+/// v_indices is flat layout: row i starts at i*dim. WITHOUT dequantizing values.
+/// Mirrors Rust `codebook_weighted_sum`.
+@device fn codebook_weighted_sum(
+    weights: [f64],
+    v_indices_flat: [i64],
+    codebook: [f64],
+    n_entries: i64,
+    dim: i64,
+) -> [f64] {
+    let cb_size: i64 = codebook.len() as i64
+    let mut output: [f64] = []
+    let mut j: i64 = 0
+    while j < dim {
+        output = output.push(0.0)
+        j = j + 1
+    }
+    let mut i: i64 = 0
+    while i < n_entries {
+        let w: f64 = weights[i]
+        let row_start: i64 = i * dim
+        j = 0
+        while j < dim {
+            let idx: i64 = v_indices_flat[row_start + j]
+            let centroid: f64 = if idx >= 0 && idx < cb_size { codebook[idx] } else { 0.0 }
+            output[j] = output[j] + w * centroid
+            j = j + 1
+        }
+        i = i + 1
+    }
+    output
+}
+
+/// Full fused quantized attention.
+/// k_indices_flat: row-major (n_entries, dim) flat array of key indices.
+/// v_indices_flat: row-major (n_entries, dim) flat array of value indices.
+/// codebook: shared centroid table.
+/// Returns output vector of size `dim` in rotated space (caller applies Pi^T if needed).
+///
+/// Steps:
+/// 1. scores[i] = codebook_dot_product(query, K[i,:])
+/// 2. softmax (with max-subtract for numerical stability)
+/// 3. output = codebook_weighted_sum(attn_weights, V)
+///
+/// Mirrors Rust `fused_quantized_attention`.
+@device fn fused_quantized_attention(
+    query_rotated: [f64],
+    k_indices_flat: [i64],
+    v_indices_flat: [i64],
+    codebook: [f64],
+    n_entries: i64,
+    dim: i64,
+) -> [f64] {
+    if n_entries <= 0 {
+        // Return zero vector
+        let mut zeros: [f64] = []
+        let mut j: i64 = 0
+        while j < dim {
+            zeros = zeros.push(0.0)
+            j = j + 1
+        }
+        return zeros
+    }
+
+    // Step 1: scores per cache entry
+    let mut scores: [f64] = []
+    let mut i: i64 = 0
+    while i < n_entries {
+        let row_start: i64 = i * dim
+        // Slice k_indices: rows [row_start..row_start+dim]
+        let mut k_row: [i64] = []
+        let mut j: i64 = 0
+        while j < dim {
+            k_row = k_row.push(k_indices_flat[row_start + j])
+            j = j + 1
+        }
+        let s: f64 = codebook_dot_product(query_rotated, k_row, codebook, dim)
+        scores = scores.push(s)
+        i = i + 1
+    }
+
+    // Step 2: Softmax with max-subtract for stability.
+    // max_score = max(scores)
+    let mut max_score: f64 = scores[0]
+    i = 1
+    while i < n_entries {
+        if scores[i] > max_score { max_score = scores[i] }
+        i = i + 1
+    }
+    // exp_scores[i] = exp(scores[i] - max_score)
+    let mut exp_scores: [f64] = []
+    let mut sum_exp: f64 = 0.0
+    i = 0
+    while i < n_entries {
+        let e: f64 = exp(scores[i] - max_score)
+        exp_scores = exp_scores.push(e)
+        sum_exp = sum_exp + e
+        i = i + 1
+    }
+    // attn_weights[i] = exp_scores[i] / sum_exp
+    let mut attn_weights: [f64] = []
+    i = 0
+    while i < n_entries {
+        attn_weights = attn_weights.push(exp_scores[i] / sum_exp)
+        i = i + 1
+    }
+
+    // Step 3: weighted sum of V via codebook
+    codebook_weighted_sum(attn_weights, v_indices_flat, codebook, n_entries, dim)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 3.B — turboquant.rs core port (~535 LOC; subset)
+// LCG PRNG + Beta-distributed sampling + Lloyd-Max codebook + quant/dequant.
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Source: src/turboquant.rs lines 75-415
+// R4 LCG seed reproducibility risk: VERIFIED bit-exact 10/10 outputs vs Rust
+// (gating commit ships fj-lang core support for wrapping_mul/add/sub).
+
+/// LCG step. Returns new state. Caller passes back to subsequent calls.
+/// Mirrors Rust state.wrapping_mul(6364136223846793005).wrapping_add(1).
+@kernel fn lcg_next_state(state: i64) -> i64 {
+    let multiplier: i64 = 6364136223846793005
+    wrapping_add(wrapping_mul(state, multiplier), 1)
+}
+
+/// Convert LCG state to f64 in [1e-15, 1).
+/// Mirrors Rust `(state >> 11) as f64 / (1u64 << 53) as f64).max(1e-15)`.
+/// fj-lang uses arithmetic shift on i64; mask to 53 bits to recover
+/// the logical-shift behavior of Rust's u64 path.
+@kernel fn lcg_to_f64(state: i64) -> f64 {
+    let mask: i64 = 9007199254740991  // 2^53 - 1 = 0x1FFFFFFFFFFFFF
+    let bits: i64 = (state >> 11) & mask
+    let denom: f64 = 9007199254740992.0  // 2^53
+    let val: f64 = (bits as f64) / denom
+    if val < 1.0e-15 { 1.0e-15 } else { val }
+}
+
+/// Beta PDF approximation: (1 - x^2)^(alpha - 1) where alpha = (d-1)/2.
+/// Unnormalized — Lloyd-Max only needs relative densities.
+/// Mirrors Rust `beta_pdf`.
+@device fn beta_pdf(x: f64, d: i64) -> f64 {
+    let abs_x: f64 = if x < 0.0 { -x } else { x }
+    if abs_x >= 1.0 { return 0.0 }
+    let alpha: f64 = ((d as f64) - 1.0) / 2.0
+    pow(1.0 - x * x, alpha - 1.0)
+}
+
+/// Linear search for bucket index.
+/// Returns first i such that `x < boundaries[i]`, else `boundaries.len()`.
+/// Mirrors Rust `find_bucket`.
+@device fn find_bucket(x: f64, boundaries: [f64], n_boundaries: i64) -> i64 {
+    let mut i: i64 = 0
+    while i < n_boundaries {
+        if x < boundaries[i] { return i }
+        i = i + 1
+    }
+    n_boundaries
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 3.B continues: deferred to next sprint
+// ═══════════════════════════════════════════════════════════════════════
+// - sample_beta_distribution (Box-Muller + LCG, ~20 LOC)
+// - lloyd_max (Lloyd-Max iterations, ~50 LOC)
+// - quant_mse / dequant_mse (codebook lookup, ~40 LOC)
+// - random_orthogonal (Givens rotations, ~40 LOC)
+// Each ~10-30min based on Phase 1+2 pattern.
