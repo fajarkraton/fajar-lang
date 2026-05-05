@@ -2,6 +2,78 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v33.1.0] — 2026-05-05 FAJAROS_100PCT_FJ_PLAN partial closure
+
+**8/9 fj-lang LLVM compiler gaps closed.** 6/9 plan phases CLOSED + 2
+PARTIAL. 71% non-fj LOC reduction in fajaros kernel build path.
+
+### Added (compiler capability)
+
+- **`@naked` modifier annotation** (Phase 6 + Phase 6.6, Gaps G-B + G-N).
+  Suppresses prologue/epilogue emission so the asm body has full control
+  over registers and stack — required for OS interrupt entry stubs and
+  bare-metal runtime helpers. Codegen emits `naked` + `noinline` LLVM
+  attribute pair (matching `@interrupt` pattern) so the asm body's `ret`
+  is never inlined into callers. Returns are emitted as `ret undef`
+  (NOT `unreachable` — that triggers IPO `noreturn` propagation, DCE'ing
+  callers). Bit-verified across 12 fajaros bare-metal stubs.
+
+- **`@no_mangle` modifier annotation** (Phase 7, Gap G-C). For impl-block
+  methods, emits the bare method name in LLVM symbol table instead of
+  `Type__method` mangling. Free-standing fns are already un-mangled;
+  `@no_mangle` is the explicit opt-out attribute that survives if a
+  real mangling scheme lands.
+
+- **`@no_vectorize` promoted from primary annotation to modifier**
+  (Phase 4.D follow-up, Gap G-K). Now stacks with `@kernel`/`@unsafe`
+  primaries — canonical Phase 4.1 recipe `@no_vectorize @kernel fn`
+  is legal. Codegen emits `no-implicit-float` + `target-features`
+  negating AVX/SSE/AVX-512 vector ISA.
+
+- **LLVM backend native atomic ops** (Phase 5, Gap G-A). `atomic_load_u64`,
+  `atomic_store_u64`, `atomic_cas_u64`, `atomic_fetch_add_u64` builtins
+  using inkwell's `build_atomicrmw` + `build_cmpxchg` + `set_atomic_ordering`.
+  All ops use `SeqCst` ordering. Lowers to `LOCK CMPXCHG` / `LOCK XADD` /
+  `XCHG` x86 instructions. Replaces fajaros spinlock V0.5.1 inline-asm
+  CMPXCHG with high-level `atomic_cas_u64` (V0.5.2).
+
+### Changed (impl-block parser)
+
+- `parse_impl_block` modifier loop now consumes `@noinline`, `@naked`,
+  `@no_mangle`, `@no_vectorize` before the primary annotation,
+  mirroring `parse_item_or_stmt`. Bonus: closes a silent Phase 6
+  gap where these modifiers on impl-block methods would have been
+  silently dropped.
+
+### Compiler gap status
+
+Closed (8/9): G-A (atomics), G-B (@naked compiler), G-C (@no_mangle),
+G-K (@no_vectorize stack), G-N (@naked codegen noinline + ret-undef),
+G-G (global_asm!), G-H (raw strings), G-I (asm raw strings).
+
+Documented for future (4/9): G-F (SE009 false-positive cosmetic),
+G-J (LLVM MC stricter than GAS), G-L (kernel runtime EXC:14 in
+mdl_lmhead 295M-iter loop), G-M (LLVM-O2 vecmat-shape sensitivity —
+blocks Phase 4.D-F).
+
+### Stats
+
+- Tests: 8973 → **8974** lib tests pass under `--features llvm,native`
+  (1 new `at_no_vectorize_stacks_with_kernel` regression test for G-K)
+- 0 clippy warnings, 0 fmt diffs, 0 production unwraps
+- LLVM IR codegen verified bit-equivalent for 12 fajaros bare-metal
+  stub migrations (objdump diff)
+
+### FAJAROS_100PCT_FJ_PLAN status
+
+Phases CLOSED: 0, 1, 2, 3, 4.A, 4.B, 4.C, 5, 7. PARTIAL: 6 (compiler),
+6.6 (12/17 stubs migrated, 5 cluster-retained per design intent).
+BLOCKED: 4.D (G-M). DEFERRED: 4.E, 4.F (same G-M risk class).
+
+Non-fj LOC in fajaros kernel build path: 2,195 (Phase 0) → **642**
+(after Phase 6.6, vecmat_v8.c remains pending Phase 4.D-F G-M debug).
+71% reduction.
+
 ## [Unreleased] — 2026-05-04 CI rehab + FAJAROS_100PCT_FJ_PLAN
 
 ### Fixed (CI rehab — main CI green restored after 10+ red run streak)
