@@ -64,6 +64,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             let r = parse_expr_emit(ast, vars, p2)
             args = args.push(r.code)
             p2 = r.pos
+            if p2 < n && ast[p2] == "ARG_END" { p2 = p2 + 1 }
         }
         p2 = p2 + 1  // past END_MACRO_CALL
         let m = to_int(len(args))
@@ -92,6 +93,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             let r = parse_expr_emit(ast, vars, p2)
             elems = elems.push(r.code)
             p2 = r.pos
+            if p2 < n && ast[p2] == "ARG_END" { p2 = p2 + 1 }
         }
         p2 = p2 + 1  // past END_ARRAY_LIT
         let m = to_int(len(elems))
@@ -147,6 +149,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             let r = parse_expr_emit(ast, vars, p2)
             args = args.push(r.code)
             p2 = r.pos
+            if p2 < n && ast[p2] == "ARG_END" { p2 = p2 + 1 }
         }
         p2 = p2 + 1  // past END_METHOD_CALL
         // Dispatch helper based on method name + (for push) first arg type
@@ -216,7 +219,9 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         while p2 < n && ast[p2] != "END_MATCH" {
             if ast[p2] == "BEGIN_ARM" {
                 let r_pat = parse_expr_emit(ast, vars, p2 + 1)
-                let r_body = parse_expr_emit(ast, vars, r_pat.pos)
+                // Skip ARG_END separator between pat and body
+                let body_start = if r_pat.pos < n && ast[r_pat.pos] == "ARG_END" { r_pat.pos + 1 } else { r_pat.pos }
+                let r_body = parse_expr_emit(ast, vars, body_start)
                 // R12: string equality dispatch — if subject OR pattern is STR-typed, use strcmp
                 let pat_atom_tag = if p2 + 1 < n { ast[p2 + 1] } else { "" }
                 let cond = if subj_is_str || pat_atom_tag == "STR" {
@@ -263,6 +268,10 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
         }
         p2 = p2 + 1  // past END_STRUCT_LIT
         exr(concat!("(", type_name, "){", body, "}"), p2)
+    } else if tag == "ARG_END" {
+        // Encountered standalone — should only be hit inside arg-loop walks.
+        // For parse_atom called directly on ARG_END, return empty marker.
+        exr("", pos + 1)
     } else if tag == "BEGIN_CALL" {
         let raw_name = ast[pos + 1]
         // Map fj-lang builtins to their C runtime counterparts.
@@ -286,6 +295,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64) -> ExprResult {
             let r = parse_expr_emit(ast, vars, p)
             args = args.push(r.code)
             p = r.pos
+            if p < n && ast[p] == "ARG_END" { p = p + 1 }
         }
         p = p + 1  // past END_CALL
         let mut argstr = ""
@@ -351,32 +361,94 @@ fn find_method_name(ast: [str], pos: i64) -> str {
     ""
 }
 
+// Helper: combine two expressions with a binop, applying string-eq/strcmp
+// lowering when either operand is string-typed.
+fn combine_binop(lhs_code: str, lhs_is_str: bool,
+                 rhs_code: str, rhs_is_str: bool, op: str) -> str {
+    let either_str = lhs_is_str || rhs_is_str
+    if either_str && op == "==" {
+        concat!("_fj_streq(", lhs_code, ", ", rhs_code, ")")
+    } else if either_str && op == "!=" {
+        concat!("(!_fj_streq(", lhs_code, ", ", rhs_code, "))")
+    } else if either_str && (op == "<" || op == "<=" || op == ">" || op == ">=") {
+        concat!("(strcmp(", lhs_code, ", ", rhs_code, ") ", op, " 0)")
+    } else {
+        concat!("(", lhs_code, " ", op, " ", rhs_code, ")")
+    }
+}
+
+// Determine if an atom at `atom_pos` is string-typed.
+fn atom_is_str(ast: [str], vars: [str], atom_pos: i64) -> bool {
+    let n = to_int(len(ast))
+    if atom_pos >= n { return false }
+    let tag = ast[atom_pos]
+    if tag == "STR" { return true }
+    if tag == "BEGIN_MACRO_CALL" { return true }
+    if tag == "IDENT" {
+        if atom_pos + 1 < n {
+            return lookup_var_type_in_table(vars, ast[atom_pos + 1]) == "str"
+        }
+        return false
+    }
+    if tag == "BEGIN_METHOD_CALL" {
+        let m = find_method_name(ast, atom_pos)
+        return m == "substring" || m == "concat"
+    }
+    false
+}
+
+// Stack-based postfix evaluator. Walks atoms + BINOPs, accumulating
+// expression code until the next non-(atom|BINOP) marker.
 pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64) -> ExprResult {
     let n = to_int(len(ast))
     if pos >= n { return exr("0", pos) }
 
-    let lhs_atom_tag = ast[pos]
-    let lhs = parse_atom(ast, vars, pos)
-    let p = lhs.pos
-    if p < n && is_atom_start(ast[p]) {
-        let rhs_atom_tag = ast[p]
-        let rhs = parse_expr_emit(ast, vars, p)
-        if rhs.pos + 1 < to_int(len(ast)) && ast[rhs.pos] == "BINOP" {
-            let op = ast[rhs.pos + 1]
-            // String comparison: if either operand is a STR atom, lower to strcmp.
-            let lhs_is_str = lhs_atom_tag == "STR"
-            let rhs_is_str = rhs_atom_tag == "STR"
-            let either_str = lhs_is_str || rhs_is_str
-            if either_str && op == "==" {
-                return exr(concat!("_fj_streq(", lhs.code, ", ", rhs.code, ")"), rhs.pos + 2)
+    // Parallel stacks: code + str-typed flag + atom_start_pos (for type lookup)
+    let mut codes: [str] = []
+    let mut flags: [str] = []
+    let mut p = pos
+    while p < n {
+        if ast[p] == "BINOP" {
+            let m = to_int(len(codes))
+            if m < 2 { break }
+            let op = ast[p + 1]
+            let rhs_code = codes[m - 1]
+            let lhs_code = codes[m - 2]
+            let rhs_str = flags[m - 1] == "1"
+            let lhs_str = flags[m - 2] == "1"
+            let combined = combine_binop(lhs_code, lhs_str, rhs_code, rhs_str, op)
+            // Pop top two, push combined. Use parallel-array rebuild since we lack pop.
+            let mut new_codes: [str] = []
+            let mut new_flags: [str] = []
+            let mut k = 0
+            while k < m - 2 {
+                new_codes = new_codes.push(codes[k])
+                new_flags = new_flags.push(flags[k])
+                k = k + 1
             }
-            if either_str && op == "!=" {
-                return exr(concat!("(!_fj_streq(", lhs.code, ", ", rhs.code, "))"), rhs.pos + 2)
-            }
-            return exr(concat!("(", lhs.code, " ", op, " ", rhs.code, ")"), rhs.pos + 2)
+            new_codes = new_codes.push(combined)
+            // String result iff op produces string (here: only no — comparison/arith both numeric).
+            // For now mark binop result as non-str (numeric).
+            new_flags = new_flags.push("0")
+            codes = new_codes
+            flags = new_flags
+            p = p + 2
+        } else if is_atom_start(ast[p]) {
+            let r = parse_atom(ast, vars, p)
+            codes = codes.push(r.code)
+            flags = flags.push(if atom_is_str(ast, vars, p) { "1" } else { "0" })
+            p = r.pos
+        } else {
+            break
         }
     }
-    lhs
+    let m = to_int(len(codes))
+    if m == 0 { exr("0", p) }
+    else if m == 1 { exr(codes[0], p) }
+    else {
+        // Should not happen for well-formed postfix — return the last as fallback
+        exr(codes[m - 1], p)
+    }
 }
 
 // Compute end position of a statement starting at pos (skipping nested).

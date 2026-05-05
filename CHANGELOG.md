@@ -2,6 +2,92 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.0] — 2026-05-05 Phase 16 partial: Pratt precedence + parens + parser_ast helpers compile
+
+Phase 16 partial milestone toward Stage 2 self-compile. Adds:
+- **Pratt-style operator precedence** with proper left-associativity
+- **Parenthesized expressions** `(expr)` (transparent passthrough)
+- **`&&` / `||` / `%` binops** in parser detection
+- **Stack-based parse_expr_emit** with ARG_END separators for arg lists
+- **String ordering binops** (`<`, `<=`, `>`, `>=`) lower to `strcmp`
+
+Headline: a meaningful subset of `stdlib/parser_ast.fj` helpers
+(`is_digit_ast`, `is_alpha_ast`, `is_alnum_ast`) now compiles through
+the chain and produces correct results. Validates fj-source compiler
+can handle real compiler-shaped fj-source code.
+
+### Architectural changes
+
+**Pratt-style parser** with 6 precedence levels:
+```
+1: ||           (lowest)
+2: &&
+3: == !=
+4: < > <= >=
+5: + -
+6: * / %       (highest)
+```
+Replaces old right-associative single-binop parser. Fixes `2 + 3 * 4`
+to correctly evaluate as `2 + (3*4) = 14`, not `(2+3)*4 = 20`.
+
+**Stack-based postfix evaluator** for parse_expr_emit. Walks atoms
++ BINOPs as a stack-machine. ARG_END markers added to:
+- BEGIN_CALL args
+- BEGIN_MACRO_CALL args
+- BEGIN_METHOD_CALL args
+- BEGIN_ARRAY_LIT elements
+- BEGIN_ARM (between pat and body in match)
+
+Provides explicit boundaries between consecutive expressions in
+postfix encoding.
+
+**String ordering lowering**: `s1 < s2` → `(strcmp(s1, s2) < 0)`,
+similarly for `<=`, `>`, `>=`. Already had `==`/`!=` from Phase 13.
+Now char-comparison idioms like `c >= "0" && c <= "9"` work.
+
+### Test suite: 53 → 57 (4 NEW)
+
+```
+P54 Pratt precedence: 2 + 3 * 4               → 14 (not 20)
+P55 compound logical: c >= "0" && c <= "9"    → 33 (correct prec)
+P56 paren expr: (2 + 3) * 4                   → 20
+P57 parser_ast helpers compile (is_digit/alpha/alnum) → 7  ← headline
+```
+
+**57/57 PASS in 0.46s.**
+
+### Stage 2 R14 progress
+
+| Increment | Phase | Status |
+|---|---|---|
+| String scalars + .substring + ==/!= → strcmp | 13 | ✅ |
+| Dynamic [i64] arrays + push + len + index | 14 | ✅ |
+| concat! + to_int/to_string + [str] partial | 15 | ✅ |
+| var-type tracking → full [str] dispatch | 15.1 | ✅ |
+| R12 string match + unary prefix | (v34.4.0) | ✅ |
+| Pratt precedence + parens + parser_ast helpers | 16 PARTIAL | ✅ |
+| Self-compile FULL stdlib/parser_ast.fj | 16 FULL | ⏳ |
+| Stage 1 == Stage 2 byte-equal | 17 | ⏳ |
+
+### Honest scope still pending
+
+- ❌ Phase 16 FULL self-compile of stdlib/parser_ast.fj — current
+  partial covers char-class helpers; full needs more codegen
+  (struct method calls, enum payload extraction, more builtins)
+- ❌ Implicit-return-from-expression-body — fn `body` parses as
+  expression-statement, not return. Currently relies on gcc leaving
+  result in `%rax`. Should add `BEGIN_IMPLICIT_RET` AST.
+- ❌ R15 memory leaks (acceptable for short-lived test programs)
+- ❌ Phase 17 Stage 1 == Stage 2 byte-equal triple-test
+- ❌ Strict aliasing warnings under `-Wstrict-aliasing=2`
+
+### Effort
+
+Phase 16 partial closure ~1.5h Claude time. Multiple iterations:
+Pratt refactor → broke args (no separators) → ARG_END markers →
+match arms broke → ARG_END for pat/body → all green. 19 self-host
+phases CLOSED cumulative; ~15h total across v33.4.0..v34.5.0.
+
 ## [v34.4.0] — 2026-05-05 R12 closure: match string patterns + unary prefix ops
 
 Closure of two silent gaps surfaced in cross-phase honest audit:

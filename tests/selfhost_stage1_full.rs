@@ -659,3 +659,49 @@ fn full_p53_unary_logical_not() {
     );
     assert_eq!(r.status.code(), Some(7));
 }
+
+#[cfg(unix)]
+#[test]
+fn full_p54_pratt_precedence() {
+    // Phase 16: Pratt-style precedence — multiplication binds tighter than addition.
+    // `2 + 3 * 4` should = 14, not (2+3)*4 = 20.
+    let r = compile_subset_program("full_p54", "fn main() -> i64 { return 2 + 3 * 4 }");
+    assert_eq!(r.status.code(), Some(14));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p55_pratt_compound_logical() {
+    // Phase 16: precedence + logical chains. `c >= "0" && c <= "9"` correctly
+    // parses as `(c >= "0") && (c <= "9")` — comparison tighter than &&.
+    let r = compile_subset_program(
+        "full_p55",
+        "fn is_digit(c: str) -> bool { return c >= \"0\" && c <= \"9\" } fn main() -> i64 { if is_digit(\"5\") { return 33 } else { return 0 } }",
+    );
+    assert_eq!(r.status.code(), Some(33));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p56_parenthesized_expression() {
+    // Phase 16: `(expr)` parsed as transparent passthrough.
+    let r = compile_subset_program("full_p56", "fn main() -> i64 { return (2 + 3) * 4 }");
+    assert_eq!(r.status.code(), Some(20));
+}
+
+#[cfg(unix)]
+#[test]
+fn full_p57_parser_ast_helpers_subset() {
+    // Phase 16 headline: subset of stdlib/parser_ast.fj helpers (is_digit_ast,
+    // is_alpha_ast, is_alnum_ast) compile through the chain and produce
+    // correct results. Validates that fj-source compiler can compile a
+    // meaningful chunk of the fj-source compiler's own source code.
+    // (is_ws_ast omitted from this test to avoid \n\t\r escape complexity
+    // through the test rig — but compiles fine standalone.)
+    let r = compile_subset_program(
+        "full_p57",
+        "fn is_digit_ast(c: str) -> bool { return c >= \"0\" && c <= \"9\" } fn is_alpha_ast(c: str) -> bool { return c == \"_\" || (c >= \"a\" && c <= \"z\") || (c >= \"A\" && c <= \"Z\") } fn is_alnum_ast(c: str) -> bool { return is_alpha_ast(c) || is_digit_ast(c) } fn main() -> i64 { let mut count = 0; if is_digit_ast(\"5\") { count = count + 1 }; if is_alpha_ast(\"a\") { count = count + 2 }; if is_alnum_ast(\"_\") { count = count + 4 }; return count }",
+    );
+    // 1+2+4 = 7
+    assert_eq!(r.status.code(), Some(7));
+}

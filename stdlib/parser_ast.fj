@@ -166,7 +166,9 @@ pub fn parse_match_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         a = a.push("BEGIN_ARM")
         let r_pat = parse_expr_ast(src, p, a)
         if r_pat.error { return r_pat }
-        a = r_pat.ast
+        // ARG_END separator between pattern and body (so parse_expr_emit
+        // stops cleanly at end of pattern)
+        a = r_pat.ast.push("ARG_END")
         let p_arrow = expect_str(src, r_pat.pos, "=>")
         if p_arrow < 0 { return pr_err(a, r_pat.pos, "ERR_MATCH_ARROW") }
         let r_body = parse_expr_ast(src, p_arrow, a)
@@ -188,6 +190,16 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     if p >= n { return pr_err(ast, p, "ERR_EOF") }
 
     let c = src.substring(p, p + 1)
+    // Parenthesized expression: `(expr)` — transparent passthrough, no AST marker
+    if c == "(" {
+        let inner = parse_expr_ast(src, p + 1, ast)
+        if inner.error { return inner }
+        let p_close = skip_ws(src, inner.pos)
+        if p_close < n && src.substring(p_close, p_close + 1) == ")" {
+            return pr_ok(inner.ast, p_close + 1)
+        }
+        return pr_err(inner.ast, p_close, "ERR_PAREN_RP")
+    }
     // Unary prefix operators: `-x` and `!x`
     // Emit BEGIN_UNARY <op> <operand_expr> END_UNARY
     if c == "-" || c == "!" {
@@ -210,7 +222,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         while more_a {
             let r = parse_expr_ast(src, p2, a)
             if r.error { return r }
-            a = r.ast
+            a = r.ast.push("ARG_END")
             p2 = skip_ws(src, r.pos)
             if p2 < n && src.substring(p2, p2 + 1) == "," {
                 p2 = skip_ws(src, p2 + 1)
@@ -278,7 +290,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 while more_m {
                     let r = parse_expr_ast(src, cur, a)
                     if r.error { return r }
-                    a = r.ast
+                    a = r.ast.push("ARG_END")
                     cur = skip_ws(src, r.pos)
                     if cur < n && src.substring(cur, cur + 1) == "," {
                         cur = cur + 1
@@ -303,7 +315,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 let mut more = true
                 while more {
                     let r = parse_expr_ast(src, cur, a)
-                    a = r.ast
+                    a = r.ast.push("ARG_END")
                     cur = r.pos
                     cur = skip_ws(src, cur)
                     if cur < n && src.substring(cur, cur + 1) == "," {
@@ -410,7 +422,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 while more3 {
                     let r = parse_expr_ast(src, cur, subj_a)
                     if r.error { return r }
-                    subj_a = r.ast
+                    subj_a = r.ast.push("ARG_END")
                     cur = skip_ws(src, r.pos)
                     if cur < n && src.substring(cur, cur + 1) == "," {
                         cur = cur + 1
@@ -453,35 +465,66 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     }
 }
 
-pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
-    let lhs = parse_primary_ast(src, pos, ast)
-    if lhs.error { return lhs }
+// Precedence map for binary operators. Higher = binds tighter.
+//   1: ||     (lowest)
+//   2: &&
+//   3: == !=
+//   4: < > <= >=
+//   5: + -
+//   6: * / %
+fn op_prec(op: str) -> i64 {
+    if op == "||" { 1 }
+    else if op == "&&" { 2 }
+    else if op == "==" || op == "!=" { 3 }
+    else if op == "<" || op == ">" || op == "<=" || op == ">=" { 4 }
+    else if op == "+" || op == "-" { 5 }
+    else if op == "*" || op == "/" || op == "%" { 6 }
+    else { 0 }
+}
 
+// Try to detect a binary operator at `p`. Returns (op, advance) or ("", 0).
+fn try_binop(src: str, p: i64) -> [str] {
     let n = to_int(len(src))
-    let mut p = skip_ws(src, lhs.pos)
-    if p >= n { return pr_ok(lhs.ast, p) }
-
+    if p >= n { return ["", "0"] }
     let two = if p + 2 <= n { src.substring(p, p + 2) } else { "" }
     let one = src.substring(p, p + 1)
-
-    let mut op: str = ""
-    let mut adv: i64 = 0
-    if two == "==" || two == "!=" || two == "<=" || two == ">=" {
-        op = two; adv = 2
-    } else if one == "+" || one == "-" || one == "*" || one == "/" ||
-              one == "<" || one == ">" {
-        op = one; adv = 1
+    if two == "==" || two == "!=" || two == "<=" || two == ">=" ||
+       two == "&&" || two == "||" {
+        return [two, "2"]
     }
+    if one == "+" || one == "-" || one == "*" || one == "/" ||
+       one == "%" || one == "<" || one == ">" {
+        return [one, "1"]
+    }
+    ["", "0"]
+}
 
-    if op == "" {
-        pr_ok(lhs.ast, p)
-    } else {
-        let new_pos = p + adv
-        let rhs = parse_expr_ast(src, new_pos, lhs.ast)
+// Pratt-style precedence climbing. min_prec = inclusive lower bound.
+pub fn parse_expr_prec(src: str, pos: i64, min_prec: i64, ast: [str]) -> ParseResult {
+    let mut lhs = parse_primary_ast(src, pos, ast)
+    if lhs.error { return lhs }
+    let n = to_int(len(src))
+    let mut p = skip_ws(src, lhs.pos)
+    while p < n {
+        let opi = try_binop(src, p)
+        let op = opi[0]
+        let adv = to_int(opi[1])
+        if op == "" { break }
+        let prec = op_prec(op)
+        if prec < min_prec { break }
+        // Left-associative: parse RHS at higher precedence
+        let rhs_pos = p + adv
+        let rhs = parse_expr_prec(src, rhs_pos, prec + 1, lhs.ast)
         if rhs.error { return rhs }
         let a = rhs.ast.push("BINOP").push(op)
-        pr_ok(a, rhs.pos)
+        lhs = pr_ok(a, rhs.pos)
+        p = skip_ws(src, rhs.pos)
     }
+    lhs
+}
+
+pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
+    parse_expr_prec(src, pos, 1, ast)
 }
 
 // ─────────────────────────────────────────────────────────────────────
