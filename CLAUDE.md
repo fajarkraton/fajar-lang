@@ -718,6 +718,7 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 | When You Need... | Read This |
 |---|---|
+| **Open plans awaiting user decision (2026-05-07)** | **`docs/FJARR_LEAK_PLAN.md`** (5 strategy options A/B/C/D/E/F) + **`docs/CALL_INDEX_PLAN.md`** (3 sub-decisions D1/D2/D3) + **`docs/T4_DUP_FN_PLAN.md`** (Option A vs B). Each surfaces decision gates that need user input before implementation; none auto-decided per CLAUDE.md §6.8 R6. Total scope 18.5h–35h depending on selections. |
 | **FAJAROS_100PCT_FJ_PLAN (TERMINAL COMPLETE 2026-05-05)** | **`docs/FAJAROS_100PCT_FJ_PLAN.md`** + per-phase findings `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md`. 9/9 fj-lang LLVM compiler gaps closed (G-A through G-N); ZERO non-fj LOC in fajaros kernel build path. v33.2.0 caps the plan. |
 | **Latest audit (V33) — perfection plan** | **`docs/HONEST_AUDIT_V33.md`** — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 module classification (still authoritative; V33 added no demotions) |
