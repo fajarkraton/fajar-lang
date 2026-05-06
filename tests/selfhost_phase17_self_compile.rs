@@ -377,3 +377,180 @@ fn phase17_codegen_fj_self_compile_to_object() {
     ];
     assert_object_exports(&o_path, &required);
 }
+
+/// Phase 17.8 / v35.0.0 — Stage 2 self-host TRIPLE TEST.
+///
+/// 1. The interpreter-driven chain compiles `stdlib/{codegen,parser_ast,
+///    codegen_driver,selfhost_main}.fj` → `stage1.c` → gcc → `fjc-stage1`
+///    native binary.
+/// 2. `fjc-stage1` is given the SAME 4-file combined source as input → produces
+///    `stage2.c`. Assert `stage2.c` byte-identical to `stage1.c` (the chain's
+///    own output). This proves fj-source → C transformation is reproducible
+///    when invoked through the native binary.
+/// 3. Build `fjc-stage2` from `stage2.c` via gcc. Run BOTH `fjc-stage1` and
+///    `fjc-stage2` on a small third-party fj source. Assert they emit
+///    byte-identical C.
+///
+/// What this proves: the self-hosted compilation pipeline reaches a fixed
+/// point — the binary, when re-applied to its own source, reproduces itself
+/// exactly.
+#[cfg(unix)]
+#[test]
+fn phase17_stage2_native_triple_test() {
+    let probe_driver = r#"
+fn main() {
+    let codegen_src_r = read_file("stdlib/codegen.fj")
+    let codegen_src = match codegen_src_r { Ok(c) => c, Err(_) => { println("codegen read failed"); return } }
+    let parser_src_r = read_file("stdlib/parser_ast.fj")
+    let parser_src = match parser_src_r { Ok(c) => c, Err(_) => { println("parser_ast read failed"); return } }
+    let driver_src_r = read_file("stdlib/codegen_driver.fj")
+    let driver_src = match driver_src_r { Ok(c) => c, Err(_) => { println("codegen_driver read failed"); return } }
+    let main_src_r = read_file("stdlib/selfhost_main.fj")
+    let main_src = match main_src_r { Ok(c) => c, Err(_) => { println("selfhost_main read failed"); return } }
+    let combined = concat!(codegen_src, "\n", parser_src, "\n", driver_src, "\n", main_src)
+    let ast = parse_to_ast(combined)
+    let c_src = emit_program(ast)
+    let _ = write_file("/tmp/fjc_triple_stage1.c", c_src)
+    println(f"AST size: {to_int(len(ast))}")
+}
+"#;
+    let combined = format!(
+        "{}{}",
+        cat_files(&[
+            "stdlib/codegen.fj",
+            "stdlib/parser_ast.fj",
+            "stdlib/codegen_driver.fj"
+        ]),
+        probe_driver
+    );
+    let tmp_probe = std::env::temp_dir().join("fjc_triple_probe.fj");
+    std::fs::write(&tmp_probe, &combined).unwrap();
+
+    // Step 1: interpreter chain → stage1.c
+    let out = Command::new(fj_binary())
+        .args(["run", tmp_probe.to_str().unwrap()])
+        .current_dir(workspace())
+        .output()
+        .expect("fj run");
+    assert!(
+        out.status.success(),
+        "interpreter chain failed: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stage1_c = std::env::temp_dir().join("fjc_triple_stage1.c");
+    let fjc_stage1 = std::env::temp_dir().join("fjc-triple-stage1");
+    let cc1 = Command::new("gcc")
+        .args([
+            stage1_c.to_str().unwrap(),
+            "-o",
+            fjc_stage1.to_str().unwrap(),
+            "-w",
+        ])
+        .output()
+        .expect("gcc stage1");
+    assert!(
+        cc1.status.success(),
+        "gcc stage1 failed:\n{}",
+        String::from_utf8_lossy(&cc1.stderr)
+    );
+
+    // Step 2: stage1 binary on its own source → stage2.c
+    let combined_4file = cat_files(&[
+        "stdlib/codegen.fj",
+        "stdlib/parser_ast.fj",
+        "stdlib/codegen_driver.fj",
+        "stdlib/selfhost_main.fj",
+    ]);
+    let combined_4file_path = std::env::temp_dir().join("fjc_triple_combined.fj");
+    std::fs::write(&combined_4file_path, &combined_4file).unwrap();
+    let stage2_c = std::env::temp_dir().join("fjc_triple_stage2.c");
+    let run1 = Command::new(&fjc_stage1)
+        .args([
+            combined_4file_path.to_str().unwrap(),
+            stage2_c.to_str().unwrap(),
+        ])
+        .current_dir(workspace())
+        .output()
+        .expect("fjc-stage1 run");
+    assert!(
+        run1.status.success(),
+        "fjc-stage1 self-compile failed: stderr={}",
+        String::from_utf8_lossy(&run1.stderr)
+    );
+
+    // Invariant 1: stage2.c byte-identical to stage1.c (the chain's output).
+    let stage1_bytes = std::fs::read(&stage1_c).unwrap();
+    let stage2_bytes = std::fs::read(&stage2_c).unwrap();
+    assert_eq!(
+        stage1_bytes,
+        stage2_bytes,
+        "stage2.c diverges from stage1.c — self-host is not a fixed point. \
+         stage1 size={}, stage2 size={}",
+        stage1_bytes.len(),
+        stage2_bytes.len()
+    );
+
+    // Step 3: build stage2 binary; run both stages on a third-party fj source.
+    let fjc_stage2 = std::env::temp_dir().join("fjc-triple-stage2");
+    let cc2 = Command::new("gcc")
+        .args([
+            stage2_c.to_str().unwrap(),
+            "-o",
+            fjc_stage2.to_str().unwrap(),
+            "-w",
+        ])
+        .output()
+        .expect("gcc stage2");
+    assert!(
+        cc2.status.success(),
+        "gcc stage2 failed:\n{}",
+        String::from_utf8_lossy(&cc2.stderr)
+    );
+
+    let third = std::env::temp_dir().join("fjc_triple_third.fj");
+    std::fs::write(
+        &third,
+        "fn main() {\n    let x = 21\n    let y = x + x\n    println(y)\n}\n",
+    )
+    .unwrap();
+    let third_c1 = std::env::temp_dir().join("fjc_triple_third_s1.c");
+    let third_c2 = std::env::temp_dir().join("fjc_triple_third_s2.c");
+    let r1 = Command::new(&fjc_stage1)
+        .args([third.to_str().unwrap(), third_c1.to_str().unwrap()])
+        .output()
+        .expect("stage1 third");
+    assert!(r1.status.success(), "stage1 on third-party input failed");
+    let r2 = Command::new(&fjc_stage2)
+        .args([third.to_str().unwrap(), third_c2.to_str().unwrap()])
+        .output()
+        .expect("stage2 third");
+    assert!(r2.status.success(), "stage2 on third-party input failed");
+
+    // Invariant 2: stage1 and stage2 produce byte-identical output.
+    let third_b1 = std::fs::read(&third_c1).unwrap();
+    let third_b2 = std::fs::read(&third_c2).unwrap();
+    assert_eq!(
+        third_b1, third_b2,
+        "stage1 and stage2 disagree on third-party input"
+    );
+
+    // Sanity: the third-party C compiles + prints `42`.
+    let third_bin = std::env::temp_dir().join("fjc_triple_third_bin");
+    let cc3 = Command::new("gcc")
+        .args([
+            third_c1.to_str().unwrap(),
+            "-o",
+            third_bin.to_str().unwrap(),
+            "-w",
+        ])
+        .output()
+        .expect("gcc third");
+    assert!(cc3.status.success(), "gcc third failed");
+    let third_run = Command::new(&third_bin).output().expect("run third");
+    assert!(third_run.status.success(), "third binary did not exit 0");
+    assert_eq!(
+        String::from_utf8_lossy(&third_run.stdout).trim(),
+        "42",
+        "third binary stdout != 42"
+    );
+}

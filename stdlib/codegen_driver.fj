@@ -98,8 +98,15 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             exr(concat!("/* unknown macro ", name, " */"), p2)
         }
     } else if tag == "BEGIN_ARRAY_LIT" {
-        // [a, b, c] → _fj_arr_push_i64(_fj_arr_push_i64(_fj_arr_new(), a), b)... chain
+        // [a, b, c] → _fj_arr_push_X(_fj_arr_push_X(_fj_arr_new(), a), b)... chain
         // Or for empty []: just _fj_arr_new()
+        // Phase 17.8: dispatch helper based on FIRST element's atom — STR /
+        // string-typed → push_str, else → push_i64. Without this, `[""]` etc.
+        // pushed string literals via push_i64, leaving int-as-pointer leaks
+        // that crashed Stage 1 self-host binaries at the next get_str.
+        let first_elem_pos = pos + 1
+        let elem_is_str = first_elem_pos < n && ast[first_elem_pos] != "END_ARRAY_LIT" && atom_is_str(ast, vars, first_elem_pos)
+        let helper = if elem_is_str { "_fj_arr_push_str" } else { "_fj_arr_push_i64" }
         let mut p2 = pos + 1
         let mut elems: [str] = []
         while p2 < n && ast[p2] != "END_ARRAY_LIT" {
@@ -113,11 +120,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         if m == 0 {
             exr("_fj_arr_new()", p2)
         } else {
-            // Build nested push expression: _fj_arr_push_i64(_fj_arr_push_i64(_fj_arr_new(), e0), e1)...
+            // Build nested push expression.
             let mut code = "_fj_arr_new()"
             let mut k = 0
             while k < m {
-                code = concat!("_fj_arr_push_i64(", code, ", ", elems[k], ")")
+                code = concat!(helper, "(", code, ", ", elems[k], ")")
                 k = k + 1
             }
             exr(code, p2)
@@ -184,7 +191,15 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                 let t = lookup_var_type_in_table(vars, arg_name)
                 t == "str"
             } else { false }
-            if arg_is_str || arg_method_str || arg_ident_str {
+            // Phase 17.8: arg is `arr[k]` over a [str]-typed array → str.
+            // Without this, `subj_a.push(field_chain[k])` where field_chain
+            // is [str] dispatched to push_i64 — pointer→int leak.
+            let arg_index_str = if first_arg_tag == "BEGIN_INDEX" {
+                let idx_arr_name = if first_arg_pos + 1 < n { ast[first_arg_pos + 1] } else { "" }
+                let idx_arr_type = lookup_var_type_in_table(vars, idx_arr_name)
+                idx_arr_type == "[str]"
+            } else { false }
+            if arg_is_str || arg_method_str || arg_ident_str || arg_index_str {
                 helper = "_fj_arr_push_str"
             } else {
                 helper = "_fj_arr_push_i64"
@@ -342,11 +357,18 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             // So inline lookup must stay as a single conjunction.
             let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
             let arg_method_name = if arg_tag == "BEGIN_METHOD_CALL" { find_method_name(ast, pos + 2) } else { "" }
+            // Phase 17.8: BEGIN_INDEX over [str] yields str; treat as str arg.
+            let arg_index_str = if arg_tag == "BEGIN_INDEX" {
+                let idx_arr_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+                let idx_arr_type = lookup_var_type_in_table(vars, idx_arr_name)
+                idx_arr_type == "[str]"
+            } else { false }
             let arg_is_str = arg_tag == "STR" ||
                 (arg_tag == "IDENT" && pos + 3 < to_int(len(ast)) &&
                  lookup_var_type_in_table(vars, ast[pos + 3]) == "str") ||
                 (arg_tag == "BEGIN_METHOD_CALL" && (arg_method_name == "substring" || arg_method_name == "concat")) ||
-                (arg_tag == "BEGIN_MACRO_CALL")
+                (arg_tag == "BEGIN_MACRO_CALL") ||
+                arg_index_str
             if arg_is_str {
                 name = "_fj_to_int"
             } else {
@@ -746,7 +768,16 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             else if first_atom == "FLOAT" { fj_type = "f64" }
             else if first_atom == "BOOL" { fj_type = "bool" }
             else if first_atom == "INT" { fj_type = "i64" }
-            else if first_atom == "BEGIN_ARRAY_LIT" { fj_type = "[i64]" }  // default; declared annotation wins
+            else if first_atom == "BEGIN_ARRAY_LIT" {
+                // Phase 17.8: peek first element to choose [str] vs [i64].
+                // Declared annotation still wins via the outer `if fj_type == "" {}`.
+                let first_elem_pos = p_after_name + 1
+                if first_elem_pos < to_int(len(ast)) && ast[first_elem_pos] != "END_ARRAY_LIT" && atom_is_str(ast, vars, first_elem_pos) {
+                    fj_type = "[str]"
+                } else {
+                    fj_type = "[i64]"
+                }
+            }
             else if first_atom == "BEGIN_METHOD_CALL" {
                 let m = find_method_name(ast, p_after_name)
                 if m == "substring" { fj_type = "str" }
@@ -1019,8 +1050,16 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     // it's the final stmt — branches' last expr-stmts become `return <expr>;`.
     // Without this, fns like `parse_params` whose body ends in `if/else { pr_ok(...) } else { pr_err(...) }`
     // returned UB at runtime.
-    let implicit_return_expr = ret_type != "void" && last_tag == "BEGIN_EXPR_STMT"
-    let implicit_return_if = ret_type != "void" && last_tag == "BEGIN_IF"
+    //
+    // `main` is special-cased: emit_function_typed renders it as `int main(int
+    // argc, char** argv)`, but the body's last stmt is typically a void-
+    // returning call like `println(...)` or `write_file(...)`. We treat main
+    // as void here so the trailing call emits as a plain stmt; the C `return`
+    // is appended by emit_function_end (which we extend to add `return 0;` when
+    // closing main).
+    let is_main = name == "main"
+    let implicit_return_expr = !is_main && ret_type != "void" && last_tag == "BEGIN_EXPR_STMT"
+    let implicit_return_if = !is_main && ret_type != "void" && last_tag == "BEGIN_IF"
     // Use cg_local (with cleared+param-populated var_types) instead of cg
     let mut cg2 = emit_function_typed(cg_local, name, param_pairs, ret_type)
     while p < n && ast[p] != "END_BODY" {
@@ -1039,7 +1078,9 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 
 // Phase 17.8: emit BEGIN_IF whose branches' LAST expr-stmts become `return <expr>;`.
 // Mirrors emit_stmt's BEGIN_IF path but rewrites the trailing BEGIN_EXPR_STMT in
-// each branch as a return-form. Non-final branch stmts emit as regular stmts.
+// each branch as a return-form. When the trailing stmt is itself a BEGIN_IF
+// (else-if chain), recurses so each leaf's tail also returns. Non-final branch
+// stmts emit as regular stmts.
 pub fn emit_if_implicit_return(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
     let n = to_int(len(ast))
     let vars = cg.var_types
@@ -1059,6 +1100,9 @@ pub fn emit_if_implicit_return(ast: [str], pos: i64, cg: CodegenState) -> Codege
         if p == then_last_pos && ast[p] == "BEGIN_EXPR_STMT" {
             let r = parse_expr_emit(ast, cg2.var_types, p + 1, cg2)
             cg2 = emit_return(cg2, r.code)
+        } else if p == then_last_pos && ast[p] == "BEGIN_IF" {
+            // Else-if chain: recurse so the deeper branches also return.
+            cg2 = emit_if_implicit_return(ast, p, cg2)
         } else {
             cg2 = emit_stmt(ast, p, cg2)
         }
@@ -1078,6 +1122,8 @@ pub fn emit_if_implicit_return(ast: [str], pos: i64, cg: CodegenState) -> Codege
             if p == else_last_pos && ast[p] == "BEGIN_EXPR_STMT" {
                 let r = parse_expr_emit(ast, cg2.var_types, p + 1, cg2)
                 cg2 = emit_return(cg2, r.code)
+            } else if p == else_last_pos && ast[p] == "BEGIN_IF" {
+                cg2 = emit_if_implicit_return(ast, p, cg2)
             } else {
                 cg2 = emit_stmt(ast, p, cg2)
             }

@@ -2,6 +2,83 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.0.0] — 2026-05-06 🎯 STAGE 2 SELF-HOST TRIPLE-TEST — major bump
+
+Fajar Lang now has a self-hosted compiler that reaches a fixed point: the
+binary, applied to its own source, reproduces itself bit-for-bit. The
+interpreter chain is no longer the only path from `.fj` to native code.
+
+### The triple-test (proves the fixed point)
+1. The interpreter-driven chain compiles `stdlib/{codegen, parser_ast,
+   codegen_driver, selfhost_main}.fj` through itself. Output: `stage1.c`
+   (162 KB). gcc compiles `stage1.c` → `fjc-stage1` native binary (140 KB).
+2. `fjc-stage1` is given the SAME 4-file combined source as input. Output:
+   `stage2.c`. **`stage2.c` is byte-identical to `stage1.c`** (same md5).
+3. `fjc-stage2` is built from `stage2.c`. Both `fjc-stage1` and
+   `fjc-stage2` run on a tiny third-party fj source (`hello.fj` — `let x =
+   21; let y = x + x; println(y)`). They emit byte-identical C, which
+   compiles and prints `42`.
+
+### Performance
+- Self-compile on the 4-file combined source (3206 LOC): interpreter chain
+  ~38s vs **fjc-stage1 native binary ~0.66s** (~57× faster).
+
+### Bugs surfaced + fixed during the v35.0.0 push
+Several silent issues that `gcc -c` had been masking are now closed:
+
+- **Free `push(arr, elem)` and `len(arr)` over struct field** (`state.lines`).
+  The chain previously emitted raw `push`/`len` (link errors). Now
+  type-dispatches via `cg.struct_fields` lookup.
+- **Implicit-return through `if/else` chains.** Prior chain only treated
+  trailing `BEGIN_EXPR_STMT` as the return position. `parse_params`-style
+  fns ending in `if/else { pr_ok(...) } else { pr_err(...) }` returned
+  UB. New `emit_if_implicit_return` walks each branch, recurses into
+  else-if chains, and emits `return <expr>;` for each leaf BEGIN_EXPR_STMT.
+- **`let x = arr[i]` type inference.** Without it, `x` declared `int64_t`
+  even when `arr` is `[str]`. Pointer→int truncation chained through
+  later string ops. Now derives element type from `arr`'s recorded fj-type.
+- **`Value::Array(Arc<Vec<Value>>)` migration** (v34.5.12) — last O(n²)
+  blocker on the chain — kept the interpreter compile time at 38s instead
+  of the prior 5+ minutes. Required to fit Stage 1 build into a tight loop.
+- **`["", "0"]` array literals.** Chain hardcoded `_fj_arr_push_i64` for
+  every `BEGIN_ARRAY_LIT`. Now peeks the first element via `atom_is_str`
+  and dispatches to `_fj_arr_push_str` when appropriate.
+- **`subj_a.push(field_chain[k])`.** Method-form `.push` dispatch missed
+  the case where the elem is `BEGIN_INDEX` over a `[str]`-typed IDENT.
+  Fixed.
+- **`to_int(opi[1])`.** Free `to_int` lowering didn't recognize
+  BEGIN_INDEX over `[str]` as a string arg, so it emitted a pointer cast
+  instead of `_fj_to_int` (atoll). `parse_expr_prec` consequently read
+  pointer-bits as a position counter and bailed out of binop parsing
+  silently. Fixed.
+- **`fn main()` body wrapped in `return`.** Chain's implicit-return logic
+  fired on `int main()` even when the trailing expr was a void-returning
+  call like `println(...)`. Now suppressed for `name == "main"`; main's
+  trailing void call emits as a plain stmt and C99's implicit-return-0
+  takes over.
+
+### Added
+- New regression test `phase17_stage2_native_triple_test` covering all
+  three triple-test invariants. **4/4** phase17 tests pass.
+- `stdlib/selfhost_main.fj` — the standalone wrapper main consumed by the
+  triple-test.
+
+### Verification
+- `cargo test --release --lib` → 7629 PASS.
+- `cargo test --release --test selfhost_phase17_self_compile` → 4 PASS.
+- selfhost_stage1_full 80/80, stage1_subset 5/5, stage2_reproducibility 6/6.
+- `cargo fmt -- --check` clean. `cargo clippy --lib --tests -- -D warnings` clean.
+- Manual triple-test md5 verification:
+  - chain stage1.c md5 ≡ stage1-emitted stage2.c md5: `1d6c52afda4f4b69cbd429fda74aee8a`.
+  - stage1 hello.c md5 ≡ stage2 hello.c md5: `d47fb8a05a3c9bccff430f70c0a8ed7c`.
+
+### Stats
+- Cumulative across v33.4.0..v35.0.0: ~32h Claude time across 33 self-host
+  phase increments. 31 GH releases LIVE.
+- This is the **major bump**: triple-test changes Fajar's self-host story
+  from "fj source can be parsed and emitted via the interpreter" to
+  "fj source produces a native binary that reproduces itself byte-for-byte."
+
 ## [v34.5.13] — 2026-05-06 Phase 17.8 (partial): native-binary chain extensions
 
 Six chain extensions toward Stage 1 native binary self-host. Stage 1
