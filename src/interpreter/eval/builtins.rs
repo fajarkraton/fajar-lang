@@ -92,13 +92,13 @@ impl Interpreter {
                     Value::Struct { fields, .. } => {
                         let names: Vec<Value> =
                             fields.keys().map(|k| Value::Str(k.clone())).collect();
-                        Ok(Value::Array(names))
+                        Ok(Value::array_from_vec(names))
                     }
                     Value::Map(m) => {
                         let names: Vec<Value> = m.keys().map(|k| Value::Str(k.clone())).collect();
-                        Ok(Value::Array(names))
+                        Ok(Value::array_from_vec(names))
                     }
-                    _ => Ok(Value::Array(vec![])),
+                    _ => Ok(Value::array_from_vec(vec![])),
                 }
             }
             "push" => {
@@ -118,7 +118,7 @@ impl Interpreter {
                 let elem = iter.next().unwrap_or(Value::Null);
                 match receiver {
                     Value::Array(mut a) => {
-                        a.push(elem);
+                        std::sync::Arc::make_mut(&mut a).push(elem);
                         Ok(Value::Array(a))
                     }
                     _ => Err(RuntimeError::TypeError("push() requires an array".into()).into()),
@@ -1073,14 +1073,14 @@ impl Interpreter {
                                 .into_iter()
                                 .map(|p| Value::Tensor(p.clone()))
                                 .collect();
-                            Ok(Value::Array(params))
+                            Ok(Value::array_from_vec(params))
                         }
                         LayerValue::Conv2d(conv) => {
                             let params: Vec<Value> = vec![
                                 Value::Tensor(conv.weight.clone()),
                                 Value::Tensor(conv.bias.clone()),
                             ];
-                            Ok(Value::Array(params))
+                            Ok(Value::array_from_vec(params))
                         }
                         LayerValue::Attention(attn) => {
                             let params: Vec<Value> = vec![
@@ -1089,7 +1089,7 @@ impl Interpreter {
                                 Value::Tensor(attn.w_v.clone()),
                                 Value::Tensor(attn.w_o.clone()),
                             ];
-                            Ok(Value::Array(params))
+                            Ok(Value::array_from_vec(params))
                         }
                     },
                     _ => {
@@ -1239,7 +1239,7 @@ impl Interpreter {
                 agent.insert("action_dim".to_string(), Value::Int(action_dim as i64));
                 agent.insert(
                     "state".to_string(),
-                    Value::Array(env.state.iter().map(|s| Value::Float(*s)).collect()),
+                    Value::array_from_vec(env.state.iter().map(|s| Value::Float(*s)).collect()),
                 );
                 agent.insert("step".to_string(), Value::Int(0));
                 agent.insert("total_reward".to_string(), Value::Float(0.0));
@@ -1290,7 +1290,7 @@ impl Interpreter {
                 let mut step_result = std::collections::HashMap::new();
                 step_result.insert(
                     "state".to_string(),
-                    Value::Array(result.state.iter().map(|s| Value::Float(*s)).collect()),
+                    Value::array_from_vec(result.state.iter().map(|s| Value::Float(*s)).collect()),
                 );
                 step_result.insert("reward".to_string(), Value::Float(result.reward));
                 step_result.insert("done".to_string(), Value::Bool(result.done));
@@ -1303,7 +1303,7 @@ impl Interpreter {
             "pipeline_create" => {
                 let mut pipe = std::collections::HashMap::new();
                 pipe.insert("_type".to_string(), Value::Str("Pipeline".into()));
-                pipe.insert("stages".to_string(), Value::Array(vec![]));
+                pipe.insert("stages".to_string(), Value::array_from_vec(vec![]));
                 pipe.insert("stage_count".to_string(), Value::Int(0));
                 Ok(Value::Map(pipe))
             }
@@ -1333,8 +1333,10 @@ impl Interpreter {
                     }
                 };
                 // Append stage
-                let mut stages = match pipe.remove("stages") {
-                    Some(Value::Array(a)) => a,
+                let mut stages: Vec<Value> = match pipe.remove("stages") {
+                    Some(Value::Array(a)) => {
+                        std::sync::Arc::try_unwrap(a).unwrap_or_else(|rc| (*rc).clone())
+                    }
                     _ => vec![],
                 };
                 let mut stage = std::collections::HashMap::new();
@@ -1342,7 +1344,7 @@ impl Interpreter {
                 stage.insert("fn".to_string(), Value::Str(fn_name));
                 stages.push(Value::Map(stage));
                 let count = stages.len() as i64;
-                pipe.insert("stages".to_string(), Value::Array(stages));
+                pipe.insert("stages".to_string(), Value::array_from_vec(stages));
                 pipe.insert("stage_count".to_string(), Value::Int(count));
                 Ok(Value::Map(pipe))
             }
@@ -1354,9 +1356,9 @@ impl Interpreter {
                     }
                     .into());
                 }
-                let stages = match &args[0] {
+                let stages: Vec<Value> = match &args[0] {
                     Value::Map(m) => match m.get("stages") {
-                        Some(Value::Array(a)) => a.clone(),
+                        Some(Value::Array(a)) => (**a).clone(),
                         _ => vec![],
                     },
                     _ => {
@@ -1810,7 +1812,7 @@ impl Interpreter {
                 let reg = crate::const_traits::ConstTraitRegistry::new();
                 let mut names: Vec<String> = reg.traits.keys().cloned().collect();
                 names.sort(); // deterministic order
-                Ok(Value::Array(
+                Ok(Value::array_from_vec(
                     names.into_iter().map(Value::Str).collect::<Vec<_>>(),
                 ))
             }
@@ -1980,7 +1982,7 @@ impl Interpreter {
                 m.insert("type_desc".to_string(), Value::Str(alloc.type_desc));
                 m.insert(
                     "bytes".to_string(),
-                    Value::Array(alloc.bytes.iter().map(|b| Value::Int(*b as i64)).collect()),
+                    Value::array_from_vec(alloc.bytes.iter().map(|b| Value::Int(*b as i64)).collect()),
                 );
                 Ok(Value::Map(m))
             }
@@ -2067,7 +2069,7 @@ impl Interpreter {
                             .split(sep.as_str())
                             .map(|p| Value::Str(p.to_string()))
                             .collect();
-                        Ok(Value::Array(parts))
+                        Ok(Value::array_from_vec(parts))
                     }
                     _ => Err(RuntimeError::TypeError("split(string, separator)".into()).into()),
                 }
@@ -2392,7 +2394,7 @@ impl Interpreter {
                         for i in 0..load_n {
                             labels.push(Value::Int(bytes[8 + i] as i64));
                         }
-                        Ok(Value::Array(labels))
+                        Ok(Value::array_from_vec(labels))
                     }
                     Err(e) => Ok(Value::Enum {
                         variant: "Err".into(),
@@ -2441,7 +2443,7 @@ impl Interpreter {
                                 bytes.iter().map(|b| Value::Int(*b as i64)).collect();
                             Ok(Value::Enum {
                                 variant: "Ok".into(),
-                                data: Some(Box::new(Value::Array(arr))),
+                                data: Some(Box::new(Value::array_from_vec(arr))),
                             })
                         }
                         Err(e) => Ok(Value::Enum {
@@ -2654,7 +2656,7 @@ impl Interpreter {
                 match &args[0] {
                     Value::Map(m) => {
                         let keys: Vec<Value> = m.keys().map(|k| Value::Str(k.clone())).collect();
-                        Ok(Value::Array(keys))
+                        Ok(Value::array_from_vec(keys))
                     }
                     _ => Err(RuntimeError::TypeError("map_keys(map)".into()).into()),
                 }
@@ -2670,7 +2672,7 @@ impl Interpreter {
                 match &args[0] {
                     Value::Map(m) => {
                         let vals: Vec<Value> = m.values().cloned().collect();
-                        Ok(Value::Array(vals))
+                        Ok(Value::array_from_vec(vals))
                     }
                     _ => Err(RuntimeError::TypeError("map_values(map)".into()).into()),
                 }
@@ -3076,7 +3078,7 @@ impl Interpreter {
                         other => results.push(other),
                     }
                 }
-                Ok(Value::Array(results))
+                Ok(Value::array_from_vec(results))
             }
             "timeout" => {
                 // timeout(ms, future) → resolve future (cooperative, no real timeout in interpreter)
@@ -4055,7 +4057,7 @@ impl Interpreter {
                 Value::Map(map)
             })
             .collect();
-        Ok(Value::Array(result))
+        Ok(Value::array_from_vec(result))
     }
 
     /// `db_close(handle)` → Null.
@@ -4158,7 +4160,7 @@ impl Interpreter {
         match val {
             Value::Array(arr) => {
                 let mut params = Vec::with_capacity(arr.len());
-                for v in arr {
+                for v in arr.iter() {
                     let p = match v {
                         Value::Int(n) => DbParam::Int(*n),
                         Value::Float(f) => DbParam::Float(*f),
@@ -5428,7 +5430,7 @@ impl Interpreter {
         match &args[idx] {
             Value::Array(arr) => {
                 let mut shape = Vec::with_capacity(arr.len());
-                for v in arr {
+                for v in arr.iter() {
                     match v {
                         Value::Int(n) if *n >= 0 => shape.push(*n as usize),
                         _ => {
@@ -5542,7 +5544,7 @@ impl Interpreter {
         let data = match &args[0] {
             Value::Array(arr) => {
                 let mut data = Vec::with_capacity(arr.len());
-                for v in arr {
+                for v in arr.iter() {
                     match v {
                         Value::Float(f) => data.push(*f),
                         Value::Int(i) => data.push(*i as f64),
@@ -5596,7 +5598,7 @@ impl Interpreter {
                 if depth >= shape.len() {
                     shape.push(arr.len());
                 }
-                for item in arr {
+                for item in arr.iter() {
                     Self::flatten_nested(item, data, shape, depth + 1)?;
                 }
                 Ok(())
@@ -5617,7 +5619,7 @@ impl Interpreter {
             .into());
         }
         match &args[0] {
-            Value::Tensor(t) => Ok(Value::Array(
+            Value::Tensor(t) => Ok(Value::array_from_vec(
                 t.shape().iter().map(|&d| Value::Int(d as i64)).collect(),
             )),
             _ => Err(RuntimeError::TypeError("tensor_shape: expected tensor".into()).into()),
@@ -6549,7 +6551,7 @@ impl Interpreter {
         result.insert("_type".to_string(), Value::Str("QuantizedVector".into()));
         result.insert(
             "indices".to_string(),
-            Value::Array(qv.indices.iter().map(|&i| Value::Int(i as i64)).collect()),
+            Value::array_from_vec(qv.indices.iter().map(|&i| Value::Int(i as i64)).collect()),
         );
         result.insert("norm".to_string(), Value::Float(qv.norm));
         result.insert("dim".to_string(), Value::Int(dim as i64));
@@ -6722,7 +6724,7 @@ impl Interpreter {
                 Value::Map(dev)
             })
             .collect();
-        result.insert("devices".to_string(), Value::Array(devices));
+        result.insert("devices".to_string(), Value::array_from_vec(devices));
         if let Some(ver) = discovery.driver_version {
             result.insert("driver_version".to_string(), Value::Int(ver as i64));
         }
@@ -7446,7 +7448,7 @@ impl Interpreter {
             .into());
         }
         match &args[0] {
-            Value::Quantized(q) => Ok(Value::Array(
+            Value::Quantized(q) => Ok(Value::array_from_vec(
                 q.shape().iter().map(|&d| Value::Int(d as i64)).collect(),
             )),
             _ => Err(RuntimeError::TypeError(
@@ -7669,10 +7671,11 @@ impl Interpreter {
                 fields.insert("bits".into(), Value::Int(*bits));
                 fields.insert("len".into(), Value::Int(0));
                 // keys[layer] = [] (empty arrays, grow on update)
-                let empty_layers: Vec<Value> =
-                    (0..*n_layers).map(|_| Value::Array(Vec::new())).collect();
-                fields.insert("keys".into(), Value::Array(empty_layers.clone()));
-                fields.insert("values".into(), Value::Array(empty_layers));
+                let empty_layers: Vec<Value> = (0..*n_layers)
+                    .map(|_| Value::array_from_vec(Vec::new()))
+                    .collect();
+                fields.insert("keys".into(), Value::array_from_vec(empty_layers.clone()));
+                fields.insert("values".into(), Value::array_from_vec(empty_layers));
                 Ok(Value::Struct {
                     name: "QuantizedKVCache".into(),
                     fields,
@@ -7735,14 +7738,16 @@ impl Interpreter {
 
                 // Append key to keys[layer]
                 if let Some(Value::Array(keys)) = new_fields.get_mut("keys") {
-                    if let Some(Value::Array(layer_keys)) = keys.get_mut(layer) {
-                        layer_keys.push(args[2].clone());
+                    let keys_vec = std::sync::Arc::make_mut(keys);
+                    if let Some(Value::Array(layer_keys)) = keys_vec.get_mut(layer) {
+                        std::sync::Arc::make_mut(layer_keys).push(args[2].clone());
                     }
                 }
                 // Append value to values[layer]
                 if let Some(Value::Array(values)) = new_fields.get_mut("values") {
-                    if let Some(Value::Array(layer_values)) = values.get_mut(layer) {
-                        layer_values.push(args[3].clone());
+                    let values_vec = std::sync::Arc::make_mut(values);
+                    if let Some(Value::Array(layer_values)) = values_vec.get_mut(layer) {
+                        std::sync::Arc::make_mut(layer_values).push(args[3].clone());
                     }
                 }
                 // Increment len (only count once per full-layer update)
@@ -7868,9 +7873,9 @@ impl Interpreter {
                 let mut total: usize = 0;
                 for layer_key in ["keys", "values"] {
                     if let Some(Value::Array(layers)) = fields.get(layer_key) {
-                        for layer in layers {
+                        for layer in layers.iter() {
                             if let Value::Array(entries) = layer {
-                                for entry in entries {
+                                for entry in entries.iter() {
                                     if let Value::Quantized(q) = entry {
                                         total += q.size_bytes();
                                     }
@@ -8347,7 +8352,7 @@ impl Interpreter {
 
         // Convert value to iterator or eagerly collect
         let items: Vec<Value> = match iter_val {
-            Value::Array(arr) => arr,
+            Value::Array(arr) => std::sync::Arc::try_unwrap(arr).unwrap_or_else(|rc| (*rc).clone()),
             Value::Tuple(t) => t,
             Value::Str(s) => s.chars().map(Value::Char).collect(),
             Value::Map(m) => m
@@ -8560,7 +8565,7 @@ impl Interpreter {
                             }
                             .into());
                         }
-                        let mut new_arr = arr.clone();
+                        let mut new_arr: Vec<Value> = (**arr).clone();
                         let final_val = if op == AssignOp::Assign {
                             new_val
                         } else {
@@ -8573,7 +8578,7 @@ impl Interpreter {
                                 .env
                                 .lock()
                                 .expect("env lock")
-                                .assign(name, Value::Array(new_arr))
+                                .assign(name, Value::array_from_vec(new_arr))
                             {
                                 return Err(RuntimeError::UndefinedVariable(name.clone()).into());
                             }
@@ -8885,7 +8890,7 @@ impl Interpreter {
                     if let Some(rest_name) = rest {
                         let rest_vals: Vec<Value> =
                             vals.iter().skip(elements.len()).cloned().collect();
-                        bindings.insert(rest_name.clone(), Value::Array(rest_vals));
+                        bindings.insert(rest_name.clone(), Value::array_from_vec(rest_vals));
                     }
                     Some(bindings)
                 } else {
@@ -8949,7 +8954,7 @@ impl Interpreter {
         for e in elements {
             vals.push(self.eval_expr(e)?);
         }
-        Ok(Value::Array(vals))
+        Ok(Value::array_from_vec(vals))
     }
 
     /// Evaluates a tuple literal.
@@ -9106,7 +9111,7 @@ impl Interpreter {
             (start_val..end_val).map(Value::Int).collect()
         };
 
-        Ok(Value::Array(items))
+        Ok(Value::array_from_vec(items))
     }
 
     /// Evaluates a closure expression.
@@ -9474,7 +9479,7 @@ impl Interpreter {
                 while let Some(v) = self.iter_next(&iter_rc)? {
                     result.push(v);
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             "sum" => {
                 let mut total: i64 = 0;
@@ -9895,7 +9900,7 @@ impl Interpreter {
         match val {
             Value::Array(arr) => {
                 let mut result = Vec::with_capacity(arr.len());
-                for v in arr {
+                for v in arr.iter() {
                     match v {
                         Value::Int(n) => result.push(*n),
                         _ => {
@@ -10485,7 +10490,7 @@ impl Interpreter {
                             Value::Map(map)
                         })
                         .collect();
-                    Ok(Value::Array(result))
+                    Ok(Value::array_from_vec(result))
                 }
                 Err(e) => Err(RuntimeError::TypeError(e).into()),
             }
@@ -10503,7 +10508,7 @@ impl Interpreter {
                     Value::Map(map)
                 })
                 .collect();
-            Ok(Value::Array(result))
+            Ok(Value::array_from_vec(result))
         }
     }
 
@@ -10612,7 +10617,7 @@ impl Interpreter {
             match result {
                 Ok(bytes) => {
                     let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
-                    Ok(Value::Array(arr))
+                    Ok(Value::array_from_vec(arr))
                 }
                 Err(_) => Ok(Value::Null),
             }
@@ -10623,7 +10628,7 @@ impl Interpreter {
             match self.ble_adapter.read(handle, &uuid) {
                 Some(bytes) => {
                     let arr: Vec<Value> = bytes.into_iter().map(|b| Value::Int(b as i64)).collect();
-                    Ok(Value::Array(arr))
+                    Ok(Value::array_from_vec(arr))
                 }
                 None => Ok(Value::Null),
             }
@@ -11158,7 +11163,9 @@ impl Interpreter {
             }
         };
         let matches = crate::stdlib_v3::formats::regex_find_all(&pattern, &text);
-        Ok(Value::Array(matches.into_iter().map(Value::Str).collect()))
+        Ok(Value::array_from_vec(
+            matches.into_iter().map(Value::Str).collect(),
+        ))
     }
 
     /// regex_replace(pattern: str, text: str, replacement: str) -> str
@@ -11263,7 +11270,9 @@ impl Interpreter {
             }
         };
         match crate::stdlib_v3::formats::regex_captures(&pattern, &text) {
-            Some(caps) => Ok(Value::Array(caps.into_iter().map(Value::Str).collect())),
+            Some(caps) => Ok(Value::array_from_vec(
+                caps.into_iter().map(Value::Str).collect(),
+            )),
             None => Ok(Value::Null),
         }
     }
@@ -11479,7 +11488,7 @@ impl Interpreter {
                     Value::Int(id) => task_ids.push(*id as u64),
                     Value::Future { task_id } => task_ids.push(*task_id),
                     Value::Array(arr) => {
-                        for v in arr {
+                        for v in arr.iter() {
                             match v {
                                 Value::Int(id) => task_ids.push(*id as u64),
                                 Value::Future { task_id } => task_ids.push(*task_id),
@@ -11526,7 +11535,7 @@ impl Interpreter {
         if single_int && results.len() == 1 {
             Ok(results.into_iter().next().unwrap_or(Value::Null))
         } else {
-            Ok(Value::Array(results))
+            Ok(Value::array_from_vec(results))
         }
     }
 
@@ -11540,7 +11549,7 @@ impl Interpreter {
                 Value::Future { task_id } => task_ids.push(*task_id),
                 Value::Int(id) => task_ids.push(*id as u64),
                 Value::Array(arr) => {
-                    for v in arr {
+                    for v in arr.iter() {
                         match v {
                             Value::Future { task_id } => task_ids.push(*task_id),
                             Value::Int(id) => task_ids.push(*id as u64),
@@ -12100,7 +12109,9 @@ impl Interpreter {
                 }
                 JsonValue::Bool(b) => Value::Bool(*b),
                 JsonValue::Null => Value::Null,
-                JsonValue::Array(arr) => Value::Array(arr.iter().map(json_to_value).collect()),
+                JsonValue::Array(arr) => {
+                    Value::array_from_vec(arr.iter().map(json_to_value).collect())
+                }
                 JsonValue::Object(entries) => {
                     let map: HashMap<String, Value> = entries
                         .iter()
@@ -12208,7 +12219,7 @@ fn value_to_comptime(v: &Value) -> Option<crate::analyzer::comptime::ComptimeVal
         Value::Null => Some(ComptimeValue::Null),
         Value::Array(items) => {
             let mut out = Vec::with_capacity(items.len());
-            for item in items {
+            for item in items.iter() {
                 out.push(value_to_comptime(item)?);
             }
             Some(ComptimeValue::Array(out))

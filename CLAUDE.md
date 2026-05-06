@@ -46,9 +46,7 @@ functions migrated to pure fj; vecmat_v8.c (585 LOC) deleted.
 70+ I/O pairs verified bit-exact at full f64 precision; 1 fj-lang core
 change (analyzer wrapping_*); cumulative ~115min vs 10-17d budget (-99%).
 
-> **Source of truth (FAJAROS_100PCT_FJ_PLAN):** `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` series. v33.2.0 tag (`b49e197b`) caps the plan.
->
-> **Source of truth (perfection plan, predecessor):** `docs/HONEST_AUDIT_V33.md` — exit scorecard for all 25 perfection-plan work-items, written 2026-05-03. Predecessor audits: `HONEST_AUDIT_V32.md` (V32 re-audit), `HONEST_STATUS_V26.md` (V26 module status), `HONEST_AUDIT_V26.md` (V26 baseline), `HONEST_AUDIT_V17.md` (historical). Historical V13-V15 "100% production" claims were inflated 40-55% per V17 re-audit; V26 closed the remaining gap; V33 added ~280 tests + 5 audit scripts; v33.1.x/v33.2.0 closed the 9 fj-lang→OS compiler gaps surfaced by FAJAROS_100PCT.
+> **Source of truth:** `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` series (v33.2.0 tag `b49e197b` caps it) + `docs/HONEST_AUDIT_V33.md` (perfection-plan exit scorecard, 2026-05-03). Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
 
 **Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
 lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
@@ -137,14 +135,12 @@ Drift history → `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` series + `docs/HO
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v33.2.0** "FAJAROS_100PCT TERMINAL COMPLETE" | 2026-05-05 | 9/9 fj-lang LLVM compiler gaps closed (G-A/B/C/G/H/I/K/M/N). vecmat_v8.c (585 LOC) DELETED in fajaros-x86; ZERO non-fj LOC in kernel build path. All 4 C mailbox fns migrated to pure fj. G-M closure: --code-model kernel implies LLVM `noredzone`. Source: `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md`. |
-| **v33.1.0 / v33.1.1** "FAJAROS_100PCT partial + dialect fixes" | 2026-05-05 | 8/9 compiler gaps closed; Phase 6.6 12/17 fajaros runtime stubs migrated to @naked fn. Inline asm dialect fix + `$ → $$` escape pattern documented. |
-| **V33 / v33.0.0** "Perfection-Plan Complete" | 2026-05-03 | PERFECTION_PLAN P0-P9 all closed engineering-side. 22/25 PASS; 3 await founder external action (F1/F3/A1, regression-gated). Adds: ~280 tests, 5 audit scripts, 13 docs (incl. HONEST_AUDIT_V33, TUTORIAL.md, CRATES_IO_PUBLISH_PLAN), 3 example folders, 2 benchmarks. v33.0.0 GitHub Release LIVE w/ 5 binaries. ~14h vs 218-336h estimate (-95%). Source: `docs/HONEST_AUDIT_V33.md`. |
-| **v32.1.0** "P0-P6 milestone" | 2026-05-03 | Tag-only; release.yml failed on `llvm_compile_float_literal` stale assertion (fixed in v33.0.0). Use v33.0.0 for binaries. |
-| **V32** "Audit Complete" | 2026-05-02 | HONEST_AUDIT_V32 deep re-audit (commits `ecd265a2..96843ab7`). 0 module demotions; 7626 lib + 2498 integ + 14 doc tests all green; 5 gaps surfaced (G1 LLVM O2 deferred opportunistic; G2/G3/G4/G5 closed via F1-F4 followup). FAJAR_LANG_PERFECTION_PLAN v1.0 enumerates remaining 25 work-items across 10 phases — closed in V33. |
-| **V30.TRACK4 / V30.GEMMA3** | 2026-04-20 | FajarOS Nova v3.7.0 ext2/FAT32 disk harness + Gemma 3 1B 12 phases audit-PASS. Surfaces §6.10 rule. |
-| **V29.P3 / V29.P1** | 2026-04-16 | NX triple closure (security_enable_smep/smap + nx_enforce); @noinline+@inline+@cold lexer entries closing silent-build-failure class. |
-| **V27.5 / V27 / V26** | 2026-04-11..14 | Compiler prep (AI scheduler builtins, @interrupt, refinement params, Cap<T>); Hardened (0 doc warnings); V26 "Final" (80/80 stress, 0 unwraps, §6.7 rule). |
+| **v33.2.0** "FAJAROS_100PCT TERMINAL" | 2026-05-05 | 9/9 fj-lang LLVM gaps closed (G-A/B/C/G/H/I/K/M/N); vecmat_v8.c DELETED; ZERO non-fj LOC in kernel build path. G-M: `--code-model kernel` implies LLVM `noredzone`. |
+| **v33.1.0 / v33.1.1** | 2026-05-05 | 8/9 compiler gaps; Phase 6.6 12/17 stubs → @naked fn. Inline asm `$ → $$` escape pattern. |
+| **V33 / v33.0.0** "Perfection Complete" | 2026-05-03 | PERFECTION_PLAN P0-P9 closed engineering-side. 22/25 PASS; 3 await external action. ~280 tests, 5 audit scripts, 13 docs, 2 benchmarks. GitHub Release LIVE w/ 5 binaries. ~14h vs 218-336h (-95%). |
+| **v32.1.0 / V32** | 2026-05-02..03 | v32.1.0 tag-only (release.yml failure fixed in v33.0.0). HONEST_AUDIT_V32: 0 demotions; 5 gaps (G1 deferred; G2-G5 closed via F1-F4). PERFECTION_PLAN v1.0 enumerates 25 items — closed in V33. |
+| **V30.TRACK4 / V30.GEMMA3** | 2026-04-20 | FajarOS Nova v3.7.0 ext2/FAT32 + Gemma 3 1B 12 phases audit-PASS. Surfaces §6.10 rule. |
+| **V29 / V27 / V26** | 2026-04-11..16 | NX triple closure; @noinline/@inline/@cold lexer; AI scheduler builtins + @interrupt + Cap<T>; V26 "Final" (80/80 stress, 0 unwraps, §6.7 rule). |
 
 > V18-V25 + detailed V26-V30 entries: full detail in `CHANGELOG.md` + `git log --oneline --grep="V[12][0-9]"`.
 

@@ -993,7 +993,7 @@ impl Interpreter {
                         results.push(Value::Null);
                     }
                 }
-                Ok(Value::Array(results))
+                Ok(Value::array_from_vec(results))
             }
             AsyncOperation::Select(task_ids) => {
                 // Execute tasks sequentially, return the first successful result.
@@ -2390,7 +2390,7 @@ impl Interpreter {
                         .into());
                     }
                 };
-                Ok(Value::Array(vec![val; n]))
+                Ok(Value::array_from_vec(vec![val; n]))
             }
             Expr::Tuple { elements, .. } => self.eval_tuple(elements),
             Expr::Pipe { left, right, .. } => self.eval_pipe(left, right),
@@ -2727,9 +2727,9 @@ impl Interpreter {
             }
             // V16: Array concatenation with +
             (Value::Array(a), Value::Array(b)) if op == BinOp::Add => {
-                let mut result = a.clone();
+                let mut result = (**a).clone();
                 result.extend(b.iter().cloned());
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             // Tensor arithmetic: dispatch to tensor_binop builtins
             (Value::Tensor(_), Value::Tensor(_)) => match op {
@@ -3072,7 +3072,7 @@ impl Interpreter {
 
             let yields = self.generator_yields.take().unwrap_or_default();
             self.generator_yields = prev_yields;
-            return Ok(Value::Array(yields));
+            return Ok(Value::array_from_vec(yields));
         }
 
         self.call_depth += 1;
@@ -3584,7 +3584,7 @@ mod tests {
     fn eval_array_literal() {
         assert_eq!(
             eval("[1, 2, 3]").unwrap(),
-            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+            Value::array_from_vec(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
         );
     }
 

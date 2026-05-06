@@ -193,7 +193,12 @@ pub enum Value {
     /// String value.
     Str(String),
     /// Dynamically-sized array.
-    Array(Vec<Value>),
+    ///
+    /// Wrapped in `Arc<Vec<Value>>` so cloning is O(1) and reading from a
+    /// struct field (`fields.get("xs").cloned()`) doesn't deep-copy the
+    /// underlying buffer. In-place mutation goes through `Arc::make_mut`,
+    /// which copy-on-writes only when the buffer is shared.
+    Array(Arc<Vec<Value>>),
     /// Fixed-size tuple.
     Tuple(Vec<Value>),
     /// Struct instance with named fields.
@@ -264,6 +269,15 @@ pub enum Value {
         /// Inner value wrapped by the capability (None after consumption).
         inner: Arc<Mutex<Option<Value>>>,
     },
+}
+
+impl Value {
+    /// Construct a `Value::Array` from a `Vec<Value>`, wrapping the buffer in
+    /// an `Arc` so subsequent clones are O(1).
+    #[inline]
+    pub fn array_from_vec(items: Vec<Value>) -> Self {
+        Value::Array(Arc::new(items))
+    }
 }
 
 /// A user-defined function value, capturing its closure environment.
@@ -535,7 +549,7 @@ mod tests {
 
     #[test]
     fn value_array_display() {
-        let arr = Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let arr = Value::array_from_vec(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
         assert_eq!(format!("{arr}"), "[1, 2, 3]");
     }
 
@@ -601,7 +615,7 @@ mod tests {
         assert!(Value::Int(1).is_truthy());
         assert!(Value::Int(-1).is_truthy());
         assert!(Value::Str("hello".into()).is_truthy());
-        assert!(Value::Array(vec![]).is_truthy());
+        assert!(Value::array_from_vec(vec![]).is_truthy());
 
         assert!(!Value::Bool(false).is_truthy());
         assert!(!Value::Null.is_truthy());
@@ -616,16 +630,16 @@ mod tests {
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::Char('a').type_name(), "char");
         assert_eq!(Value::Str("".into()).type_name(), "str");
-        assert_eq!(Value::Array(vec![]).type_name(), "array");
+        assert_eq!(Value::array_from_vec(vec![]).type_name(), "array");
         assert_eq!(Value::Tuple(vec![]).type_name(), "tuple");
         assert_eq!(Value::BuiltinFn("x".into()).type_name(), "builtin");
     }
 
     #[test]
     fn value_array_equality() {
-        let a = Value::Array(vec![Value::Int(1), Value::Int(2)]);
-        let b = Value::Array(vec![Value::Int(1), Value::Int(2)]);
-        let c = Value::Array(vec![Value::Int(1), Value::Int(3)]);
+        let a = Value::array_from_vec(vec![Value::Int(1), Value::Int(2)]);
+        let b = Value::array_from_vec(vec![Value::Int(1), Value::Int(2)]);
+        let c = Value::array_from_vec(vec![Value::Int(1), Value::Int(3)]);
         assert_eq!(a, b);
         assert_ne!(a, c);
     }

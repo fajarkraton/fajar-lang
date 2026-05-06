@@ -433,6 +433,7 @@ fn map_method(method: str) -> str {
     if method == "substring" { return "_fj_substring" }
     if method == "push" { return "_fj_arr_push_i64" }
     if method == "len" { return "_fj_arr_len" }
+    if method == "join" { return "_fj_arr_join_str" }
     ""
 }
 

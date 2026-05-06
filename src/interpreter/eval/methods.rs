@@ -103,7 +103,10 @@ impl Interpreter {
         // Iterator methods on collections: .iter()
         if method == "iter" {
             let iter_val = match obj {
-                Value::Array(arr) => IteratorValue::Array { items: arr, pos: 0 },
+                Value::Array(arr) => IteratorValue::Array {
+                    items: std::sync::Arc::try_unwrap(arr).unwrap_or_else(|rc| (*rc).clone()),
+                    pos: 0,
+                },
                 Value::Str(s) => IteratorValue::Chars {
                     chars: s.chars().collect(),
                     pos: 0,
@@ -195,7 +198,7 @@ impl Interpreter {
         if method == "push" && matches!(obj, Value::Array(_)) && arg_vals.len() == 1 {
             if let Value::Array(mut a) = obj {
                 let v = arg_vals.into_iter().next().unwrap_or(Value::Null);
-                a.push(v);
+                std::sync::Arc::make_mut(&mut a).push(v);
                 return Ok(Value::Array(a));
             }
         }
@@ -257,7 +260,7 @@ impl Interpreter {
                         .split(sep.as_str())
                         .map(|p| Value::Str(p.to_string()))
                         .collect();
-                    Ok(Value::Array(parts))
+                    Ok(Value::array_from_vec(parts))
                 } else {
                     Err(RuntimeError::TypeError("split() requires a string argument".into()).into())
                 }
@@ -274,7 +277,7 @@ impl Interpreter {
             }
             (Value::Str(s), "chars") => {
                 let chars: Vec<Value> = s.chars().map(Value::Char).collect();
-                Ok(Value::Array(chars))
+                Ok(Value::array_from_vec(chars))
             }
             (Value::Str(s), "substring") => {
                 let start = match arg_vals.first() {
@@ -351,7 +354,7 @@ impl Interpreter {
                 }
             }
             (Value::Str(s), "rev") => Ok(Value::Str(s.chars().rev().collect())),
-            (Value::Str(s), "bytes") => Ok(Value::Array(
+            (Value::Str(s), "bytes") => Ok(Value::array_from_vec(
                 s.bytes().map(|b| Value::Int(b as i64)).collect(),
             )),
             // String v2 methods (v0.8)
@@ -405,14 +408,14 @@ impl Interpreter {
             },
             (Value::Str(s), "lines") => {
                 let lines: Vec<Value> = s.lines().map(|l| Value::Str(l.to_string())).collect();
-                Ok(Value::Array(lines))
+                Ok(Value::array_from_vec(lines))
             }
             (Value::Str(s), "words") => {
                 let words: Vec<Value> = s
                     .split_whitespace()
                     .map(|w| Value::Str(w.to_string()))
                     .collect();
-                Ok(Value::Array(words))
+                Ok(Value::array_from_vec(words))
             }
             (Value::Str(s), "char_at") => {
                 let idx = match arg_vals.first() {
@@ -472,9 +475,9 @@ impl Interpreter {
                     }
                     .into());
                 }
-                let mut new_arr = a.clone();
+                let mut new_arr: Vec<Value> = (**a).clone();
                 new_arr.push(arg_vals.into_iter().next().unwrap_or(Value::Null));
-                Ok(Value::Array(new_arr))
+                Ok(Value::array_from_vec(new_arr))
             }
             (Value::Array(a), "is_empty") => Ok(Value::Bool(a.is_empty())),
             // V16 L1.2: pop — remove and return last element
@@ -482,7 +485,7 @@ impl Interpreter {
                 if a.is_empty() {
                     Ok(Value::Null)
                 } else {
-                    let mut new_arr = a.clone();
+                    let mut new_arr: Vec<Value> = (**a).clone();
                     let last = new_arr.pop().unwrap_or(Value::Null);
                     // Return tuple: (popped_value, remaining_array)
                     Ok(last)
@@ -505,11 +508,11 @@ impl Interpreter {
                         );
                     }
                 };
-                let mut new_arr = a.clone();
+                let mut new_arr: Vec<Value> = (**a).clone();
                 if idx <= new_arr.len() {
                     new_arr.insert(idx, arg_vals[1].clone());
                 }
-                Ok(Value::Array(new_arr))
+                Ok(Value::array_from_vec(new_arr))
             }
             // V16 L1: remove at index
             (Value::Array(a), "remove") => {
@@ -528,11 +531,11 @@ impl Interpreter {
                         );
                     }
                 };
-                let mut new_arr = a.clone();
+                let mut new_arr: Vec<Value> = (**a).clone();
                 if idx < new_arr.len() {
                     new_arr.remove(idx);
                 }
-                Ok(Value::Array(new_arr))
+                Ok(Value::array_from_vec(new_arr))
             }
             // V16 L1: index_of — find first occurrence
             (Value::Array(a), "index_of") => {
@@ -564,7 +567,7 @@ impl Interpreter {
                     let mapped = self.call_value(&func, vec![item.clone()])?;
                     result.push(mapped);
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "filter") => {
                 if arg_vals.len() != 1 {
@@ -582,7 +585,7 @@ impl Interpreter {
                         result.push(item.clone());
                     }
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "fold") => {
                 if arg_vals.len() != 2 {
@@ -638,15 +641,15 @@ impl Interpreter {
                     .enumerate()
                     .map(|(i, v)| Value::Tuple(vec![Value::Int(i as i64), v.clone()]))
                     .collect();
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "reverse" | "rev") => {
-                let mut reversed = a.clone();
+                let mut reversed: Vec<Value> = (**a).clone();
                 reversed.reverse();
-                Ok(Value::Array(reversed))
+                Ok(Value::array_from_vec(reversed))
             }
             (Value::Array(a), "sort") => {
-                let mut sorted = a.clone();
+                let mut sorted: Vec<Value> = (**a).clone();
                 sorted.sort_by(|a, b| match (a, b) {
                     (Value::Int(x), Value::Int(y)) => x.cmp(y),
                     (Value::Float(x), Value::Float(y)) => {
@@ -655,7 +658,7 @@ impl Interpreter {
                     (Value::Str(x), Value::Str(y)) => x.cmp(y),
                     _ => std::cmp::Ordering::Equal,
                 });
-                Ok(Value::Array(sorted))
+                Ok(Value::array_from_vec(sorted))
             }
             (Value::Array(a), "join") => {
                 let sep = match arg_vals.first() {
@@ -678,26 +681,26 @@ impl Interpreter {
                 for item in a.iter() {
                     let mapped = self.call_value(&func, vec![item.clone()])?;
                     if let Value::Array(inner) = mapped {
-                        result.extend(inner);
+                        result.extend((*inner).iter().cloned());
                     } else {
                         result.push(mapped);
                     }
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "take") => {
                 let n = match arg_vals.first() {
                     Some(Value::Int(n)) => *n as usize,
                     _ => 0,
                 };
-                Ok(Value::Array(a.iter().take(n).cloned().collect()))
+                Ok(Value::array_from_vec(a.iter().take(n).cloned().collect()))
             }
             (Value::Array(a), "skip") => {
                 let n = match arg_vals.first() {
                     Some(Value::Int(n)) => *n as usize,
                     _ => 0,
                 };
-                Ok(Value::Array(a.iter().skip(n).cloned().collect()))
+                Ok(Value::array_from_vec(a.iter().skip(n).cloned().collect()))
             }
             (Value::Array(a), "zip") => {
                 if let Some(Value::Array(b)) = arg_vals.into_iter().next() {
@@ -706,7 +709,7 @@ impl Interpreter {
                         .zip(b.iter())
                         .map(|(x, y)| Value::Tuple(vec![x.clone(), y.clone()]))
                         .collect();
-                    Ok(Value::Array(result))
+                    Ok(Value::array_from_vec(result))
                 } else {
                     Err(RuntimeError::TypeError("zip() requires an array argument".into()).into())
                 }
@@ -770,7 +773,7 @@ impl Interpreter {
             }
             (Value::Array(a), "sum") => {
                 let mut total: i64 = 0;
-                for item in a {
+                for item in a.iter() {
                     if let Value::Int(n) = item {
                         total += n;
                     }
@@ -811,12 +814,12 @@ impl Interpreter {
                 let mut result = Vec::new();
                 for item in a.iter() {
                     if let Value::Array(inner) = item {
-                        result.extend(inner.clone());
+                        result.extend((**inner).iter().cloned());
                     } else {
                         result.push(item.clone());
                     }
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "dedup") => {
                 let mut result = Vec::new();
@@ -827,7 +830,7 @@ impl Interpreter {
                     }
                     prev = Some(item.clone());
                 }
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "chunks") => {
                 let size = match arg_vals.first() {
@@ -841,9 +844,9 @@ impl Interpreter {
                 };
                 let result: Vec<Value> = a
                     .chunks(size)
-                    .map(|chunk| Value::Array(chunk.to_vec()))
+                    .map(|chunk| Value::array_from_vec(chunk.to_vec()))
                     .collect();
-                Ok(Value::Array(result))
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "windows") => {
                 let size = match arg_vals.first() {
@@ -855,9 +858,11 @@ impl Interpreter {
                         .into());
                     }
                 };
-                let result: Vec<Value> =
-                    a.windows(size).map(|w| Value::Array(w.to_vec())).collect();
-                Ok(Value::Array(result))
+                let result: Vec<Value> = a
+                    .windows(size)
+                    .map(|w| Value::array_from_vec(w.to_vec()))
+                    .collect();
+                Ok(Value::array_from_vec(result))
             }
             (Value::Array(a), "first") => match a.first() {
                 Some(v) => Ok(Value::Enum {
@@ -910,11 +915,11 @@ impl Interpreter {
             }
             (Value::Map(m), "keys") => {
                 let keys: Vec<Value> = m.keys().map(|k| Value::Str(k.clone())).collect();
-                Ok(Value::Array(keys))
+                Ok(Value::array_from_vec(keys))
             }
             (Value::Map(m), "values") => {
                 let vals: Vec<Value> = m.values().cloned().collect();
-                Ok(Value::Array(vals))
+                Ok(Value::array_from_vec(vals))
             }
             (Value::Map(m), "insert") => {
                 if arg_vals.len() != 2 {
@@ -963,7 +968,7 @@ impl Interpreter {
                     .iter()
                     .map(|(k, v)| Value::Tuple(vec![Value::Str(k.clone()), v.clone()]))
                     .collect();
-                Ok(Value::Array(entries))
+                Ok(Value::array_from_vec(entries))
             }
             (Value::Map(m), "map_values") => {
                 if arg_vals.len() != 1 {
@@ -1883,7 +1888,7 @@ impl Interpreter {
                 }
             }
         }
-        Ok(Value::Array(entries))
+        Ok(Value::array_from_vec(entries))
     }
 
     /// Get environment variable value. Returns "" if not set.

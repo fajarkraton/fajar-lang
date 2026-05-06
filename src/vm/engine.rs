@@ -412,7 +412,7 @@ impl VM {
                     elems.push(self.pop()?);
                 }
                 elems.reverse();
-                self.push(Value::Array(elems));
+                self.push(Value::Array(std::sync::Arc::new(elems)));
             }
             Op::NewTuple(count) => {
                 let mut elems = Vec::with_capacity(count as usize);
@@ -532,7 +532,7 @@ impl VM {
                     (Value::Array(mut arr), Value::Int(i)) => {
                         let idx = *i as usize;
                         if idx < arr.len() {
-                            arr[idx] = val;
+                            std::sync::Arc::make_mut(&mut arr)[idx] = val;
                             self.push(Value::Array(arr));
                         } else {
                             return Err(RuntimeError::TypeError(format!(

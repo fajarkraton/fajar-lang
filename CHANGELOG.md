@@ -2,6 +2,53 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.12] — 2026-05-06 🎯 Phase 17 milestone #3: all-3-combined self-compile + Arc<Vec<Value>>
+
+The eval_field deep-clone of `Value::Array` was the last O(n²) blocker
+on the self-compile chain. Migrating `Value::Array(Vec<Value>)` to
+`Value::Array(Arc<Vec<Value>>)` makes `fields.get(field).cloned()` an
+O(1) refcount bump instead of an O(n) buffer copy. Combined with v34.5.11's
+push fast-path, the parser_ast.fj self-compile drops from **175s to 9s**
+(19.5× speedup), and — for the first time — codegen.fj + parser_ast.fj +
+codegen_driver.fj all compile *together* through the chain in 35s.
+
+### Added
+- `Value::array_from_vec(items: Vec<Value>)` constructor wrapping in `Arc`.
+- `_fj_arr_join_str(_FjArr*, const char*)` C runtime helper for `.join()`.
+- `map_method` lowers `.join()` → `_fj_arr_join_str`.
+- New phase17 milestone test: `phase17_all_three_combined_self_compile_to_object`.
+  Compiles `stdlib/{codegen,parser_ast,codegen_driver}.fj` concatenated
+  through the chain, gccs the output, asserts T-symbol exports across all
+  three modules.
+
+### Changed
+- `Value::Array(Vec<Value>)` → `Value::Array(Arc<Vec<Value>>)`. ~165
+  call sites touched across `interpreter/eval/{builtins,methods,mod}.rs`,
+  `vm/engine.rs`, `macros.rs`, `interpreter/value.rs`, `tests/property_tests.rs`.
+  Mutation goes through `Arc::make_mut` (CoW: O(1) when unique). Iteration
+  via `arr.iter()` (Arc<Vec> derefs through Vec).
+- All construction sites use `Value::array_from_vec(vec)` or explicit
+  `std::sync::Arc::new(vec)`.
+
+### Performance
+- parser_ast.fj self-compile (1200 LOC): **175s → 9s wall** (19.5×).
+- All-3-combined self-compile (codegen+parser_ast+codegen_driver, ~3000 LOC):
+  newly feasible at **35s** (was unreachable, would OOM/exceed minute scale).
+- Page faults on parser_ast probe: 6.4M → 1.47M (4.4× reduction).
+- C output byte-identical to v34.5.11 baseline (md5 a527d6c500cad004e9c3956e4498b044).
+
+### Verification
+- `cargo test --release --lib` → 7629 PASS, 0 fail.
+- `cargo test --release --lib -- --test-threads=64` → 7629 PASS (stress).
+- selfhost_stage1_full 80/80 + stage1_subset 5/5 + stage2_reproducibility 6/6
+  + phase17_self_compile **3/3** PASS.
+- `cargo fmt -- --check` clean. `cargo clippy --lib --tests -- -D warnings` clean.
+
+### Stats
+- Tests: 7629 lib + 80 stage1_full + 5 subset + 6 stage2 + **3 phase17** = 7723+
+- Cumulative across v33.4.0..v34.5.12: ~26h Claude time, **31 self-host phases CLOSED**.
+- Self-host phases shipped this session: Phase 17.8 (eval_field perf, ~2h vs 2-4h budget).
+
 ## [v34.5.11] — 2026-05-06 Phase 17.7: O(n²) → O(n) push + emit_program join
 
 Two interpreter perf fixes that move the chain closer to handling

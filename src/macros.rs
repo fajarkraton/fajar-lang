@@ -119,7 +119,7 @@ pub fn eval_builtin_macro(name: &str, args: &[Value]) -> Result<Value, String> {
     match name {
         "vec" => {
             // vec![a, b, c] → Array([a, b, c])
-            Ok(Value::Array(args.to_vec()))
+            Ok(Value::Array(std::sync::Arc::new(args.to_vec())))
         }
         "stringify" => {
             // stringify!(expr) → string representation
@@ -359,14 +359,14 @@ mod tests {
         let result = eval_builtin_macro("vec", &[Value::Int(1), Value::Int(2), Value::Int(3)]);
         assert_eq!(
             result.unwrap(),
-            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
+            Value::array_from_vec(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
         );
     }
 
     #[test]
     fn eval_vec_empty() {
         let result = eval_builtin_macro("vec", &[]);
-        assert_eq!(result.unwrap(), Value::Array(vec![]));
+        assert_eq!(result.unwrap(), Value::array_from_vec(vec![]));
     }
 
     #[test]

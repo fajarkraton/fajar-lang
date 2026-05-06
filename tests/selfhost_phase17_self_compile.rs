@@ -248,6 +248,94 @@ fn main() {
 
 #[cfg(unix)]
 #[test]
+fn phase17_all_three_combined_self_compile_to_object() {
+    // Phase 17 milestone #3 — the THIRD and final stdlib module joins the
+    // self-compile family: stdlib/codegen.fj + parser_ast.fj +
+    // codegen_driver.fj concatenated and run through the chain together.
+    // The all-3 source emits a single .c that gcc accepts and that exports
+    // the union of the three modules' public APIs as T symbols.
+    //
+    // Unlocked by v34.5.12: Value::Array → Arc<Vec<Value>> migration. Before
+    // that, eval_field deep-cloned every struct.array_field read, making the
+    // combined parse 5+ minutes; now ~35s.
+    let driver = r#"
+fn main() {
+    let codegen_src_r = read_file("stdlib/codegen.fj")
+    let codegen_src = match codegen_src_r { Ok(c) => c, Err(_) => { println("codegen read failed"); return } }
+    let parser_src_r = read_file("stdlib/parser_ast.fj")
+    let parser_src = match parser_src_r { Ok(c) => c, Err(_) => { println("parser_ast read failed"); return } }
+    let driver_src_r = read_file("stdlib/codegen_driver.fj")
+    let driver_src = match driver_src_r { Ok(c) => c, Err(_) => { println("codegen_driver read failed"); return } }
+    let combined = concat!(codegen_src, "\n", parser_src, "\n", driver_src)
+    let ast = parse_to_ast(combined)
+    let c_src = emit_program(ast)
+    let _ = write_file("/tmp/all_three_phase17_self_compile.c", c_src)
+    println(f"AST size: {to_int(len(ast))}")
+}
+"#;
+    let combined = format!(
+        "{}{}",
+        cat_files(&[
+            "stdlib/codegen.fj",
+            "stdlib/parser_ast.fj",
+            "stdlib/codegen_driver.fj"
+        ]),
+        driver
+    );
+    let tmp_fj = std::env::temp_dir().join("all_three_phase17_probe.fj");
+    std::fs::write(&tmp_fj, &combined).unwrap();
+
+    let out = Command::new(fj_binary())
+        .args(["run", tmp_fj.to_str().unwrap()])
+        .current_dir(workspace())
+        .output()
+        .expect("fj run");
+    assert!(
+        out.status.success(),
+        "fj run failed: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let c_path = std::env::temp_dir().join("all_three_phase17_self_compile.c");
+    let o_path = std::env::temp_dir().join("all_three_phase17_self_compile.o");
+    assert!(c_path.exists(), "chain failed to write all-3 C output");
+
+    let cc = Command::new("gcc")
+        .args([
+            c_path.to_str().unwrap(),
+            "-c",
+            "-o",
+            o_path.to_str().unwrap(),
+            "-w",
+        ])
+        .output()
+        .expect("gcc");
+    assert!(
+        cc.status.success(),
+        "gcc -c failed for all-3:\n{}",
+        String::from_utf8_lossy(&cc.stderr)
+    );
+
+    // Spot-check a representative subset spanning all three modules.
+    let required = [
+        // codegen.fj
+        "new_codegen",
+        "emit_preamble",
+        "emit_program",
+        // parser_ast.fj
+        "parse_to_ast",
+        "parse_primary_ast",
+        "parse_stmt_ast",
+        // codegen_driver.fj
+        "find_method_name",
+        "map_method",
+        "map_binop",
+    ];
+    assert_object_exports(&o_path, &required);
+}
+
+#[cfg(unix)]
+#[test]
 fn phase17_codegen_fj_self_compile_to_object() {
     // Phase 17 milestone — sister to parser_ast.fj. The chain compiles
     // stdlib/codegen.fj's full source (~541 LOC, 33 fns) into a valid

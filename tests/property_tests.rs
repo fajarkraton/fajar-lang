@@ -815,7 +815,7 @@ proptest! {
     #[test]
     fn value_array_display(a in -100i64..100, b in -100i64..100) {
         use fajar_lang::interpreter::Value;
-        let v = Value::Array(vec![Value::Int(a), Value::Int(b)]);
+        let v = Value::array_from_vec(vec![Value::Int(a), Value::Int(b)]);
         let displayed = format!("{v}");
         prop_assert!(displayed.starts_with('['));
         prop_assert!(displayed.ends_with(']'));
