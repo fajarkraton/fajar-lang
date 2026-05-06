@@ -458,10 +458,12 @@ What works:
 - ✅ Page faults: 6.4M → 1.47M via Arc<Vec<Value>> migration
 
 What does NOT work yet (legitimate scope-boundary):
-- ❌ R15 memory leak class persists. Every `_fj_substring`,
-  `_fj_concat2`, `_fj_to_string`, `_fj_arr_push_str` malloc has no
-  free. Acceptable for short-lived self-compile (<1s); a long-running
-  fjc-as-language-server would leak.
+- ✅ ~~R15 memory leak class persists.~~ **CLOSED 2026-05-07** in
+  commit `3a3dd586` via bump-pointer arena in emit_preamble. Sites
+  switched: `_fj_substring`, `_fj_concat2`, `_fj_arr_join_str` (×2),
+  `_fj_to_string`. Arena freed at exit via `atexit(_fj_arena_free_all)`
+  registered in main(). _FjArr realloc-based storage is a separate
+  leak class still on plain malloc (out of R15 scope).
 - ❌ `arr[i]` for `[str]`-typed `arr` in user-extended codegen —
   default dispatch is `_fj_arr_get_i64`. Var-type tracking handles
   declared cases but `let x = some_fn_returning_str_array()[i]` needs
