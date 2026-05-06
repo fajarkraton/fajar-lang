@@ -298,6 +298,29 @@ pub fn emit_preamble(state: CodegenState) -> CodegenState {
     s = emit_line(s, "#include <string.h>")
     s = emit_line(s, "#include <stdbool.h>")
     s = emit_line(s, "")
+    s = emit_line(s, "// Phase 17.8: native binary I/O — argv stash + read_file + write_file")
+    s = emit_line(s, "static int g_fj_argc = 0;")
+    s = emit_line(s, "static char** g_fj_argv = (char**)0;")
+    s = emit_line(s, "static const char* _fj_argv_get(int64_t i) {")
+    s = emit_line(s, "    if (i < 0 || (int)i >= g_fj_argc) return \"\";")
+    s = emit_line(s, "    return g_fj_argv[(int)i];")
+    s = emit_line(s, "}")
+    s = emit_line(s, "static const char* _fj_read_file(const char* path) {")
+    s = emit_line(s, "    FILE* f = fopen(path, \"rb\");")
+    s = emit_line(s, "    if (!f) { fprintf(stderr, \"read_file: cannot open %s\\n\", path); exit(1); }")
+    s = emit_line(s, "    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);")
+    s = emit_line(s, "    char* buf = (char*)malloc((size_t)n + 1);")
+    s = emit_line(s, "    if ((long)fread(buf, 1, (size_t)n, f) != n) { fprintf(stderr, \"read_file: read failed\\n\"); exit(1); }")
+    s = emit_line(s, "    buf[n] = 0; fclose(f); return buf;")
+    s = emit_line(s, "}")
+    s = emit_line(s, "static int64_t _fj_write_file(const char* path, const char* content) {")
+    s = emit_line(s, "    FILE* f = fopen(path, \"wb\");")
+    s = emit_line(s, "    if (!f) return 1;")
+    s = emit_line(s, "    size_t n = strlen(content);")
+    s = emit_line(s, "    int64_t r = (int64_t)(fwrite(content, 1, n, f) != n);")
+    s = emit_line(s, "    fclose(f); return r;")
+    s = emit_line(s, "}")
+    s = emit_line(s, "")
     s = emit_line(s, "// Fajar Lang runtime")
     s = emit_line(s, "static void fj_println_int(int64_t v) { printf(\"%lld\\n\", (long long)v); }")
     s = emit_line(s, "static void fj_println_str(const char* s) { printf(\"%s\\n\", s); }")
@@ -405,6 +428,17 @@ pub fn emit_function(state: CodegenState, name: str, params: [str], ret_type: st
 /// Used by the AST-driven codegen_driver (Phase 8+).
 pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], ret_type: str) -> CodegenState {
     let mut s = state
+    // Phase 17.8: when the user-level fn is `main` with no params, emit a
+    // native C entry point that takes argc/argv and stashes them into
+    // file-scope globals so `argv(i)` / `read_file(p)` / `write_file(p, c)`
+    // work from fj source. Other functions render normally.
+    if name == "main" && to_int(len(param_pairs)) == 0 {
+        s = emit_line(s, "int main(int argc, char** argv) {")
+        s = indent(s)
+        s = emit_line(s, "g_fj_argc = argc;")
+        s = emit_line(s, "g_fj_argv = argv;")
+        return s
+    }
     let c_ret = map_type_ctx(ret_type, state)
 
     let mut param_str = ""

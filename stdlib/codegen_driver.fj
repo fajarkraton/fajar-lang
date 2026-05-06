@@ -356,6 +356,10 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             }
         }
         if raw_name == "to_string" { name = "_fj_to_string" }
+        // Phase 17.8: native binary I/O — argv access + read_file/write_file.
+        if raw_name == "argv" { name = "_fj_argv_get" }
+        if raw_name == "read_file" { name = "_fj_read_file" }
+        if raw_name == "write_file" { name = "_fj_write_file" }
         // Phase 16.3 / 17.0: free `len(x)` lowers based on x's fj-type:
         //   [T]-typed IDENT → _fj_arr_len(x)
         //   str-typed IDENT → strlen(x)
@@ -365,14 +369,49 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
             let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
             if arg_tag == "IDENT" {
-                let t = lookup_var_type_in_table(vars, arg_name)
-                if t == "[str]" || t == "[i64]" || t == "[int]" || t == "[i32]" {
-                    name = "_fj_arr_len"
-                } else if t == "str" {
-                    name = "strlen"
+                // Phase 17.8: if IDENT is followed by FIELD, the arg is a
+                // struct field — derive the type via cg.struct_fields.
+                let next_tok = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                if next_tok == "FIELD" {
+                    let field_n = if pos + 5 < to_int(len(ast)) { ast[pos + 5] } else { "" }
+                    let struct_t = lookup_var_type_in_table(vars, arg_name)
+                    let field_t = lookup_struct_field(cg, struct_t, field_n)
+                    if field_t == "[str]" || field_t == "[i64]" || field_t == "[int]" || field_t == "[i32]" {
+                        name = "_fj_arr_len"
+                    } else if field_t == "str" {
+                        name = "strlen"
+                    }
+                } else {
+                    let t = lookup_var_type_in_table(vars, arg_name)
+                    if t == "[str]" || t == "[i64]" || t == "[int]" || t == "[i32]" {
+                        name = "_fj_arr_len"
+                    } else if t == "str" {
+                        name = "strlen"
+                    }
                 }
             } else if arg_tag == "STR" {
                 name = "strlen"
+            }
+        }
+        // Phase 17.8: free `push(arr, elem)` — sister to method-form .push().
+        // Dispatch on first arg: if it's an IDENT (or IDENT.field) typed
+        // [str], emit _fj_arr_push_str; else default to _fj_arr_push_i64.
+        if raw_name == "push" {
+            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+            if arg_tag == "IDENT" {
+                let next_tok = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                if next_tok == "FIELD" {
+                    let field_n = if pos + 5 < to_int(len(ast)) { ast[pos + 5] } else { "" }
+                    let struct_t = lookup_var_type_in_table(vars, arg_name)
+                    let field_t = lookup_struct_field(cg, struct_t, field_n)
+                    if field_t == "[str]" { name = "_fj_arr_push_str" }
+                    else { name = "_fj_arr_push_i64" }
+                } else {
+                    let t = lookup_var_type_in_table(vars, arg_name)
+                    if t == "[str]" { name = "_fj_arr_push_str" }
+                    else { name = "_fj_arr_push_i64" }
+                }
             }
         }
         // strlen is C stdlib; pass through unchanged
@@ -741,6 +780,15 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                     if t != "" { fj_type = t }
                 }
             }
+            // Phase 17.8: `let x = arr[i]` — derive element type from arr's
+            // recorded fj-type. Without this, x defaults to int64_t even when
+            // arr is [str], producing pointer-truncation bugs at native link.
+            else if first_atom == "BEGIN_INDEX" {
+                let arr_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                let arr_type = lookup_var_type_in_table(vars, arr_name)
+                if arr_type == "[str]" { fj_type = "str" }
+                else if arr_type == "[i64]" || arr_type == "[int]" || arr_type == "[i32]" { fj_type = "i64" }
+            }
         }
         let er = parse_expr_emit(ast, vars, p_after_name, cg)
 
@@ -789,6 +837,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                              let t = lookup_var_type_in_table(vars, src_name)
                              if t != "" { map_type_ctx(t, cg) } else { "int64_t" }
                          }
+                     }
+                     // Phase 17.8: `let x = arr[i]` — element type from arr's fj-type.
+                     else if first_atom == "BEGIN_INDEX" {
+                         let arr_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                         let arr_type = lookup_var_type_in_table(vars, arr_name)
+                         if arr_type == "[str]" { "const char*" }
+                         else { "int64_t" }
                      }
                      else { "int64_t" }
         }
@@ -883,6 +938,10 @@ pub fn emit_fn_forward_decl(ast: [str], pos: i64, cg: CodegenState) -> CodegenSt
     let n = to_int(len(ast))
     if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
     let name = ast[pos + 1]
+    // Phase 17.8: `main` renders as `int main(int argc, char** argv)` in
+    // emit_function_typed; skipping its forward decl avoids emitting a
+    // conflicting `int64_t main(void);` prototype.
+    if name == "main" { return cg }
     let mut p = pos + 2
     let mut param_pairs: [str] = []
     if p < n && ast[p] == "BEGIN_PARAMS" {
@@ -955,19 +1014,77 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         last_stmt_pos = scan
         scan = stmt_end(ast, scan)
     }
-    let implicit_return = ret_type != "void" && last_stmt_pos >= 0 && ast[last_stmt_pos] == "BEGIN_EXPR_STMT"
+    let last_tag = if last_stmt_pos >= 0 { ast[last_stmt_pos] } else { "" }
+    // Phase 17.8: extend implicit return to also trigger on BEGIN_IF when
+    // it's the final stmt — branches' last expr-stmts become `return <expr>;`.
+    // Without this, fns like `parse_params` whose body ends in `if/else { pr_ok(...) } else { pr_err(...) }`
+    // returned UB at runtime.
+    let implicit_return_expr = ret_type != "void" && last_tag == "BEGIN_EXPR_STMT"
+    let implicit_return_if = ret_type != "void" && last_tag == "BEGIN_IF"
     // Use cg_local (with cleared+param-populated var_types) instead of cg
     let mut cg2 = emit_function_typed(cg_local, name, param_pairs, ret_type)
     while p < n && ast[p] != "END_BODY" {
-        if implicit_return && p == last_stmt_pos {
+        if implicit_return_expr && p == last_stmt_pos {
             let er = parse_expr_emit(ast, cg2.var_types, p + 1, cg2)
             cg2 = emit_return(cg2, er.code)
+        } else if implicit_return_if && p == last_stmt_pos {
+            cg2 = emit_if_implicit_return(ast, p, cg2)
         } else {
             cg2 = emit_stmt(ast, p, cg2)
         }
         p = stmt_end(ast, p)
     }
     emit_function_end(cg2)
+}
+
+// Phase 17.8: emit BEGIN_IF whose branches' LAST expr-stmts become `return <expr>;`.
+// Mirrors emit_stmt's BEGIN_IF path but rewrites the trailing BEGIN_EXPR_STMT in
+// each branch as a return-form. Non-final branch stmts emit as regular stmts.
+pub fn emit_if_implicit_return(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
+    let n = to_int(len(ast))
+    let vars = cg.var_types
+    let er = parse_expr_emit(ast, vars, pos + 1, cg)
+    let mut cg2 = emit_if(cg, er.code)
+    let mut p = er.pos
+    if ast[p] != "BEGIN_THEN" { return cg2 }
+    p = p + 1
+    // Find last stmt in THEN
+    let mut then_last_pos = 0 - 1
+    let mut scan_t = p
+    while scan_t < n && ast[scan_t] != "END_THEN" {
+        then_last_pos = scan_t
+        scan_t = stmt_end(ast, scan_t)
+    }
+    while p < n && ast[p] != "END_THEN" {
+        if p == then_last_pos && ast[p] == "BEGIN_EXPR_STMT" {
+            let r = parse_expr_emit(ast, cg2.var_types, p + 1, cg2)
+            cg2 = emit_return(cg2, r.code)
+        } else {
+            cg2 = emit_stmt(ast, p, cg2)
+        }
+        p = stmt_end(ast, p)
+    }
+    p = p + 1  // past END_THEN
+    if p < n && ast[p] == "BEGIN_ELSE" {
+        cg2 = emit_else(cg2)
+        p = p + 1
+        let mut else_last_pos = 0 - 1
+        let mut scan_e = p
+        while scan_e < n && ast[scan_e] != "END_ELSE" {
+            else_last_pos = scan_e
+            scan_e = stmt_end(ast, scan_e)
+        }
+        while p < n && ast[p] != "END_ELSE" {
+            if p == else_last_pos && ast[p] == "BEGIN_EXPR_STMT" {
+                let r = parse_expr_emit(ast, cg2.var_types, p + 1, cg2)
+                cg2 = emit_return(cg2, r.code)
+            } else {
+                cg2 = emit_stmt(ast, p, cg2)
+            }
+            p = stmt_end(ast, p)
+        }
+    }
+    emit_endif(cg2)
 }
 
 // Find end of a fn def starting at pos.
@@ -1048,6 +1165,11 @@ pub fn const_end(ast: [str], pos: i64) -> i64 {
 pub fn emit_program(ast: [str]) -> str {
     let mut cg = new_codegen()
     let n = to_int(len(ast))
+    // Phase 17.8: seed return types for native I/O builtins so
+    // `let src = read_file(path)` infers `const char*` rather than int64_t.
+    cg = add_fn_ret_type(cg, "read_file", "str")
+    cg = add_fn_ret_type(cg, "argv", "str")
+    cg = add_fn_ret_type(cg, "write_file", "i64")
     // Phase 16.2: pre-scan to register declared struct names and fn return
     // types BEFORE we emit anything. This lets emit_function_typed render
     // `-> ParseResult` as `ParseResult` (typedef) instead of int64_t, and

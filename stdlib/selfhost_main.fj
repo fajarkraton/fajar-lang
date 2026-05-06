@@ -1,0 +1,19 @@
+// Phase 17.8 — self-hosted compiler entry point.
+//
+// Compile this together with stdlib/codegen.fj + stdlib/parser_ast.fj +
+// stdlib/codegen_driver.fj and the chain emits a standalone C `main` that
+// takes `<input.fj> <output.c>` on the command line, parses the input
+// through `parse_to_ast`, lowers it via `emit_program`, and writes the C
+// to the output path.
+//
+// Usage of the resulting native binary:
+//   ./fjc <input.fj> <output.c>
+
+fn main() {
+    let in_path = argv(1)
+    let out_path = argv(2)
+    let src = read_file(in_path)
+    let ast = parse_to_ast(src)
+    let c_src = emit_program(ast)
+    let _ = write_file(out_path, c_src)
+}

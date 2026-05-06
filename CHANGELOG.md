@@ -2,6 +2,69 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v34.5.13] — 2026-05-06 Phase 17.8 (partial): native-binary chain extensions
+
+Six chain extensions toward Stage 1 native binary self-host. Stage 1
+builds successfully end-to-end — `gcc /tmp/fjc_compiled.c -o /tmp/fjc`
+links cleanly — but the resulting binary segfaults inside `emit_program`
+at `strcmp(0x1f, "BEGIN_STRUCT")`. Root cause is an int-vs-pointer leak
+somewhere in the parse path; debugging continues next session toward
+v35.0.0.
+
+Existing self-host suites unchanged: parser_ast self-compile, codegen
+self-compile, and all-3-combined still PASS at gcc -c level (3/3
+phase17 milestone tests, 80 stage1-full, 5 subset, 6 stage2).
+
+### Added
+- `stdlib/selfhost_main.fj` — wrapper main() that takes argv[1] (input
+  fj source path) + argv[2] (output C path), parses, emits, writes.
+- C runtime helpers in emit_preamble:
+  - `g_fj_argc / g_fj_argv` globals + `_fj_argv_get(i)` accessor.
+  - `_fj_read_file(path)` returning const char* (exit on fail).
+  - `_fj_write_file(path, content)` returning int64_t (0 = ok).
+- BEGIN_CALL lowerings in codegen_driver: `argv` → `_fj_argv_get`,
+  `read_file` → `_fj_read_file`, `write_file` → `_fj_write_file`.
+- `emit_function_typed` special-cases `fn main()` to render
+  `int main(int argc, char** argv)` and stash globals at function entry.
+- `emit_fn_forward_decl` skips `main` (no `int64_t main(void);`
+  prototype that would conflict with the argc/argv signature).
+- `emit_if_implicit_return` helper: when a fn body's last stmt is
+  `BEGIN_IF` (not just `BEGIN_EXPR_STMT`), each branch's trailing
+  expr-stmt becomes `return <expr>;`. Required for `parse_params` and
+  similar fns whose tail is `if/else { pr_ok(...) } else { pr_err(...) }`.
+  Without this, those fns returned UB.
+- BEGIN_LET type inference now handles `let x = arr[i]`: derives element
+  type from arr's recorded fj-type ([str] → const char*, otherwise int64_t).
+- Free `push(arr, elem)` and `len(arr)` calls type-dispatch when the
+  first arg is `IDENT.field` (struct-field access) — looks up the
+  struct field's declared type via cg.struct_fields.
+- Native I/O builtin return types pre-seeded in emit_program:
+  `read_file`/`argv` → str, `write_file` → i64.
+- `_fj_arr_join_str` helper from v34.5.12 still in place for
+  `cg.lines.join("\n")` lowering.
+
+### Known gap (deferred to next session)
+- Stage 1 native binary segfaults during emit_program at
+  `_fj_streq(a=0x1f, b="BEGIN_STRUCT")`. The pointer 0x1f is an integer
+  leaking into the AST array somewhere — likely a free `push` or method
+  `.push` call where the chain dispatched to `_fj_arr_push_i64` instead
+  of `_fj_arr_push_str` despite the elem being a string. Next session:
+  isolate which fj source site produces the leak (instrument the chain
+  to abort on int-into-str-array push, or sweep parser_ast.fj for
+  `.push(<int_var>)` on `[str]`-typed arrays).
+
+### Verification
+- `cargo test --release --lib` → 7629 PASS, 0 fail.
+- selfhost suites unchanged: phase17 3/3, stage1_full 80/80,
+  stage1_subset 5/5, stage2_reproducibility 6/6.
+- `cargo fmt --check` clean. `cargo clippy --lib --tests -- -D warnings` clean.
+- Manual: chain run on combined stdlib + selfhost_main → gcc-clean .c
+  → linker-clean ELF binary at /tmp/fjc (139KB).
+
+### Stats
+- Cumulative across v33.4.0..v34.5.13: ~28.7h Claude time across 32
+  self-host phase increments. 30 GH releases LIVE.
+
 ## [v34.5.12] — 2026-05-06 🎯 Phase 17 milestone #3: all-3-combined self-compile + Arc<Vec<Value>>
 
 The eval_field deep-clone of `Value::Array` was the last O(n²) blocker
