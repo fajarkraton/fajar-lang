@@ -53,6 +53,14 @@ jobs:
         # silently passes. Closes a long-standing test-file lint backlog.
         run: cargo clippy --tests -- -D warnings
 
+      # NEW-1 fix (re-audit 2026-05-07, extension to ci.yml): the phase17
+      # self-host tests in tests/selfhost_phase17_self_compile.rs::fj_binary()
+      # hardcode `target/release/fj`. `cargo test --lib --bins --tests --examples`
+      # below builds dev profile only, so the release path is NotFound and
+      # all 4 phase17 tests panic. See docs/RE_AUDIT_2026_05_07.md NEW-1.
+      - name: Build release fj binary (required by phase17 self-host tests)
+        run: cargo build --release --bin fj
+
       - name: Run tests
         run: cargo test --lib --bins --tests --examples
 
