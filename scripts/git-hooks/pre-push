@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Fajar Lang pre-push hook — Phase 18 prevention layer
+#
+# Rejects pushes that regress the self-host test suite.
+# Bypass with --no-verify if absolutely necessary (discouraged).
+#
+# Source of truth: scripts/git-hooks/pre-push
+# Install via:    bash scripts/install-git-hooks.sh
+#
+# Two checks (per CLAUDE.md §6.8 R3 prevention discipline):
+#   1. selfhost_stage1_full      — 86 P-tests, including P81..P86
+#                                   (Phase 18 call-index regression coverage)
+#   2. selfhost_phase17_self_compile — Stage 2 byte-equality + triple-test
+#                                   (Phase 17 fixed-point regression coverage)
+#
+# Why these two: stage1_full surfaces parser/codegen bugs at the
+# small-program level; phase17 surfaces them at the whole-compiler
+# self-compile level. Either alone misses bug classes the other catches.
+
+set -e
+
+# Skip if no Rust source / stdlib / test changes are being pushed.
+# Local-only doc commits don't need to pay the ~2min cost.
+RANGE_FILES=$(git diff --name-only "@{push}.." 2>/dev/null || git diff --name-only HEAD~5..HEAD 2>/dev/null || true)
+
+NEEDS_RUN=0
+if [ -n "$RANGE_FILES" ]; then
+    if echo "$RANGE_FILES" | grep -qE '\.(rs|fj)$|^stdlib/|^tests/|^Cargo\.(toml|lock)$'; then
+        NEEDS_RUN=1
+    fi
+fi
+
+# If we couldn't compute a range (new branch, etc.), default to running.
+if [ -z "$RANGE_FILES" ]; then
+    NEEDS_RUN=1
+fi
+
+if [ "$NEEDS_RUN" -eq 0 ]; then
+    echo "📋 pre-push: no Rust/fj/stdlib/test changes detected; skipping self-host gate."
+    exit 0
+fi
+
+LOG=/tmp/fajar-prepush.log
+> "$LOG"
+
+echo "🔒 pre-push: running self-host regression gate (~2min)..."
+echo "    log: $LOG"
+
+# Check 1: stage1_full (P1..P86 — call-index regression coverage)
+echo "  [1/2] cargo test --release --test selfhost_stage1_full"
+if ! cargo test --release --test selfhost_stage1_full >> "$LOG" 2>&1; then
+    echo ""
+    echo "❌ pre-push blocked: selfhost_stage1_full regression."
+    echo ""
+    tail -40 "$LOG"
+    echo ""
+    echo "Full log: $LOG"
+    echo "Bypass (discouraged):  git push --no-verify"
+    exit 1
+fi
+
+# Check 2: phase17 self-compile (Stage 2 byte-equality + triple-test)
+echo "  [2/2] cargo test --release --test selfhost_phase17_self_compile -- --test-threads=1"
+if ! cargo test --release --test selfhost_phase17_self_compile -- --test-threads=1 >> "$LOG" 2>&1; then
+    echo ""
+    echo "❌ pre-push blocked: selfhost_phase17_self_compile regression."
+    echo ""
+    tail -60 "$LOG"
+    echo ""
+    echo "Full log: $LOG"
+    echo "Bypass (discouraged):  git push --no-verify"
+    exit 1
+fi
+
+echo "✅ pre-push: self-host gate green (stage1_full + phase17 self-compile)."
+exit 0

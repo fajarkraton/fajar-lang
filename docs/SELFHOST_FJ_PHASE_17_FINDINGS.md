@@ -464,10 +464,14 @@ What does NOT work yet (legitimate scope-boundary):
   `_fj_to_string`. Arena freed at exit via `atexit(_fj_arena_free_all)`
   registered in main(). _FjArr realloc-based storage is a separate
   leak class still on plain malloc (out of R15 scope).
-- ❌ `arr[i]` for `[str]`-typed `arr` in user-extended codegen —
-  default dispatch is `_fj_arr_get_i64`. Var-type tracking handles
-  declared cases but `let x = some_fn_returning_str_array()[i]` needs
-  the call's ret-type traced through. Phase 18+ scope.
+- ✅ ~~`arr[i]` for `[str]`-typed `arr` in user-extended codegen.~~
+  **CLOSED Phase 18** (2026-05-07) per `docs/SELFHOST_FJ_PHASE_18_FINDINGS.md`.
+  D1.A (reuse BEGIN_INDEX, generalize subject) + D2.A (peek subject AST first
+  child for ret-type) + D3.B (parallel `map_method_ret_type` registry) shipped
+  the call-index family in ~6h actual / 8.75h ceiling (-31%). Stage 2
+  byte-equality preserved (md5 unchanged). Pre-push hook gates
+  `selfhost_stage1_full` (86 P-tests) + `selfhost_phase17_self_compile`
+  going forward.
 - ❌ Multi-dim arrays codegen-incomplete (`[[i64]]`). No syntactic
   support beyond 1-deep arrays.
 - ❌ No bounds checking on `_FjArr` access. Out-of-range index =
