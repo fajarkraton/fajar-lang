@@ -430,12 +430,17 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         }
         if after < n && src.substring(after, after + 1) == "(" {
             // Function call: BEGIN_CALL <name> <args...> END_CALL
+            // CALL_INDEX P1.1 (Decision D1.A, 2026-05-07): capture
+            // ast length BEFORE BEGIN_CALL push so maybe_wrap_call_index
+            // can splice BEGIN_INDEX in at that position when `[`
+            // follows the closing `)`. Subject reused inside wrapper.
+            let len_before = to_int(len(ast))
             let mut a = ast.push("BEGIN_CALL").push(word)
             let mut cur = after + 1
             cur = skip_ws(src, cur)
             if cur < n && src.substring(cur, cur + 1) == ")" {
                 a = a.push("END_CALL")
-                pr_ok(a, cur + 1)
+                return maybe_wrap_call_index(src, a, cur + 1, len_before)
             } else {
                 let mut more = true
                 while more {
@@ -450,7 +455,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 cur = skip_ws(src, cur)
                 if cur < n && src.substring(cur, cur + 1) == ")" {
                     a = a.push("END_CALL")
-                    pr_ok(a, cur + 1)
+                    return maybe_wrap_call_index(src, a, cur + 1, len_before)
                 } else {
                     pr_err(a, cur, "ERR_CALL_PAREN")
                 }
@@ -711,6 +716,50 @@ pub fn parse_expr_prec(src: str, pos: i64, min_prec: i64, ast: [str]) -> ParseRe
 
 pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     parse_expr_prec(src, pos, 1, ast)
+}
+
+// CALL_INDEX P1.1 (Decision D1.A, 2026-05-07): wrap a just-parsed call
+// (BEGIN_CALL...END_CALL spanning ast[len_before_call..]) in
+// BEGIN_INDEX if `[` follows the closing `)`. fj subset has no
+// array insert, so we reconstruct: ast[0..len_before_call] +
+// BEGIN_INDEX + ast[len_before_call..] + index-expr + END_INDEX.
+//
+// Subject can therefore be the full BEGIN_CALL block; codegen P2.1
+// case-splits BEGIN_INDEX dispatch on the first child's tag
+// (IDENT keeps existing fast path; BEGIN_CALL takes the new
+// general path that walks the call subject and looks up its
+// return type via fn_ret_types).
+//
+// Until P2.1 lands, the new wrapped shape is unreachable from any
+// existing test (no test uses `f()[i]`), so this helper is silent
+// regression-wise — it only fires when source actually contains
+// `f()[...]`.
+fn maybe_wrap_call_index(src: str, ast: [str], end_pos: i64, len_before_call: i64) -> ParseResult {
+    let n = to_int(len(src))
+    let after = skip_ws(src, end_pos)
+    if after >= n || src.substring(after, after + 1) != "[" {
+        return pr_ok(ast, end_pos)
+    }
+    let total = to_int(len(ast))
+    let mut out: [str] = []
+    let mut i = 0
+    while i < len_before_call {
+        out = out.push(ast[i])
+        i = i + 1
+    }
+    out = out.push("BEGIN_INDEX")
+    while i < total {
+        out = out.push(ast[i])
+        i = i + 1
+    }
+    let p_idx = skip_ws(src, after + 1)
+    let r = parse_expr_ast(src, p_idx, out)
+    if r.error { return r }
+    let p_rb = skip_ws(src, r.pos)
+    if p_rb < n && src.substring(p_rb, p_rb + 1) == "]" {
+        return pr_ok(r.ast.push("END_INDEX"), p_rb + 1)
+    }
+    pr_err(r.ast, p_rb, "ERR_INDEX_RB")
 }
 
 // ─────────────────────────────────────────────────────────────────────
