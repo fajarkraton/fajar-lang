@@ -28,8 +28,20 @@
 //!
 //! Requires `gcc` on PATH — gated to Unix targets.
 
+// NEW-3 fix (re-audit 2026-05-07): module-level cfg(unix) gates helpers
+// (fj_binary, workspace, cat_files) along with already-gated test fns so
+// Windows clippy --tests stops firing "never used" with -D warnings.
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::process::Command;
+
+// NEW-1.b fix (re-audit 2026-05-07): use /tmp/ consistently to avoid
+// the Linux-vs-macOS std::env::temp_dir() mismatch. See companion note
+// in tests/selfhost_phase17_self_compile.rs.
+fn tmp_dir() -> PathBuf {
+    PathBuf::from("/tmp")
+}
 
 fn fj_binary() -> PathBuf {
     let target = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
@@ -72,7 +84,7 @@ fn main() {{
         ]),
         driver
     );
-    let tmp_fj = std::env::temp_dir().join(format!("{label}_repro.fj"));
+    let tmp_fj = tmp_dir().join(format!("{label}_repro.fj"));
     std::fs::write(&tmp_fj, &combined).unwrap();
 
     // Run twice
@@ -101,8 +113,8 @@ fn main() {{
 
 /// Compile generated C with gcc, run, return exit code.
 fn gcc_run_bin(label: &str, c_src: &[u8]) -> i32 {
-    let c_path = std::env::temp_dir().join(format!("{label}.c"));
-    let bin_path = std::env::temp_dir().join(format!("{label}.bin"));
+    let c_path = tmp_dir().join(format!("{label}.c"));
+    let bin_path = tmp_dir().join(format!("{label}.bin"));
     std::fs::write(&c_path, c_src).unwrap();
 
     let cc = Command::new("gcc")

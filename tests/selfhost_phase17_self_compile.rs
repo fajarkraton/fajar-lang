@@ -22,8 +22,26 @@
 //!
 //! Requires `gcc` on PATH — gated to Unix targets.
 
+// NEW-3 fix (re-audit 2026-05-07): module-level cfg(unix) gates helpers
+// (fj_binary, workspace, cat_files, chain_compile_to_object) along with
+// already-gated test fns so Windows clippy --tests stops firing
+// "never used" with -D warnings.
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::process::Command;
+
+// NEW-1.b fix (re-audit 2026-05-07): the fj-source probe drivers below
+// hardcode `/tmp/...` paths in their write_file() calls (e.g. line 413
+// `write_file("/tmp/fjc_triple_stage1.c", ...)`). On Linux,
+// std::env::temp_dir() == /tmp so the Rust harness reads from the same
+// path. On macOS, std::env::temp_dir() == /var/folders/.../T so the
+// harness looked in a different place than fj wrote → "no such file".
+// Since these tests are #![cfg(unix)] (NEW-3 gate above), `/tmp` is
+// guaranteed to exist. Use it consistently.
+fn tmp_dir() -> PathBuf {
+    PathBuf::from("/tmp")
+}
 
 fn fj_binary() -> PathBuf {
     let target = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
@@ -74,7 +92,7 @@ fn main() {{
         ]),
         driver
     );
-    let tmp_fj = std::env::temp_dir().join(format!("{label}_self_compile.fj"));
+    let tmp_fj = tmp_dir().join(format!("{label}_self_compile.fj"));
     std::fs::write(&tmp_fj, &combined).unwrap();
 
     let out = Command::new(fj_binary())
@@ -88,8 +106,8 @@ fn main() {{
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let c_path = std::env::temp_dir().join(format!("{label}_self_compile.c"));
-    let o_path = std::env::temp_dir().join(format!("{label}_self_compile.o"));
+    let c_path = tmp_dir().join(format!("{label}_self_compile.c"));
+    let o_path = tmp_dir().join(format!("{label}_self_compile.o"));
     assert!(
         c_path.exists(),
         "chain failed to write C output for {label}"
@@ -155,7 +173,7 @@ fn main() {
         ]),
         driver
     );
-    let tmp_fj = std::env::temp_dir().join("phase17_self_compile.fj");
+    let tmp_fj = tmp_dir().join("phase17_self_compile.fj");
     std::fs::write(&tmp_fj, &combined).unwrap();
 
     let out = Command::new(fj_binary())
@@ -187,8 +205,8 @@ fn main() {
 
     // Compile the emitted C to an object file via gcc -c. -w suppresses
     // benign warnings (mostly unused-variable). We check ONLY exit code.
-    let c_path = std::env::temp_dir().join("parser_ast_self_compile.c");
-    let o_path = std::env::temp_dir().join("parser_ast_self_compile.o");
+    let c_path = tmp_dir().join("parser_ast_self_compile.c");
+    let o_path = tmp_dir().join("parser_ast_self_compile.o");
     assert!(c_path.exists(), "chain failed to write C output");
 
     let cc = Command::new("gcc")
@@ -282,7 +300,7 @@ fn main() {
         ]),
         driver
     );
-    let tmp_fj = std::env::temp_dir().join("all_three_phase17_probe.fj");
+    let tmp_fj = tmp_dir().join("all_three_phase17_probe.fj");
     std::fs::write(&tmp_fj, &combined).unwrap();
 
     let out = Command::new(fj_binary())
@@ -296,8 +314,8 @@ fn main() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let c_path = std::env::temp_dir().join("all_three_phase17_self_compile.c");
-    let o_path = std::env::temp_dir().join("all_three_phase17_self_compile.o");
+    let c_path = tmp_dir().join("all_three_phase17_self_compile.c");
+    let o_path = tmp_dir().join("all_three_phase17_self_compile.o");
     assert!(c_path.exists(), "chain failed to write all-3 C output");
 
     let cc = Command::new("gcc")
@@ -423,7 +441,7 @@ fn main() {
         ]),
         probe_driver
     );
-    let tmp_probe = std::env::temp_dir().join("fjc_triple_probe.fj");
+    let tmp_probe = tmp_dir().join("fjc_triple_probe.fj");
     std::fs::write(&tmp_probe, &combined).unwrap();
 
     // Step 1: interpreter chain → stage1.c
@@ -437,8 +455,8 @@ fn main() {
         "interpreter chain failed: stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stage1_c = std::env::temp_dir().join("fjc_triple_stage1.c");
-    let fjc_stage1 = std::env::temp_dir().join("fjc-triple-stage1");
+    let stage1_c = tmp_dir().join("fjc_triple_stage1.c");
+    let fjc_stage1 = tmp_dir().join("fjc-triple-stage1");
     let cc1 = Command::new("gcc")
         .args([
             stage1_c.to_str().unwrap(),
@@ -461,9 +479,9 @@ fn main() {
         "stdlib/codegen_driver.fj",
         "stdlib/selfhost_main.fj",
     ]);
-    let combined_4file_path = std::env::temp_dir().join("fjc_triple_combined.fj");
+    let combined_4file_path = tmp_dir().join("fjc_triple_combined.fj");
     std::fs::write(&combined_4file_path, &combined_4file).unwrap();
-    let stage2_c = std::env::temp_dir().join("fjc_triple_stage2.c");
+    let stage2_c = tmp_dir().join("fjc_triple_stage2.c");
     let run1 = Command::new(&fjc_stage1)
         .args([
             combined_4file_path.to_str().unwrap(),
@@ -491,7 +509,7 @@ fn main() {
     );
 
     // Step 3: build stage2 binary; run both stages on a third-party fj source.
-    let fjc_stage2 = std::env::temp_dir().join("fjc-triple-stage2");
+    let fjc_stage2 = tmp_dir().join("fjc-triple-stage2");
     let cc2 = Command::new("gcc")
         .args([
             stage2_c.to_str().unwrap(),
@@ -507,14 +525,14 @@ fn main() {
         String::from_utf8_lossy(&cc2.stderr)
     );
 
-    let third = std::env::temp_dir().join("fjc_triple_third.fj");
+    let third = tmp_dir().join("fjc_triple_third.fj");
     std::fs::write(
         &third,
         "fn main() {\n    let x = 21\n    let y = x + x\n    println(y)\n}\n",
     )
     .unwrap();
-    let third_c1 = std::env::temp_dir().join("fjc_triple_third_s1.c");
-    let third_c2 = std::env::temp_dir().join("fjc_triple_third_s2.c");
+    let third_c1 = tmp_dir().join("fjc_triple_third_s1.c");
+    let third_c2 = tmp_dir().join("fjc_triple_third_s2.c");
     let r1 = Command::new(&fjc_stage1)
         .args([third.to_str().unwrap(), third_c1.to_str().unwrap()])
         .output()
@@ -535,7 +553,7 @@ fn main() {
     );
 
     // Sanity: the third-party C compiles + prints `42`.
-    let third_bin = std::env::temp_dir().join("fjc_triple_third_bin");
+    let third_bin = tmp_dir().join("fjc_triple_third_bin");
     let cc3 = Command::new("gcc")
         .args([
             third_c1.to_str().unwrap(),
