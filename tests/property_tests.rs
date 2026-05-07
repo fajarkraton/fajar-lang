@@ -6,6 +6,121 @@ use fajar_lang::lexer::tokenize;
 use fajar_lang::parser::parse;
 use proptest::prelude::*;
 
+// NEW-7 (re-audit 2026-05-07): full reserved-keyword set for proptest
+// filtering. Mirror of `m.insert("...", TokenKind::*)` in
+// src/lexer/token.rs as of 2026-05-07. Sync this list when new keywords
+// are added; otherwise proptest may randomly pick one as an identifier
+// → flaky CI fail like "struct should parse: ExpectedIdentifier 'dyn'".
+const FJ_KEYWORDS: &[&str] = &[
+    "addr",
+    "app",
+    "as",
+    "async",
+    "await",
+    "bf16",
+    "bool",
+    "break",
+    "char",
+    "cold",
+    "comptime",
+    "const",
+    "continue",
+    "derive",
+    "device",
+    "dyn",
+    "effect",
+    "else",
+    "ensures",
+    "entry",
+    "enum",
+    "extern",
+    "f16",
+    "f32",
+    "f64",
+    "false",
+    "ffi",
+    "fn",
+    "for",
+    "gen",
+    "gpu",
+    "grad",
+    "host",
+    "i128",
+    "i16",
+    "i32",
+    "i64",
+    "i8",
+    "if",
+    "ignore",
+    "impl",
+    "implements",
+    "in",
+    "infer",
+    "inline",
+    "interrupt",
+    "invariant",
+    "irq",
+    "isize",
+    "kernel",
+    "layer",
+    "let",
+    "linear",
+    "loop",
+    "loss",
+    "match",
+    "message",
+    "mod",
+    "model",
+    "mut",
+    "naked",
+    "never",
+    "noinline",
+    "no_mangle",
+    "no_std",
+    "no_vectorize",
+    "npu",
+    "null",
+    "page",
+    "panic_handler",
+    "protocol",
+    "ptr",
+    "pub",
+    "pure",
+    "region",
+    "repr_c",
+    "repr_packed",
+    "requires",
+    "return",
+    "safe",
+    "section",
+    "service",
+    "shared",
+    "should_panic",
+    "simd",
+    "static",
+    "str",
+    "struct",
+    "syscall",
+    "tensor",
+    "test",
+    "trait",
+    "true",
+    "type",
+    "u128",
+    "u16",
+    "u32",
+    "u64",
+    "u8",
+    "union",
+    "unsafe",
+    "use",
+    "usize",
+    "void",
+    "where",
+    "while",
+    "yield",
+];
+
 // ═══════════════════════════════════════════════════════════════════════
 // Lexer properties
 // ═══════════════════════════════════════════════════════════════════════
@@ -100,17 +215,9 @@ proptest! {
     /// Let statements with integer literals always parse.
     #[test]
     fn parser_let_statement(name in "[a-z]{2}[a-z0-9_]{2,10}", val in 0i64..10000) {
-        // Filter out names that happen to be keywords or type names
-        let keywords = [
-            "if", "in", "fn", "as", "do", "for", "let", "mod", "mut", "pub", "use",
-            "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64",
-            "str", "ptr", "int", "bool", "char", "void", "true", "null", "type",
-            "enum", "impl", "else", "loop", "while", "break", "const", "match",
-            "trait", "super", "return", "struct", "extern", "tensor", "float",
-            "isize", "usize", "never", "model", "layer", "loss", "grad",
-            "continue",
-        ];
-        prop_assume!(!keywords.contains(&name.as_str()));
+        // NEW-7 (re-audit 2026-05-07): use shared FJ_KEYWORDS list (above)
+        // to filter out reserved words. Previous local list was incomplete.
+        prop_assume!(!FJ_KEYWORDS.contains(&name.as_str()));
         let src = format!("let {name} = {val}");
         let tokens = tokenize(&src).expect("let should lex");
         let _program = parse(tokens).expect("let should parse");
@@ -533,12 +640,13 @@ proptest! {
     /// Struct definitions always parse.
     #[test]
     fn parser_struct_def(name in "[A-Z][a-z]{2,6}", field in "[a-z]{3,6}") {
-        let kw = ["if", "in", "fn", "as", "do", "for", "let", "mod", "mut", "pub", "use",
-            "str", "ptr", "int", "bool", "char", "void", "true", "null", "type",
-            "enum", "impl", "else", "loop", "while", "break", "const", "match",
-            "trait", "super", "return", "struct", "extern", "tensor", "float",
-            "isize", "usize", "never", "model", "layer", "loss", "grad", "continue"];
-        prop_assume!(!kw.contains(&field.as_str()) && !kw.contains(&name.to_lowercase().as_str()));
+        // NEW-7 (re-audit 2026-05-07): keyword filter was previously
+        // incomplete (missing dyn, gen, async, await, yield, effect, etc.)
+        // → proptest occasionally generated those as field names → CI flake
+        // ("struct should parse: ExpectedIdentifier 'dyn'"). List below
+        // mirrors src/lexer/token.rs's full reserved-keyword set as of
+        // 2026-05-07. Source-of-truth check: `grep 'm.insert("' src/lexer/token.rs`.
+        prop_assume!(!FJ_KEYWORDS.contains(&field.as_str()) && !FJ_KEYWORDS.contains(&name.to_lowercase().as_str()));
         let src = format!("struct {name} {{ {field}: i64 }}");
         let tokens = tokenize(&src).expect("struct should lex");
         let _prog = parse(tokens).expect("struct should parse");
@@ -547,7 +655,16 @@ proptest! {
     /// Enum definitions always parse.
     #[test]
     fn parser_enum_def(name in "[A-Z][a-z]{3,6}", v1 in "[A-Z][a-z]{3,6}", v2 in "[A-Z][a-z]{3,6}") {
+        // NEW-7 (re-audit 2026-05-07): same keyword-filter risk as
+        // parser_struct_def. Variant names start uppercase but proptest
+        // could still produce names whose lowercased form collides
+        // (rare but possible — e.g. "Dyn" → lowercased "dyn"). Filter both.
         prop_assume!(v1 != v2);
+        prop_assume!(
+            !FJ_KEYWORDS.contains(&name.to_lowercase().as_str())
+                && !FJ_KEYWORDS.contains(&v1.to_lowercase().as_str())
+                && !FJ_KEYWORDS.contains(&v2.to_lowercase().as_str())
+        );
         let src = format!("enum {name} {{ {v1}, {v2} }}");
         let tokens = tokenize(&src).expect("enum should lex");
         let _prog = parse(tokens).expect("enum should parse");

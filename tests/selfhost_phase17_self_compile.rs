@@ -145,8 +145,13 @@ fn assert_object_exports(o_path: &std::path::Path, required: &[&str]) {
     let nm = Command::new("nm").arg(o_path).output().expect("nm");
     let nm_out = String::from_utf8_lossy(&nm.stdout);
     for sym in required {
+        // NEW-6 (re-audit 2026-05-07): Linux nm emits " T sym",
+        // macOS nm emits " T _sym" (Mach-O underscore convention).
+        // Accept either form.
+        let linux = format!(" T {sym}");
+        let macos = format!(" T _{sym}");
         assert!(
-            nm_out.contains(&format!(" T {sym}")),
+            nm_out.contains(&linux) || nm_out.contains(&macos),
             "missing exported symbol: {sym}\nnm output:\n{nm_out}"
         );
     }
@@ -275,8 +280,11 @@ fn main() {
         "parse_to_ast",
     ];
     for sym in required {
+        // NEW-6: macOS nm prefixes symbols with `_` (Mach-O convention).
+        let linux = format!(" T {sym}");
+        let macos = format!(" T _{sym}");
         assert!(
-            nm_out.contains(&format!(" T {sym}")),
+            nm_out.contains(&linux) || nm_out.contains(&macos),
             "missing exported symbol: {sym}\nnm output:\n{nm_out}"
         );
     }
