@@ -379,14 +379,23 @@ pub fn emit_preamble(state: CodegenState) -> CodegenState {
     // is determined by which push/get helper is called.
     s = emit_line(s, "// Dynamic array (Phase 14+15) — unified void** layout for both [i64] and [str]")
     s = emit_line(s, "typedef struct _FjArr { void** data; size_t len; size_t cap; } _FjArr;")
+    // FJARR_LEAK Phase 1 step 18.A.1 (decision doc 2026-05-07-fjarr-leak-strategy.md
+    // Choice F.A): _FjArr struct + buffer migrated from malloc/realloc to the
+    // R15 bump-pointer arena. Grow is copy-grow (alloc fresh, memcpy live
+    // entries, abandon old slot to arena). Whole arena freed at exit via
+    // existing atexit(_fj_arena_free_all). Closes the documented 88-bytes/array
+    // leak class per docs/FJARR_LEAK_B0_FINDINGS.md.
     s = emit_line(s, "static _FjArr* _fj_arr_new(void) {")
-    s = emit_line(s, "    _FjArr* a = (_FjArr*)malloc(sizeof(_FjArr));")
+    s = emit_line(s, "    _FjArr* a = (_FjArr*)_fj_arena_alloc(sizeof(_FjArr));")
     s = emit_line(s, "    a->data = NULL; a->len = 0; a->cap = 0; return a;")
     s = emit_line(s, "}")
     s = emit_line(s, "static _FjArr* _fj_arr_grow(_FjArr* a) {")
     s = emit_line(s, "    if (a->len >= a->cap) {")
-    s = emit_line(s, "        a->cap = a->cap == 0 ? 8 : a->cap * 2;")
-    s = emit_line(s, "        a->data = (void**)realloc(a->data, a->cap * sizeof(void*));")
+    s = emit_line(s, "        size_t new_cap = a->cap == 0 ? 8 : a->cap * 2;")
+    s = emit_line(s, "        void** new_data = (void**)_fj_arena_alloc(new_cap * sizeof(void*));")
+    s = emit_line(s, "        if (a->data) memcpy(new_data, a->data, a->len * sizeof(void*));")
+    s = emit_line(s, "        a->data = new_data;")
+    s = emit_line(s, "        a->cap = new_cap;")
     s = emit_line(s, "    }")
     s = emit_line(s, "    return a;")
     s = emit_line(s, "}")

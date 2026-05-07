@@ -1,16 +1,19 @@
-//! FJARR_LEAK Phase 1 — `_FjArr` leak regression baseline test.
+//! FJARR_LEAK Phase 1 — `_FjArr` leak regression GREEN gate.
 //!
-//! Per `docs/FJARR_LEAK_PLAN.md` row 18.0.2 + decision file
+//! Per `docs/FJARR_LEAK_PLAN.md` row 18.A.2 + decision file
 //! `docs/decisions/2026-05-07-fjarr-leak-strategy.md` (Choice F: A-now arena +
-//! D-Phase-19 linear types). Establishes the **RED baseline** today (88 bytes
-//! per `[i64]` array) that the 18.A.1 arena migration must flip to **GREEN**
-//! (`definitely lost: 0` AND `indirectly lost: 0`).
+//! D-Phase-19 linear types). Locks in the **GREEN state** post-18.A.1
+//! arena migration: `definitely lost + indirectly lost == 0` for the
+//! emitted reproducer. Arena chunks themselves are `still reachable` (we do
+//! NOT sum that bucket), and `_fj_arena_free_all` registered via atexit
+//! reaps them at program exit so the whole class closes cleanly.
 //!
-//! ## Lifecycle of this assertion
-//! - **Today (PRE-18.A.1)**: asserts leak >= 88 bytes (`MIN_LEAK_BYTES_PRE_FIX`).
-//!   Bug confirmed present per `docs/FJARR_LEAK_B0_FINDINGS.md` §B0.4.
-//! - **Post-18.A.1**: step 18.A.2 flips this to `assert_eq!(lost, 0)` and
-//!   updates the doc-comment + constant accordingly.
+//! ## Lifecycle history (for future maintainers)
+//! - **Pre-18.A.1 (commit `f13ac484`)**: asserted leak >= 88 bytes (RED
+//!   baseline per `docs/FJARR_LEAK_B0_FINDINGS.md` §B0.4).
+//! - **Post-18.A.1 (this commit)**: flipped to `assert_eq!(lost, 0)`. If
+//!   this regresses, the arena migration in `stdlib/codegen.fj`
+//!   `_fj_arr_new` / `_fj_arr_grow` has been reverted or broken.
 //!
 //! ## Why ignored by default
 //! Chain run + gcc + valgrind sweep ~30-50s on a hot release build. Slow for
@@ -28,11 +31,6 @@
 
 use std::path::PathBuf;
 use std::process::Command;
-
-/// Per `docs/FJARR_LEAK_B0_FINDINGS.md` §B0.4: a single `[1, 2, 3]` array
-/// leaks exactly 88 bytes (24 direct `_FjArr` struct + 64 indirect `void**`
-/// buffer). Use as the lower-bound RED-baseline assertion.
-const MIN_LEAK_BYTES_PRE_FIX: u64 = 88;
 
 fn tmp_dir() -> PathBuf {
     PathBuf::from("/tmp")
@@ -66,9 +64,17 @@ fn have_valgrind() -> bool {
 
 /// Sum the bytes reported on `definitely lost:` and `indirectly lost:` lines.
 /// Valgrind format: `==PID==    definitely lost: 1,234 bytes in 56 blocks`.
+///
+/// When the program is leak-free, valgrind emits "All heap blocks were freed
+/// -- no leaks are possible" and OMITS the per-class lost lines entirely, so
+/// the absence of those lines combined with a present HEAP SUMMARY block is
+/// taken as `lost == 0`. If HEAP SUMMARY is missing, valgrind didn't run
+/// correctly (e.g., binary crashed) and we return None for diagnostic.
 fn parse_valgrind_lost(stderr: &str) -> Option<u64> {
+    if !stderr.contains("HEAP SUMMARY:") {
+        return None;
+    }
     let mut total: u64 = 0;
-    let mut found_any = false;
     for line in stderr.lines() {
         for tag in &["definitely lost:", "indirectly lost:"] {
             if let Some(idx) = line.find(tag) {
@@ -81,12 +87,11 @@ fn parse_valgrind_lost(stderr: &str) -> Option<u64> {
                     .collect();
                 if let Ok(n) = digits.parse::<u64>() {
                     total += n;
-                    found_any = true;
                 }
             }
         }
     }
-    if found_any { Some(total) } else { None }
+    Some(total)
 }
 
 #[test]
@@ -185,19 +190,14 @@ fn main() {
         )
     });
 
-    assert!(
-        lost >= MIN_LEAK_BYTES_PRE_FIX,
-        "expected leak >= {} bytes (RED baseline per FJARR_LEAK_B0_FINDINGS §B0.4); got {} bytes.\n\
-         If this is failing because the leak is FIXED in 18.A.1, flip this assertion to\n\
-         `assert_eq!(lost, 0)` per docs/FJARR_LEAK_PLAN.md row 18.A.2.\n\
-         Full valgrind stderr:\n{}",
-        MIN_LEAK_BYTES_PRE_FIX,
-        lost,
-        stderr
+    assert_eq!(
+        lost, 0,
+        "expected leak == 0 (GREEN, post-18.A.1 arena migration); got {lost} bytes.\n\
+         If this is failing, the _fj_arr_new / _fj_arr_grow arena migration in\n\
+         stdlib/codegen.fj has regressed. See docs/FJARR_LEAK_PLAN.md row 18.A.1\n\
+         and the existing pre-commit gate in scripts/git-hooks/pre-commit.\n\
+         Full valgrind stderr:\n{stderr}"
     );
 
-    eprintln!(
-        "RED baseline confirmed: leak {} bytes >= {} (bug present per B0.4; ready for 18.A.1 arena migration)",
-        lost, MIN_LEAK_BYTES_PRE_FIX
-    );
+    eprintln!("GREEN: leak == 0 (post-18.A.1 arena migration). _FjArr realloc-leak class closed.");
 }
