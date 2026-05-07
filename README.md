@@ -1,8 +1,8 @@
 # Fajar Lang — Systems Programming Language for Embedded ML & OS Development
 
-> **The only language where an OS kernel and a neural network can share the same codebase, type system, and compiler, with safety guarantees that no existing language provides.**
+> **Status: experimental, pre-1.0, research-grade.** A statically-typed systems language exploring compile-time domain isolation between kernel and ML code via `@kernel`/`@device`/`@safe` context annotations. Not production-ready; no external production users yet.
 
-Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two complete operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang, proving the language's capability for real-world systems programming from kernel to neural network inference.
+Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two dogfood operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang as project-internal validators (not production OSes; no userspace ecosystem).
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Release v35.0.0](https://img.shields.io/badge/release-v35.0.0_STAGE_2_SELF--HOST_TRIPLE--TEST-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.0.0)
@@ -71,7 +71,7 @@ Existing languages force you to choose: **Rust** for systems, **Python** for ML,
 }
 ```
 
-If it compiles, the kernel code cannot accidentally trigger a heap allocation, and the ML code cannot accidentally dereference a raw pointer. **Safety by construction.**
+**Design intent**: in `@kernel` context the compiler rejects heap allocation; in `@device` context it rejects raw pointer dereference. Type-level domain isolation means these classes of bugs are caught at compile time when contexts are explicitly annotated. Formal soundness proof is open work (see `docs/1/STRATEGIC_COMPASS.md` §6.1).
 
 ---
 
@@ -162,12 +162,12 @@ fj repl
 - **Native tensor types** — `Tensor` is a first-class citizen with compile-time shape checking
 - **Generics and traits** — monomorphized generics, trait objects (`dyn Trait`), GAT, async traits
 - **Pattern matching** — exhaustive `match` on enums, structs, tuples with `Option<T>` / `Result<T,E>`
-- **Algebraic effects** — structured side-effect control with handlers and delimited continuations
+- **Algebraic effects** *(experimental)* — structured side-effect control with handlers and delimited continuations
 - **Macro system** — `macro_rules!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `#[derive(...)]`, token tree expansion engine
 - **Generators** — `yield` keyword, `gen fn`, `GeneratorIter` (for-in compatible), `AsyncStream`, coroutines
 - **Pipeline operator** — `x |> f |> g` for clean functional data flow
 - **String interpolation** — `f"Hello {name}, result is {1 + 2}"`
-- **Compile-time evaluation** — `const fn`, `comptime {}` blocks, tensor shape verification
+- **Compile-time evaluation** — `const fn`, `comptime {}` blocks, partial tensor shape verification (compile-time shape checking is core to the embedded-AI niche; see `docs/1/STRATEGIC_COMPASS.md` §6.3 for known gaps)
 - **Async/await** — real tokio I/O, async traits, streams, channels, spawn/join/select
 
 ### Compilation
@@ -487,7 +487,7 @@ fajar-lang/
     plugin/             Compiler plugin system (AST-phase)
     playground/         WASM playground (wasm-bindgen)
   stdlib/               Fajar Lang standard library (.fj source)
-  examples/             178 example .fj programs
+  examples/             245 example .fj programs (sample-tested; full sweep open per RE_AUDIT NEW-4)
   tests/                Integration tests (eval, ML, OS, safety, property)
   benches/              Criterion benchmarks
   packages/             37 standard packages
@@ -521,16 +521,16 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Release | **v34.0.0 "Stage 2 Lite reproducibility"** (2026-05-05, MAJOR) — fj-source compiler chain proven deterministic + full self-host driver pipeline working in pure fj. NEW core builtin `run_command(cmd: str) -> i64` shells out to gcc. NEW examples/selfhost_compiler.fj chains read_file → parse_to_ast → emit_program → write_file → gcc → run binary, all in fj-source. NEW 6 reproducibility tests verify C-source byte-equality + behavioral correctness across runs. **6/6 PASS in 0.12s.** Honest scope: NOT a full Stage 2 triple-test (codegen enrichment for self-compile is R14, ~3-7d separate scope). Cumulative ~9h vs plan 5-15d. Source: `docs/SELFHOST_FJ_PHASE_{0..12}_FINDINGS.md`. |
-| Compiler LOC | ~450,000 Rust across 391+ files in src/ |
-| Tests | **8,974 lib** + 2,498+ integ + 14 doc ≈ **11,486 total** — 0 failures, 0 flakes, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`), 162+ LLVM tests green under `--features llvm,native` |
+| Release | **v35.0.0 "Stage 2 Self-Host Triple-Test"** (2026-05-06, MAJOR) — fjc Stage 1 native binary (140KB ELF) compiles its own combined fj source byte-identical to the chain output (md5 `1d6c52a...`); cross-stage equivalence on third-party input (md5 `d47fb8a...`). Self-compile speed 38s (interpreter) → 0.66s (native), ~57×. Source: `docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md`. **Note**: this is internal-engineering proof of fixed-point self-hosting; it is not a production-deployment milestone. |
+| Compiler LOC | ~450,000 Rust across 391 files in src/ |
+| Tests | **7,629 lib** + 10,489 integ (in 72 files) + 14 doc + 1 ignored = **18,132 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~1,345 tests (8,974 PASS at `--features llvm,native`). Verified 2026-05-07 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
 | Doc coverage | **95.79% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
 | Error-code coverage | **gap=0** — 135 cataloged, 125 covered + 12 forward-compat (per §6.6 R6); `python3 scripts/audit_error_codes.py --strict` enforces |
 | Tutorial | `docs/TUTORIAL.md` 10 chapters, basics → robot control loop |
-| Examples | 243 `.fj` programs + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`) |
+| Examples | 245 `.fj` programs + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). Sample-tested; full sweep open per RE_AUDIT NEW-4. |
 | Benchmarks | 5 vs C/Rust/Go (fibonacci, bubble_sort, sum_loop, matrix_multiply, mandelbrot) — `bash benches/baselines/run_baselines.sh` |
-| FajarQuant | 49-86% lower MSE than TurboQuant (adaptive PCA rotation) |
-| JIT | 76x speedup on fib(30) via Cranelift native compilation |
+| FajarQuant | Algorithm research repo at `fajarkraton/fajarquant`. Earlier "49-86% lower MSE vs TurboQuant" claim was a protocol artifact (post-hoc cache mutation); under canonical R-α.1 model surgery the result reverses. See `memory/feedback_research_integrity.md` and CLAUDE.md §6.9. Current FjQ Phase E in flight; published claims gated by `verify_paper_tables.py --strict`. |
+| JIT | Cranelift native compilation (see Performance Benchmarks for actual numbers; "76× on fib(30)" was an early demo, current Cranelift JIT shows 12× over C — see `benches/baselines/RESULTS.md`) |
 | GPU | Real CUDA detection (RTX 4090: 9,728 cores, 16 GB VRAM) |
 | Error codes | 80+ across 10 categories |
 | Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
@@ -553,11 +553,11 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
 | FFI v2 | C++ templates/STL/smart-ptr, Python async/NumPy, Rust traits, `fj bindgen` |
-| Verification | SMT symbolic execution, @kernel/@device proofs, DO-178C/ISO-26262 certification |
-| Effects | Algebraic effects + handlers, effect inference, effect polymorphism |
-| Dependent types | Pi types, Sigma types, refinement types, dependent array bounds |
-| GPU codegen | SPIR-V (Vulkan), PTX (CUDA), kernel fusion, auto-dispatch |
-| Production status | **100% production-ready** (V31.C "Phase D + Track B" — compiler attrs + OS security triple + LLM training resilience) |
+| Verification | SMT symbolic execution scaffolding (experimental, `--features smt`), `@kernel`/`@device` context-isolation enforcement at compile time. **Not certified** to DO-178C / ISO-26262 — those standards require multi-year third-party audit and Fajar Lang has not undergone certification. |
+| Effects | Algebraic effects + handlers — **experimental**, partial. Surface-level features work in examples; not yet stable for production. |
+| Dependent types | Pi/Sigma/refinement types — **experimental, research-grade**. Subset works in tests; not a complete dependent type theory implementation. |
+| GPU codegen | SPIR-V (Vulkan), PTX (CUDA), kernel fusion, auto-dispatch — Cranelift+LLVM-mediated; CUDA verified on RTX 4090. Embedded NPU paths (STM32N6 Neural-ART, Qualcomm Hexagon) not yet wired. |
+| Maturity status | **Pre-1.0, research-grade, experimental.** Engineering quality gates green locally (tests, clippy, fmt, doc coverage). No external production users yet. Targeted niche per `docs/1/STRATEGIC_COMPASS.md`: embedded AI safety. |
 | V27.5 additions | AI scheduler builtins, `@interrupt` ARM64+x86_64 wrappers, `@app`+`@host` annotations, `Cap<T>` linear type, refinement param checks, `fb_set_base`/`fb_scroll`, IPC stub generator |
 | V28-V31 additions | **Compiler:** `@noinline`+`@inline`+`@cold` lexer + 5-layer silent-build prevention (V29.P1), `@no_vectorize` codegen attribute IR+disasm verified (V31.B.P2), `FJ_EMIT_IR` env var (pre-opt LLVM IR dump). **CLAUDE.md:** §6.10 FS Roundtrip Coverage Rule, §6.11 Training Script Interruption-Safety Rule. **FajarOS Nova v3.4.0→v3.7.0:** SMEP re-enabled (V29.P2), SMAP re-enabled (V29.P3), NX triple closure (V29.P3.P6), Gemma 3 1B Path D audit (V30.GEMMA3 12 phases PASS), ext2+FAT32 disk harness (V30.TRACK4). **FajarQuant Phase D IntLLM:** Mini v2 PPL 80.0, **Base c.1 PASS at val_loss 3.99 / PPL 54.1 by 0.21 nat margin** (Chinchilla-optimal 21.16 tok/p, 8h03m on RTX 4090 Laptop), Track B 5-layer interruption-safety (ckpt_every/--resume/StepWatchdog/HF timeout+retry/test-train-watchdog), nohup line-buffering hardening |
 
@@ -635,8 +635,10 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full gu
 # Build
 cargo build
 
-# Test (8,092 tests)
-cargo test --features native
+# Test (18,132 total: 7,629 lib + 10,489 integ + 14 doc, verified 2026-05-07)
+cargo test --lib              # lib only
+cargo test --tests            # all 72 integration test files
+cargo test --features native  # adds Cranelift native codegen tests
 
 # Lint
 cargo clippy -- -D warnings
