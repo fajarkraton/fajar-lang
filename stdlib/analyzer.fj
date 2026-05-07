@@ -264,40 +264,59 @@ fn check_fn_call(state: AnalyzerState, name: str) -> AnalyzerState {
 // Public API
 // ═══════════════════════════════════════════════════════════════════════
 
-/// Analyze tokens from a tokenized source.
-/// Performs two passes: first registers all fn/struct/enum names,
-/// then walks the token stream checking variable usage, types, and context.
-pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
+/// Analyze tokens with parallel span arrays from `tokenize_with_spans`.
+/// Performs two passes: first registers all fn/struct/enum names (with
+/// duplicate-definition detection), then walks the token stream checking
+/// variable usage, types, and context.
+///
+/// T4 (Decision A, 2026-05-07): consumes `SpanResult` so `extract_ident`
+/// can return real source text instead of `f"var_{idx}"` placeholder.
+pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerState {
     let mut state = new_analyzer()
+    let tokens = spans.tokens
+    let starts = spans.starts
+    let ends = spans.ends
     let n = to_int(len(tokens))
 
-    // Pass 1: register all top-level function names
+    // Pass 1: register all top-level fn/struct/enum names + dup guard
     let mut i = 0
     while i < n {
         // fn name(
         if tokens[i] == 15 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, tokens, i + 1)
+            let name = extract_ident(source, starts, ends, i + 1)
+            if scope_contains(state.fn_names, name) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            }
             state = define_fn(state, name, 0)
             i = i + 2
             continue
         }
         // pub fn name(
         if tokens[i] == 25 && i + 1 < n && tokens[i + 1] == 15 && i + 2 < n && tokens[i + 2] == 133 {
-            let name = extract_ident(source, tokens, i + 2)
+            let name = extract_ident(source, starts, ends, i + 2)
+            if scope_contains(state.fn_names, name) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            }
             state = define_fn(state, name, 0)
             i = i + 3
             continue
         }
         // struct Name
         if tokens[i] == 16 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, tokens, i + 1)
+            let name = extract_ident(source, starts, ends, i + 1)
+            if scope_contains(state.var_names, name) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            }
             state = define_var(state, name, TY_UNKNOWN) // register as type name
             i = i + 2
             continue
         }
         // enum Name
         if tokens[i] == 17 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, tokens, i + 1)
+            let name = extract_ident(source, starts, ends, i + 1)
+            if scope_contains(state.var_names, name) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            }
             state = define_var(state, name, TY_UNKNOWN)
             i = i + 2
             continue
@@ -324,7 +343,7 @@ pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
             let mut is_mut = false
             if tokens[next] == 14 { is_mut = true; next = next + 1 } // mut
             if next < n && tokens[next] == 133 {
-                let name = extract_ident(source, tokens, next)
+                let name = extract_ident(source, starts, ends, next)
                 // Check for duplicate
                 if scope_contains(state.var_names, name) {
                     state = add_error(state, ERR_DUPLICATE_DEF, name)
@@ -339,7 +358,10 @@ pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
 
         // Const definition
         if tk == 22 && j + 1 < n && tokens[j + 1] == 133 {
-            let name = extract_ident(source, tokens, j + 1)
+            let name = extract_ident(source, starts, ends, j + 1)
+            if scope_contains(state.var_names, name) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            }
             state = define_var(state, name, TY_UNKNOWN)
         }
 
@@ -359,6 +381,14 @@ pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
     state
 }
 
+/// Backwards-compat shim: preserves `analyze_tokens(tokens, source)` API
+/// for `compiler.fj` L41. Re-tokenizes via `tokenize_with_spans` (work
+/// duplication; cheap relative to analysis).
+pub fn analyze_tokens(tokens: [i64], source: str) -> AnalyzerState {
+    let spans = tokenize_with_spans(source)
+    analyze_tokens_with_spans(spans, source)
+}
+
 /// Infer a basic type tag from a token kind.
 fn infer_type_from_token(kind: i64) -> i64 {
     if kind == 130 { TY_INT }      // IntLit
@@ -368,12 +398,12 @@ fn infer_type_from_token(kind: i64) -> i64 {
     else { TY_UNKNOWN }
 }
 
-/// Extract identifier text from source at a token position.
-/// This is a simplified version that returns a placeholder.
-fn extract_ident(source: str, tokens: [i64], idx: i64) -> str {
-    // In a full implementation, we'd track token spans.
-    // For now, return a numbered placeholder.
-    f"var_{idx}"
+/// Extract identifier text from source using parallel span arrays.
+/// `starts[idx]` and `ends[idx]` are byte offsets recorded by
+/// `tokenize_with_spans` in lexer.fj. T4 (Decision A, 2026-05-07):
+/// replaces `f"var_{idx}"` placeholder that broke dup-fn detection.
+fn extract_ident(source: str, starts: [i64], ends: [i64], idx: i64) -> str {
+    source.substring(starts[idx], ends[idx])
 }
 
 /// Type name from type tag.

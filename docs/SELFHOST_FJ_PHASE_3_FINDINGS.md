@@ -73,12 +73,12 @@ Lex → analyze pipeline with assertions on error count + format helpers:
 | T1 | valid `fn add(a:i64,b:i64)->i64 { a+b }` | errors=0 | 0 | ✅ PASS |
 | T2 | return outside fn | errors≥1 | 1 (ERR_RETURN_OUTSIDE_FN) | ✅ PASS |
 | T3 | break outside loop | errors≥1 | 1 (ERR_BREAK_OUTSIDE_LOOP) | ✅ PASS |
-| T4 | duplicate fn def `fn f(){} fn f(){}` | errors≥1 | 0 | ❌ FAIL — known limitation |
+| T4 | duplicate fn def `fn f(){} fn f(){}` | errors≥1 | 1 (SE006) | ✅ PASS — closed 2026-05-07 (Decision A) |
 | T5 | `analysis_ok(valid_state)` | true | true | ✅ PASS |
 | T6 | `type_name(TY_INT)` | `"i64"` | `"i64"` | ✅ PASS |
 | T7 | `format_error(1001, "x")` | `"SE001: undefined variable 'x'"` | exact | ✅ PASS |
 
-**Result: 6/7 PASS.**
+**Result: 7/7 PASS** (T4 closed 2026-05-07 — see §3.4 closure note + dedicated `tests/selfhost_analyzer_dup_detection.rs` 8-case harness).
 
 ## 3.4 — T4 honest analysis (known limitation, NOT implementation bug)
 
@@ -204,3 +204,25 @@ context detection, 8 of 16 SE error codes with format strings.
 `extract_ident` returns placeholder `var_{idx}` instead of real
 source text — documented limitation deferred to Phase 4 builtin
 plumbing. R6 added. Pattern of -94% to -97% variance holds.*
+
+---
+
+## T4 closure (2026-05-07, Decision A — fj-side spans)
+
+**Status:** ✅ T4 PASS. R6 closed.
+
+**What landed:**
+- `stdlib/lexer.fj` — new `pub struct SpanResult { tokens, starts, ends }` + `pub fn tokenize_with_spans(source) -> SpanResult` (commit `2f960844`, A1).
+- `stdlib/analyzer.fj` — `extract_ident` now slices `source.substring(starts[idx], ends[idx])` (was `f"var_{idx}"`); `analyze_tokens` renamed to `analyze_tokens_with_spans(spans, source)`; thin backwards-compat shim `analyze_tokens(tokens, source)` re-tokenizes via `tokenize_with_spans` so `compiler.fj` L41 callsite is unchanged.
+- Pass-1 dup guards added at fn / pub-fn / struct / enum sites (against the relevant scope: `fn_names` for fn/pub-fn, `var_names` for struct/enum). Pass-2 const dup guard added against `var_names`.
+- `tests/selfhost_analyzer_dup_detection.rs` — 8-case harness: dup_fn / dup_fn_with_pub_modifier / dup_fn_disjoint / dup_struct / dup_enum / dup_const / let_shadow_fn (separate namespaces — must NOT fire) / let_shadow_let_in_same_scope.
+- `tests/selfhost_analyzer_extract_ident_not_placeholder.rs` — grep-lock to prevent silent regression to placeholder.
+
+**Verification at HEAD:**
+- New tests: 9/9 PASS (`cargo test --test selfhost_analyzer_dup_detection --test selfhost_analyzer_extract_ident_not_placeholder`)
+- `cargo test --lib` 7,629 PASS, 0 fail.
+- `cargo test --tests` 10,498 PASS, 0 fail (= prior 10,489 + 9 new).
+- `cargo test --release --test selfhost_phase17_self_compile -- --test-threads=1` 4/4 PASS — Stage 2 byte-equality preserved (md5 `d47fb8a...`); analyzer.fj source change does NOT shift the compiled-output hash, RT1 closed.
+- `cargo clippy --tests --lib -- -D warnings` clean. `cargo fmt -- --check` clean.
+
+**Effort tracking (CLAUDE.md §6.8 R5):** A1 ~1h (prior session) + A2/A3/A5/A4/A6 ~1h this session = ~2h vs 6.5h cap (-69%). Pattern of large negative variance holds; the pre-flight audit B0 (`docs/T4_DUP_FN_B0_FINDINGS.md`) correctly identified that the only structural blocker was extract_ident; downstream guards + tests are mechanical.
