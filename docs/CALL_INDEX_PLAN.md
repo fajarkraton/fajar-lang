@@ -120,7 +120,8 @@ If parser were patched, what would codegen produce? Walk codegen_driver.fj L144 
 | **P2.1** | L139-154 (BEGIN_INDEX dispatch) | Replace `let arr_name = ast[pos+1]` with case-split on `ast[pos+1]` tag: IDENT → existing path; BEGIN_CALL → recurse + lookup_fn_ret_type(callee); BEGIN_METHOD_CALL → recurse + D3 lookup. | `./target/release/fj run /tmp/b0_call_index_i64.fj` exits 20 | +30% |
 | **P2.2** | L197-201 (push-arg dispatch reading ast[first_arg_pos+1] as IDENT) | Gate IDENT-name lookup behind `subject IS IDENT` check. | grep verifies guard. P81 PASS. | +20% |
 | **P2.3** | L361-365 (`to_int` BEGIN_INDEX dispatch) | Same surgery as P2.2. | P82 PASS. | +20% |
-| **P2.4** | L139-154 cursor audit | Verify `r.pos + 1` after subj-recurse + index-parse still correct. | P83 (`f()[g()]`) PASS. | +30% (off-by-one prototypical bug) |
+| **P2.4** ✅ | L139-154 cursor audit | Verify `r.pos + 1` after subj-recurse + index-parse still correct. | P83 (`f()[g()]`) PASS. | +30% (off-by-one prototypical bug) |
+| **P2.4 closure note (2026-05-07)** | Audit only, no code change. The `r_idx.pos + 1` (skip END_INDEX) idiom is consistent across all three BEGIN_INDEX subject paths (IDENT @ L183, BEGIN_CALL @ L159, BEGIN_METHOD_CALL @ L168). Trace for `make_arr()[one()]`: parse_atom on BEGIN_CALL block → r_subj.pos past END_CALL; parse_expr_emit on index → r_idx.pos past END_CALL; +1 lands past END_INDEX. P83 + P85 (two invocations) PASS confirm correctness. | full_p83 + full_p85 GREEN | actual ~10min, est ~1.5h, **-89%** |
 
 ### Phase P3 — Method ret-type registry (D3.B)
 
