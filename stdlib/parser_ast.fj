@@ -532,6 +532,15 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
             }
             // Method call: last segment in chain followed by `(`
             if to_int(len(field_chain)) > 0 && cur_after < n && src.substring(cur_after, cur_after + 1) == "(" {
+                // CALL_INDEX P1.2 (Decision D1.A, 2026-05-07): capture
+                // ast length BEFORE any BEGIN_METHOD_CALL pushes so
+                // maybe_wrap_call_index can splice BEGIN_INDEX in at
+                // that position when `[` follows the final chain `)`.
+                // Symmetric to P1.1 in the BEGIN_CALL branch above.
+                // Deferred (DG-P1.2): `obj.m()[i].n()` — chain
+                // continuation after index — would need an extra
+                // post-wrap chain-loop iteration. Out of P1 scope.
+                let len_before_method = to_int(len(ast))
                 let nchain = to_int(len(field_chain))
                 let method_name = field_chain[nchain - 1]
                 // Phase 16.5: detect chained method calls `a.f(x).g(y).h(z)`.
@@ -616,7 +625,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                     subj_a = subj_a.push("END_METHOD_CALL")
                     remaining = remaining - 1
                 }
-                return pr_ok(subj_a, cur)
+                return maybe_wrap_call_index(src, subj_a, cur, len_before_method)
             }
             // Array indexing: IDENT[expr] or IDENT.f1.f2[expr] (Phase 17.4:
             // codegen.fj uses `state.lines[i]` — field chain followed by index).
