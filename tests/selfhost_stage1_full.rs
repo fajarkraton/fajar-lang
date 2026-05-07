@@ -1098,6 +1098,20 @@ fn full_p85_call_index_i64_two_invocations() {
 }
 
 #[test]
+fn full_p84_method_index_chained_push() {
+    // CALL_INDEX P3.2 (2026-05-07): exercises BEGIN_INDEX over BEGIN_METHOD_CALL.
+    // `a.push(9)[2]` is BEGIN_INDEX wrapping a BEGIN_METHOD_CALL chain (parser
+    // P1.2). Codegen P3.2 routes this through map_method_ret_type — `push`
+    // returns "" (no fixed ret-type), so default _fj_arr_get_i64 helper wins,
+    // matching the [i64] subject. Verifies the wire-up path doesn't regress.
+    let r = compile_subset_program(
+        "full_p84",
+        "fn main() -> i64 { let mut a: [i64] = []; a = a.push(7); a = a.push(8); return a.push(9)[2] }",
+    );
+    assert_eq!(r.status.code(), Some(9));
+}
+
+#[test]
 fn full_p86_call_index_push_into_str_array() {
     // CALL_INDEX P2.2: free `push(arr, f()[i])` form. Verifies that with
     // P1.1+P2.1+P2.3 wiring, the second arg `make_strs()[0]` (BEGIN_INDEX

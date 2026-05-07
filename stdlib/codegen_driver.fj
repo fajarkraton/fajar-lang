@@ -159,13 +159,16 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             exr(concat!(helper, "(", r_subj.code, ", ", r_idx.code, ")"), r_idx.pos + 1)
         } else if first_child == "BEGIN_METHOD_CALL" {
             // Subject is a method-call chain. Same parse_atom rationale as above.
-            // P3.2 (deferred): wire map_method_ret_type for [str] dispatch.
-            // Until then default to _fj_arr_get_i64 — B0.3 confirms no
-            // method maps to [str] ret-type today, so this is a safe
-            // bridge that emits valid C for any current source.
+            // CALL_INDEX P3.2 (2026-05-07): wire map_method_ret_type to drive
+            // [str] vs i64 helper choice. No method currently returns "[str]"
+            // (B0.3), so all current sources route to _fj_arr_get_i64; the
+            // wire-up is forward-investment for when methods return [str].
             let r_subj = parse_atom(ast, vars, pos + 1, cg)
+            let method = find_method_name(ast, pos + 1)
+            let method_ret = map_method_ret_type(method)
+            let helper = if method_ret == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
             let r_idx = parse_expr_emit(ast, vars, r_subj.pos, cg)
-            exr(concat!("_fj_arr_get_i64(", r_subj.code, ", ", r_idx.code, ")"), r_idx.pos + 1)
+            exr(concat!(helper, "(", r_subj.code, ", ", r_idx.code, ")"), r_idx.pos + 1)
         } else {
             // IDENT path (existing): arr[i] or state.lines[i].
             // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
@@ -398,9 +401,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                     let idx_callee = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
                     lookup_fn_ret_type(cg, idx_callee) == "[str]"
                 } else if idx_first_child == "BEGIN_METHOD_CALL" {
-                    // obj.m()[i]: deferred to P3.2 (map_method_ret_type).
-                    // No method returns [str] today (B0.D0), so safe default.
-                    false
+                    // CALL_INDEX P3.2 (2026-05-07): wire map_method_ret_type.
+                    // If method returns [str], indexing yields str → atoll.
+                    // No current method returns [str] (B0.3) → defaults false.
+                    let idx_method = find_method_name(ast, pos + 3)
+                    map_method_ret_type(idx_method) == "[str]"
                 } else {
                     // IDENT path: arr[i] over [str]-typed arr.
                     let idx_arr_type = lookup_var_type_in_table(vars, idx_first_child)
@@ -492,9 +497,12 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                     if ret_t == "[[str]]" { name = "_fj_arr_push_str" }
                     else { name = "_fj_arr_push_i64" }
                 } else if idx_first_child == "BEGIN_METHOD_CALL" {
-                    // obj.m()[i]: deferred to P3.2 (map_method_ret_type).
-                    // No method returns [[str]] today, so safe default.
-                    name = "_fj_arr_push_i64"
+                    // CALL_INDEX P3.2 (2026-05-07): wire map_method_ret_type.
+                    // If method returns [[str]], indexing yields [str] → push_str.
+                    // No current method returns [[str]] (B0.3) → defaults push_i64.
+                    let idx_method = find_method_name(ast, pos + 3)
+                    if map_method_ret_type(idx_method) == "[[str]]" { name = "_fj_arr_push_str" }
+                    else { name = "_fj_arr_push_i64" }
                 } else {
                     // IDENT subject: push(arrs[i], elem) over [[T]]-typed arr.
                     let idx_arr_type = lookup_var_type_in_table(vars, idx_first_child)
@@ -562,6 +570,19 @@ fn map_method(method: str) -> str {
     if method == "push" { return "_fj_arr_push_i64" }
     if method == "len" { return "_fj_arr_len" }
     if method == "join" { return "_fj_arr_join_str" }
+    ""
+}
+
+// CALL_INDEX P3.1 (2026-05-07): map fj method name → declared return type.
+// Used by BEGIN_INDEX-subject dispatch (P3.2) to choose [str] vs i64 helper
+// when the index subject is BEGIN_METHOD_CALL. Returns "" when method has
+// no fixed ret-type (e.g. push preserves subject's array type, which can't
+// be determined from the method name alone).
+fn map_method_ret_type(method: str) -> str {
+    if method == "substring" { return "str" }
+    if method == "concat" { return "str" }
+    if method == "join" { return "str" }
+    if method == "len" { return "i64" }
     ""
 }
 
