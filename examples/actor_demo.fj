@@ -41,7 +41,8 @@ fn main() {
 
     // Apply supervision strategy
     let result = actor_supervise(echo, "one_for_one")
-    println("Supervision: " + result)
+    print("Supervision: ")
+    println(result)
     println("")
 
     // Graceful shutdown

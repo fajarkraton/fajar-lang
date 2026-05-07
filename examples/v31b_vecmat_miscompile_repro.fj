@@ -1,3 +1,7 @@
+// TIMEOUT: long-running (large iteration count for miscompile repro).
+// `fj run` with a 15s timeout reports rc=124. This file is a debugging
+// artifact, not a tutorial. See docs/EXAMPLES_SWEEP_2026_05_07.md.
+//
 // V31.B.P0.1 — Minimal repro of km_vecmat_packed_v8 LLVM O2 miscompile.
 //
 // The kernel's km_vecmat_packed_v8 function (pre-V30.P3.6, see

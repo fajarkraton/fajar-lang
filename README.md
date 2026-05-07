@@ -487,7 +487,7 @@ fajar-lang/
     plugin/             Compiler plugin system (AST-phase)
     playground/         WASM playground (wasm-bindgen)
   stdlib/               Fajar Lang standard library (.fj source)
-  examples/             245 example .fj programs (sample-tested; full sweep open per RE_AUDIT NEW-4)
+  examples/             241 .fj programs (96.7% pass via `fj run`); 4 forward-looking in examples/aspirational/
   tests/                Integration tests (eval, ML, OS, safety, property)
   benches/              Criterion benchmarks
   packages/             37 standard packages
@@ -527,7 +527,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | Doc coverage | **95.79% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
 | Error-code coverage | **gap=0** — 135 cataloged, 125 covered + 12 forward-compat (per §6.6 R6); `python3 scripts/audit_error_codes.py --strict` enforces |
 | Tutorial | `docs/TUTORIAL.md` 10 chapters, basics → robot control loop |
-| Examples | 245 `.fj` programs + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). Sample-tested; full sweep open per RE_AUDIT NEW-4. |
+| Examples | 241 `.fj` programs + 4 forward-looking in `examples/aspirational/` (annotation/syntax not yet implemented; see [aspirational README](examples/aspirational/README.md)) + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). **Full sweep**: 233/241 (~96.7%) pass via `fj run` (15s timeout); 4 require harness concatenation (selfhost test programs), 1 was real bug now fixed (`actor_demo.fj`), 3 are documented long-runners (mnist_real, rest_api_crud, vecmat repro). See `docs/EXAMPLES_SWEEP_2026_05_07.md`. |
 | Benchmarks | 5 vs C/Rust/Go (fibonacci, bubble_sort, sum_loop, matrix_multiply, mandelbrot) — `bash benches/baselines/run_baselines.sh` |
 | FajarQuant | Algorithm research repo at `fajarkraton/fajarquant`. Earlier "49-86% lower MSE vs TurboQuant" claim was a protocol artifact (post-hoc cache mutation); under canonical R-α.1 model surgery the result reverses. See `memory/feedback_research_integrity.md` and CLAUDE.md §6.9. Current FjQ Phase E in flight; published claims gated by `verify_paper_tables.py --strict`. |
 | JIT | Cranelift native compilation (see Performance Benchmarks for actual numbers; "76× on fib(30)" was an early demo, current Cranelift JIT shows 12× over C — see `benches/baselines/RESULTS.md`) |

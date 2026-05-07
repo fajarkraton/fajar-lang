@@ -1,3 +1,8 @@
+// TIMEOUT: long-running (server runs until killed). Not a candidate
+// for the default examples sweep — `fj run` with a 15s timeout reports
+// rc=124. To exercise: `fj run --features https examples/rest_api_crud.fj`
+// and curl the listening port. See docs/EXAMPLES_SWEEP_2026_05_07.md.
+//
 // rest_api_crud.fj — Production REST API with HTTP Framework
 //
 // Demonstrates V10 HTTP server framework:

@@ -1,12 +1,18 @@
 // examples/selfhost_compiler.fj — Stage-1.5 self-host driver.
 //
+// HARNESS-ONLY: this example consumes stdlib modules (parser_ast,
+// codegen, codegen_driver) and only runs after they're concatenated
+// in front. Do NOT run via plain `fj run examples/selfhost_compiler.fj`
+// — you'll get SE001 "undefined variable 'parse_to_ast'" because the
+// fj CLI doesn't auto-load stdlib/*.fj. Run via:
+//
+//   cat stdlib/codegen.fj stdlib/parser_ast.fj stdlib/codegen_driver.fj \
+//     examples/selfhost_compiler.fj > /tmp/combined.fj
+//   fj run /tmp/combined.fj
+//
 // Reads a target .fj source from disk, runs the lex+parse+codegen
 // pipeline, writes the emitted C to disk, and shells out to gcc to
 // produce a native binary. Then prints the binary's exit code.
-//
-// Usage (after concatenating stdlib/codegen.fj + parser_ast.fj +
-// codegen_driver.fj on top of this file):
-//   fj run combined_selfhost.fj <target.fj> <output.bin>
 //
 // In practice we hardcode the I/O paths since fj-lang doesn't yet
 // expose argv to fj-source. This driver demonstrates the mechanics.

@@ -1,3 +1,8 @@
+// TIMEOUT: long-running. Full MNIST training takes minutes to hours
+// depending on backend and `--release` build. Not a candidate for the
+// default examples sweep — `fj run` with a 15s timeout reports rc=124
+// (timeout). See docs/EXAMPLES_SWEEP_2026_05_07.md.
+//
 // V16 R1: MNIST Training with Real Data (IDX Binary Format)
 // Requires: MNIST dataset files in data/mnist/ directory
 // Download from: https://yann.lecun.com/exdb/mnist/
