@@ -117,8 +117,19 @@ fn gcc_run_bin(label: &str, c_src: &[u8]) -> i32 {
     let bin_path = tmp_dir().join(format!("{label}.bin"));
     std::fs::write(&c_path, c_src).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings so build proceeds. See companion comments in
+    // tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(

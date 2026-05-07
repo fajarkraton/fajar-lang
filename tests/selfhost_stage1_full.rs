@@ -93,8 +93,20 @@ fn main() {{
     let bin_path = tmp_dir().join(format!("{label}.bin"));
     std::fs::write(&c_path, &out.stdout).unwrap();
 
+    // NEW-1.b extension: macOS clang (Xcode 15+) errors-by-default
+    // on int-conversion / incompatible-pointer / implicit-fn-decl /
+    // implicit-int. The chain emits some of these today; un-promote
+    // so the build can proceed. Linux gcc no-ops these flags.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(

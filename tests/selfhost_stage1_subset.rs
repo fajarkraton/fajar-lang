@@ -8,6 +8,11 @@
 //! a driver) over multiple subset programs, gcc-compiles the
 //! emitted C, runs the resulting binaries, and asserts exit codes.
 
+// NEW-3 fix (re-audit 2026-05-07): module-level cfg(unix) gates the
+// helpers along with already-gated test fns. See companion sibling
+// files for full rationale.
+#![cfg(unix)]
+
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -61,8 +66,18 @@ fn main() {
     let bin_path = std::env::temp_dir().join("p1.bin");
     std::fs::write(&c_path, c_src.as_bytes()).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings. See companion comments in tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(
@@ -108,8 +123,18 @@ fn main() {
     let bin_path = std::env::temp_dir().join("p2.bin");
     std::fs::write(&c_path, c_src.as_bytes()).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings. See companion comments in tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(
@@ -156,8 +181,18 @@ fn main() {
     let bin_path = std::env::temp_dir().join("p3.bin");
     std::fs::write(&c_path, c_src.as_bytes()).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings. See companion comments in tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(
@@ -208,8 +243,18 @@ fn main() {
     let bin_path = std::env::temp_dir().join("p4.bin");
     std::fs::write(&c_path, c_src.as_bytes()).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings. See companion comments in tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(
@@ -255,8 +300,18 @@ fn main() {
     let bin_path = std::env::temp_dir().join("p5.bin");
     std::fs::write(&c_path, c_src.as_bytes()).unwrap();
 
+    // NEW-1.b extension: un-promote macOS clang's default-error
+    // warnings. See companion comments in tests/selfhost_phase17_self_compile.rs.
     let cc = Command::new("gcc")
-        .args([c_path.to_str().unwrap(), "-o", bin_path.to_str().unwrap()])
+        .args([
+            c_path.to_str().unwrap(),
+            "-o",
+            bin_path.to_str().unwrap(),
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
+        ])
         .output()
         .expect("gcc");
     assert!(

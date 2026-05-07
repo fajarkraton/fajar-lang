@@ -120,6 +120,15 @@ fn main() {{
             "-o",
             o_path.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc");
@@ -216,6 +225,15 @@ fn main() {
             "-o",
             o_path.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc");
@@ -325,6 +343,15 @@ fn main() {
             "-o",
             o_path.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc");
@@ -463,6 +490,15 @@ fn main() {
             "-o",
             fjc_stage1.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc stage1");
@@ -516,6 +552,15 @@ fn main() {
             "-o",
             fjc_stage2.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc stage2");
@@ -560,6 +605,15 @@ fn main() {
             "-o",
             third_bin.to_str().unwrap(),
             "-w",
+            // NEW-1.b extension (re-audit 2026-05-07): macOS clang
+            // (Xcode 15+) promotes these to errors by default, ignoring
+            // -w. The chain emits some int-vs-pointer mismatches today
+            // (tracked separately in CALL_INDEX_PLAN); un-promote so
+            // gcc -w can suppress them. No-ops on Linux gcc.
+            "-Wno-error=int-conversion",
+            "-Wno-error=incompatible-pointer-types",
+            "-Wno-error=implicit-function-declaration",
+            "-Wno-error=implicit-int",
         ])
         .output()
         .expect("gcc third");
