@@ -139,19 +139,49 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
     } else if tag == "BEGIN_INDEX" {
         // Phase 15.1: dispatch by declared array element type if known.
         // Phase 17.4: support FIELD chain on subject (e.g. state.lines[i]).
-        // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
-        //         _fj_arr_get_i64(arr, i) otherwise (default for [i64] or unknown)
-        let arr_name = ast[pos + 1]
-        let mut p_subj = pos + 2
-        let mut subj = arr_name
-        while p_subj + 1 < n && ast[p_subj] == "FIELD" {
-            subj = concat!(subj, ".", ast[p_subj + 1])
-            p_subj = p_subj + 2
+        // CALL_INDEX P2.1 (Decision D1.A, 2026-05-07): subject can also
+        // be BEGIN_CALL or BEGIN_METHOD_CALL per parser P1.1/P1.2.
+        // Case-split on first child tag.
+        let first_child = ast[pos + 1]
+        if first_child == "BEGIN_CALL" {
+            // Subject is a function call: BEGIN_INDEX BEGIN_CALL <name> <args> END_CALL <idx> END_INDEX.
+            // Callee name is at ast[pos + 2] (immediately after BEGIN_CALL).
+            // Look up callee's declared return type for [str]/[i64] dispatch.
+            // Use parse_atom (NOT parse_expr_emit) for the subject so we
+            // consume just BEGIN_CALL...END_CALL as one atom — parse_expr_emit
+            // is greedy and would also slurp the index expression into the
+            // same code stream, returning the wrong code/position.
+            let callee = if pos + 2 < n { ast[pos + 2] } else { "" }
+            let r_subj = parse_atom(ast, vars, pos + 1, cg)
+            let ret_type = lookup_fn_ret_type(cg, callee)
+            let helper = if ret_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
+            let r_idx = parse_expr_emit(ast, vars, r_subj.pos, cg)
+            exr(concat!(helper, "(", r_subj.code, ", ", r_idx.code, ")"), r_idx.pos + 1)
+        } else if first_child == "BEGIN_METHOD_CALL" {
+            // Subject is a method-call chain. Same parse_atom rationale as above.
+            // P3.2 (deferred): wire map_method_ret_type for [str] dispatch.
+            // Until then default to _fj_arr_get_i64 — B0.3 confirms no
+            // method maps to [str] ret-type today, so this is a safe
+            // bridge that emits valid C for any current source.
+            let r_subj = parse_atom(ast, vars, pos + 1, cg)
+            let r_idx = parse_expr_emit(ast, vars, r_subj.pos, cg)
+            exr(concat!("_fj_arr_get_i64(", r_subj.code, ", ", r_idx.code, ")"), r_idx.pos + 1)
+        } else {
+            // IDENT path (existing): arr[i] or state.lines[i].
+            // arr[i] → _fj_arr_get_str(arr, i) when arr declared as [str]
+            //         _fj_arr_get_i64(arr, i) otherwise (default).
+            let arr_name = ast[pos + 1]
+            let mut p_subj = pos + 2
+            let mut subj = arr_name
+            while p_subj + 1 < n && ast[p_subj] == "FIELD" {
+                subj = concat!(subj, ".", ast[p_subj + 1])
+                p_subj = p_subj + 2
+            }
+            let r = parse_expr_emit(ast, vars, p_subj, cg)
+            let arr_type = lookup_var_type_in_table(vars, arr_name)
+            let helper = if arr_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
+            exr(concat!(helper, "(", subj, ", ", r.code, ")"), r.pos + 1)
         }
-        let r = parse_expr_emit(ast, vars, p_subj, cg)
-        let arr_type = lookup_var_type_in_table(vars, arr_name)
-        let helper = if arr_type == "[str]" { "_fj_arr_get_str" } else { "_fj_arr_get_i64" }
-        exr(concat!(helper, "(", subj, ", ", r.code, ")"), r.pos + 1)
     } else if tag == "BEGIN_METHOD_CALL" {
         // Phase 16.5: subject can be ANY expression (incl. nested
         // BEGIN_METHOD_CALL for chained calls). Parse subject via

@@ -1043,3 +1043,42 @@ fn full_p64_struct_typed_let_via_call_no_annotation() {
     );
     assert_eq!(r.status.code(), Some(77));
 }
+
+#[test]
+fn full_p81_call_index_i64_baseline() {
+    // CALL_INDEX P2.1 (Decision D1.A, 2026-05-07): `f()[i]` over [i64]
+    // ret-type. Parser P1.1 wraps BEGIN_CALL block in BEGIN_INDEX;
+    // codegen P2.1 case-splits BEGIN_INDEX dispatch on first child tag,
+    // recurses on the call, looks up ret_type via lookup_fn_ret_type
+    // and dispatches to _fj_arr_get_i64.
+    let r = compile_subset_program(
+        "full_p81",
+        "fn make_arr() -> [i64] { let mut a: [i64] = []; a = a.push(10); a = a.push(20); a = a.push(30); return a } fn main() -> i64 { return make_arr()[1] }",
+    );
+    assert_eq!(r.status.code(), Some(20));
+}
+
+#[test]
+fn full_p83_call_index_i64_nested_index_call() {
+    // CALL_INDEX P2.1: index expression itself is a function call.
+    // Verifies the index-side parse_expr_emit recursion (no special
+    // handling needed — just that we re-enter parse_expr_emit on the
+    // index slot, not assume INT atom).
+    let r = compile_subset_program(
+        "full_p83",
+        "fn one() -> i64 { return 1 } fn make_arr() -> [i64] { let mut a: [i64] = []; a = a.push(10); a = a.push(20); a = a.push(30); return a } fn main() -> i64 { return make_arr()[one()] }",
+    );
+    assert_eq!(r.status.code(), Some(20));
+}
+
+#[test]
+fn full_p85_call_index_i64_two_invocations() {
+    // CALL_INDEX P2.1: same call appears twice in one expression
+    // (`f()[0] + f()[1]`). Each gets its own BEGIN_INDEX wrapper +
+    // independent codegen pass; len_before captured per call site.
+    let r = compile_subset_program(
+        "full_p85",
+        "fn make_arr() -> [i64] { let mut a: [i64] = []; a = a.push(7); a = a.push(8); return a } fn main() -> i64 { return make_arr()[0] + make_arr()[1] }",
+    );
+    assert_eq!(r.status.code(), Some(15));
+}
