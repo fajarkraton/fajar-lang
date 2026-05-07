@@ -478,6 +478,29 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                     if t == "[str]" { name = "_fj_arr_push_str" }
                     else { name = "_fj_arr_push_i64" }
                 }
+            } else if arg_tag == "BEGIN_INDEX" {
+                // CALL_INDEX P2.2 (Decision D1.A, 2026-05-07): first arg of
+                // free `push` may be a BEGIN_INDEX expression
+                // (`push(arrs[i], elem)` or `push(f()[i], elem)`).
+                // Mirror the P2.3 to_int pattern: case-split on idx_first_child.
+                let idx_first_child = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+                if idx_first_child == "BEGIN_CALL" {
+                    // f()[i]: subject is fn call. Look up callee's ret-type.
+                    // [[str]] → push-element is [str]-typed arr → push_str.
+                    let idx_callee = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                    let ret_t = lookup_fn_ret_type(cg, idx_callee)
+                    if ret_t == "[[str]]" { name = "_fj_arr_push_str" }
+                    else { name = "_fj_arr_push_i64" }
+                } else if idx_first_child == "BEGIN_METHOD_CALL" {
+                    // obj.m()[i]: deferred to P3.2 (map_method_ret_type).
+                    // No method returns [[str]] today, so safe default.
+                    name = "_fj_arr_push_i64"
+                } else {
+                    // IDENT subject: push(arrs[i], elem) over [[T]]-typed arr.
+                    let idx_arr_type = lookup_var_type_in_table(vars, idx_first_child)
+                    if idx_arr_type == "[[str]]" { name = "_fj_arr_push_str" }
+                    else { name = "_fj_arr_push_i64" }
+                }
             }
         }
         // strlen is C stdlib; pass through unchanged

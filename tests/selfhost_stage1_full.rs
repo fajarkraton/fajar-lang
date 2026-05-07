@@ -1096,3 +1096,19 @@ fn full_p85_call_index_i64_two_invocations() {
     );
     assert_eq!(r.status.code(), Some(15));
 }
+
+#[test]
+fn full_p86_call_index_push_into_str_array() {
+    // CALL_INDEX P2.2: free `push(arr, f()[i])` form. Verifies that with
+    // P1.1+P2.1+P2.3 wiring, the second arg `make_strs()[0]` (BEGIN_INDEX
+    // over BEGIN_CALL returning [str]) parses + lowers correctly while the
+    // first arg `out` (IDENT [str]) drives the push-variant dispatch
+    // (_fj_arr_push_str). P2.2 itself extends push dispatch to also handle
+    // BEGIN_INDEX-as-first-arg (forward-investment for [[T]]-shaped arrays;
+    // not exercised by this test since [[T]] doesn't surface in stdlib).
+    let r = compile_subset_program(
+        "full_p86",
+        "fn make_strs() -> [str] { let mut a: [str] = []; a = a.push(\"hi\"); return a } fn main() -> i64 { let mut out: [str] = []; out = push(out, make_strs()[0]); return strlen(out[0]) }",
+    );
+    assert_eq!(r.status.code(), Some(2));
+}
