@@ -88,87 +88,42 @@ detailed entries.
 ### Current Totals (v35.0.0 "STAGE 2 SELF-HOST TRIPLE-TEST", 2026-05-06)
 
 ```
-Tests:     7,629 lib + 10,489 integ (in 72 test files) + 14 doc + 1 ignored
-           = 18,132 total | 0 failures, 0 flakes
-           Verified 2026-05-06 via `cargo test --lib`, `cargo test --tests`,
-           `cargo test --doc`. Prior CLAUDE.md numbers (8,974 / 2,498) were
-           stale from v33.2.0; lib count drift is expected (test consolidation
-           during v34 self-host work), integ count surfaced after fixing
-           shell-glob mistake `--test '*'` (only 1 target) → `--tests` (all 72).
-           Stress: 5/5 consecutive runs at `cargo test --lib -- --test-threads=64`
-           LLVM: 162+ tests pass under --features llvm,native
-LOC:       ~449,000 lines of Rust (391+ files in src/)
-Examples:  243 .fj programs + 6 multi-file real-project folders
-           Binary: 18 MB release | MSRV: Rust 1.87
-Modules:   42 lib.rs pub mods | 54 [x], 0 [sim], 0 [f], 0 [s] (54 logical)
-           Source of truth: docs/HONEST_AUDIT_V33.md (P0-P9 closed; no demotions)
-           V26 Phase A3 closed all 5 framework + 2 stub modules. 0 remaining.
-CLI:       39 subcommands declared in src/main.rs, all production
-CI:        7 GitHub Actions workflows (CI, Embedded, Docs, Release, nightly,
-           release.yml, fuzz job) — release.yml triggers on v*.*.* tags
-Feature Flags: websocket, mqtt, ble, gui, https, native (Cranelift), llvm, registry, cuda, wasm, playground-wasm
-Quality:   0 clippy warnings (all 20 features) | 0 production .unwrap()
-           0 rustdoc warnings (incl. --document-private-items)
-           0 fmt diffs | 0 test failures | 0 flakes
-           95.79% pub-item doc coverage (scripts/check_doc_coverage.sh)
-           100% stdlib_v3 doc coverage (scripts/check_stdlib_docs.sh)
-           0 error-code coverage gap (135 cataloged, 125 covered, 12 forward-compat;
-             scripts/audit_error_codes.py --strict gap=0)
-FajarQuant: extracted to standalone repo `fajarkraton/fajarquant` (V26 A4)
-            wire-up via Cargo path dep + re-export shim, 16 integ tests pass
-Threading: Real std::thread actors + Arc<Mutex> throughout interpreter
-GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, async streams, 3x speedup)
-Hooks:     Pre-commit rejects fmt drift (scripts/git-hooks/pre-commit, V26 A1.2)
-Tags:      v32.1.0 (P0-P6 milestone, tag-only) +
-           v33.0.0 (Perfection-Complete, GitHub Release w/ 5 binaries) +
-           v33.1.0 (FAJAROS_100PCT partial — 8/9 gaps + Phase 6.6 12/17 stubs) +
-           v33.1.1 (inline asm dialect fix + $ escape discovery) +
-           v33.2.0 (FAJAROS_100PCT TERMINAL COMPLETE — 9/9 gaps,
-                    vecmat_v8.c deleted, ZERO non-fj LOC in fajaros kernel) +
-           v33.4.0..v33.8.0 (self-host phases 9–11) +
-           v34.0.0..v34.5.13 (R14 + Phase 16 + Phase 17 build-up) +
-           v35.0.0 (🎯 STAGE 2 SELF-HOST TRIPLE-TEST — fixed point achieved,
-                    fjc 140KB ELF, ~57× speedup, GitHub Release w/ 5 binaries)
+Tests:     7,629 lib + 10,489 integ (72 files) + 14 doc + 1 ignored = 18,132 (0 fail, 0 flake, 2026-05-06)
+           Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
+LOC:       ~449,000 Rust (391+ files) | Binary 18 MB | MSRV 1.87 | 243 .fj examples
+Modules:   42 pub mods | 54 [x], 0 [sim]/[f]/[s] (HONEST_AUDIT_V33; V26 A3 closed all gaps)
+CLI:       39 subcommands (all production) | CI: 7 workflows | Features: 11 flags
+Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.79% pub-doc | 100% stdlib_v3 doc
+           0 error-code gap (135 cataloged, scripts/audit_error_codes.py --strict)
+GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, 3× speedup)
+Tags:      v32.1.0 → v33.{0,1,2}.0 → v33.4.0..v33.8.0 → v34.{0..5.13} → v35.0.0 LIVE
+           v33.2.0: FAJAROS_100PCT TERMINAL (9/9 gaps, ZERO non-fj LOC)
+           v35.0.0: 🎯 Stage 2 self-host triple-test (fjc 140KB ELF, ~57× speedup)
 
-Labeling: [x] = production (tested, works E2E)
-          [sim] = simulated — NONE REMAINING (all upgraded to [x] in V21)
-          [f] = framework (code exists, not callable from .fj)
-          [s] = stub (near-empty placeholder)
-
-Numbers verified by runnable commands as of 2026-05-06 (v35.0.0 sync).
-Drift history → `docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md` (v34..v35) + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` (v33).
+Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
+Drift history → docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md + docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md
 ```
 
-### Version History (V18 → v35.0.0)
+### Version History
 
-> **Detailed entries:** `CHANGELOG.md` (root) — has V20.8 → v35.0.0 with full
-> Added/Changed/Fixed/Removed/Stats sections. V18-V20 history lives in
-> git log (`git log --oneline --grep="V1[89]\|V20"`).
+> **Detailed entries:** `CHANGELOG.md` (root). V18-V20 in `git log --oneline --grep="V1[89]\|V20"`.
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc Stage 1 (140KB ELF) compiles its own source byte-identical (md5 1d6c52a...); Stage 2 == Stage 1 cross-equivalence on third-party input (md5 d47fb8a...); 7 silent bugs fixed; ~57× speedup. Findings: SELFHOST_FJ_PHASE_17. |
-| **v34.5.0..v34.5.13** | 2026-05-05..06 | Phase 16+17 build-up: Pratt precedence, struct-typed sigs, [T] field/ret, chained methods, parser_ast.fj+codegen.fj self-compile, Arc<Vec<Value>>, native-binary chain. Findings: SELFHOST_FJ_PHASE_{16,17}. |
-| **v34.0.0..v34.4.0** | 2026-05-05 | R14 increments: string + dyn arrays + concat! + match expression. |
+| **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. |
+| **v34.5.0..v34.5.13** | 2026-05-05..06 | Phase 16+17 build-up: Pratt precedence, struct sigs, [T] fields, chained methods, parser_ast.fj+codegen.fj self-compile. |
+| **v34.0.0..v34.4.0** | 2026-05-05 | R14: string + dyn arrays + concat! + match expression. |
 | **v33.4.0..v33.8.0** | 2026-05-05 | Self-host phases 9–11: Stage-1-Full closure, struct lit/field, match. |
-| **v33.2.0** "FAJAROS_100PCT TERMINAL" | 2026-05-05 | 9/9 fj-lang LLVM gaps closed (G-A/B/C/G/H/I/K/M/N); vecmat_v8.c DELETED; ZERO non-fj LOC in kernel build path. G-M: `--code-model kernel` implies LLVM `noredzone`. |
-| **v33.1.0 / v33.1.1** | 2026-05-05 | 8/9 compiler gaps; Phase 6.6 12/17 stubs → @naked fn. Inline asm `$ → $$` escape pattern. |
-| **V33 / v33.0.0** "Perfection Complete" | 2026-05-03 | PERFECTION_PLAN P0-P9 closed engineering-side. 22/25 PASS; 3 await external action. ~280 tests, 5 audit scripts, 13 docs, 2 benchmarks. GitHub Release LIVE w/ 5 binaries. ~14h vs 218-336h (-95%). |
-| **v32.1.0 / V32** | 2026-05-02..03 | v32.1.0 tag-only (release.yml failure fixed in v33.0.0). HONEST_AUDIT_V32: 0 demotions; 5 gaps (G1 deferred; G2-G5 closed via F1-F4). PERFECTION_PLAN v1.0 enumerates 25 items — closed in V33. |
-| **V30.TRACK4 / V30.GEMMA3** | 2026-04-20 | FajarOS Nova v3.7.0 ext2/FAT32 + Gemma 3 1B 12 phases audit-PASS. Surfaces §6.10 rule. |
-| **V29 / V27 / V26** | 2026-04-11..16 | NX triple closure; @noinline/@inline/@cold lexer; AI scheduler builtins + @interrupt + Cap<T>; V26 "Final" (80/80 stress, 0 unwraps, §6.7 rule). |
+| **v33.2.0** "FAJAROS_100PCT TERMINAL" | 2026-05-05 | 9/9 LLVM gaps closed; vecmat_v8.c DELETED; ZERO non-fj LOC in kernel. |
+| **v33.0.0..v33.1.1** | 2026-05-03..05 | Perfection Complete (P0-P9, 22/25 PASS); 8/9 compiler gaps; @naked fn; `$→$$` asm escape. |
+| **v32.1.0 / V32** | 2026-05-02..03 | HONEST_AUDIT_V32: 0 demotions; 5 gaps (G1 deferred; G2-G5 closed). |
+| **V30.TRACK4 / V30.GEMMA3** | 2026-04-20 | FajarOS Nova ext2/FAT32 + Gemma 3 1B 12 phases. Surfaces §6.10. |
+| **V29 / V27 / V26** | 2026-04-11..16 | NX triple closure; @noinline/@inline/@cold; AI scheduler + @interrupt + Cap<T>; V26 "Final" (§6.7 rule). |
 
-> V18-V25 + detailed V26-V30 entries: full detail in `CHANGELOG.md` + `git log --oneline --grep="V[12][0-9]"`.
-
-### FajarOS (two platforms)
+### Platforms
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
-- **FajarOS Nova** (x86_64): **100% Fajar Lang as of 2026-05-05** (FAJAROS_100PCT_FJ_PLAN TERMINAL COMPLETE; ZERO non-fj LOC in kernel build path). V26 LLM E2E (SmolLM-135M v5/v6) + V31 IntLLM Phase D + V30.GEMMA3 Gemma 3 1B in-kernel paths, 14 LLM shell commands. Boot to `nova>` reliably in QEMU. 5/5 gemma3-e2e PASS gates verified at every Phase-closure commit. Source: fajaros-x86 commit `541db09` (Phase 4.D-G + vecmat_v8.c deletion).
-
-### FajarQuant (separate repo since 2026-04-11)
-- **`fajarkraton/fajarquant`** (standalone) — extracted from `src/runtime/ml/fajarquant/` + `turboquant.rs` in V26 Phase A4 split. Algorithm + paper + data + reproducibility scripts now live there.
-- fajar-lang depends via Cargo path/git dep + thin re-export shim in `src/runtime/ml/{fajarquant/mod.rs, turboquant.rs}` — zero changes to `interpreter/eval/builtins.rs` call sites.
-- 29 unit tests moved with the algorithm (now in fajarquant repo). 16 integration tests stay in `tests/fajarquant_*.rs` to verify the wire-up.
-- **All Phase C work** (multi-model validation, perf benchmarks, paper polish) happens in the new repo. See `docs/V26_PRODUCTION_PLAN.md` v1.2.
+- **FajarOS Nova** (x86_64): **100% Fajar Lang** since 2026-05-05 (FAJAROS_100PCT TERMINAL; ZERO non-fj LOC). V26/V31/V30.GEMMA3 in-kernel LLM paths, 14 shell commands. 5/5 gemma3-e2e PASS. fajaros-x86 commit `541db09`.
+- **FajarQuant** (`fajarkraton/fajarquant`, since 2026-04-11): standalone repo with algorithm/paper/data; fajar-lang wires via Cargo path dep + re-export shim, 16 integ tests verify wire-up.
 
 ---
 
