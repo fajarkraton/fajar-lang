@@ -322,7 +322,24 @@ jobs:
         # 24936960952 + 24869110898 + 24855252863.
         run: command -v cargo-tarpaulin >/dev/null 2>&1 || cargo install cargo-tarpaulin --locked
       - name: Generate coverage
-        run: cargo tarpaulin --out xml --output-dir coverage/ --skip-clean --timeout 300
+        # NEW-2 fix (re-audit 2026-05-07): scope to --lib only.
+        # Without scope limit, tarpaulin runs full integration test suite
+        # under instrumentation. Two problems:
+        #   1) phase17 self-host tests need target/release/fj (same NEW-1
+        #      cause as embedded.yml/ci.yml main matrix). Without release
+        #      binary build step here, tests panic NotFound → tarpaulin
+        #      reports "Test failed during run" → coverage job fails.
+        #      (Logs from CI run 25451260351 confirm: lib tests PASS in
+        #      253s, then 9.5min later "Test failed during run" at the
+        #      integ-test phase.)
+        #   2) phase17 chain tests under tarpaulin instrumentation are
+        #      ~5× slower than native; combined with cargo build cold
+        #      cache pushes total job time past 3h35m before failing.
+        # Coverage measures library code; the 7,629 lib tests already
+        # extensively exercise lib.rs and submodules. CLI/bin code not
+        # measured by --lib, but src/main.rs is a thin clap dispatch
+        # (small uncovered surface, acceptable trade-off).
+        run: cargo tarpaulin --lib --out xml --output-dir coverage/ --skip-clean --timeout 300
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
