@@ -380,6 +380,309 @@ pub fn tokenize(source: str) -> [i64] {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// T4 (re-audit 2026-05-07, Decision A): tokenize_with_spans
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Purpose: parallel of `tokenize` above that ALSO records each token's
+// byte-offset start + end into the source, enabling
+// `extract_ident(source, starts, ends, idx) -> str` in analyzer.fj
+// (replaces placeholder `f"var_{idx}"` that broke T4 dup-fn detection).
+//
+// Implementation note: we duplicate tokenize's body verbatim and add
+// `starts.push(...) + ends.push(...)` at every `tokens.push(...)` site.
+// Single-pass over source, parallel arrays. Yes this is ~280 LOC of
+// duplicated lexing logic; the alternative (refactor `tokenize` to
+// internally track spans) was rejected per plan A1: "Keep `tokenize`
+// unchanged" to preserve the 95-test green board across the change.
+// Future Phase 19+ work may unify them; for now both must be kept in
+// sync when new token kinds land.
+
+/// Result of `tokenize_with_spans`: parallel arrays of token kinds + byte spans.
+/// Indices align: tokens[i], starts[i], ends[i] all refer to the same token.
+pub struct SpanResult {
+    tokens: [i64],
+    starts: [i64],
+    ends: [i64],
+}
+
+/// Tokenize source code into parallel arrays of (kind, start, end).
+/// Identical kind-recognition to `tokenize`; adds byte-offset tracking.
+pub fn tokenize_with_spans(source: str) -> SpanResult {
+    let n = to_int(len(source))
+    let mut pos = 0
+    let mut tokens: [i64] = []
+    let mut starts: [i64] = []
+    let mut ends: [i64] = []
+
+    while pos < n {
+        let c = source.substring(pos, pos + 1)
+
+        // Skip whitespace
+        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+            pos = pos + 1
+            continue
+        }
+
+        // Skip line comments
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+            pos = pos + 2
+            while pos < n && source.substring(pos, pos + 1) != "\n" {
+                pos = pos + 1
+            }
+            continue
+        }
+
+        // Skip block comments (nested)
+        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+            pos = pos + 2
+            let mut depth = 1
+            while pos < n && depth > 0 {
+                if source.substring(pos, pos + 1) == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+                    depth = depth + 1
+                    pos = pos + 2
+                } else if source.substring(pos, pos + 1) == "*" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+                    depth = depth - 1
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            continue
+        }
+
+        // ── Token start ──
+        let tok_start = pos
+
+        // Numbers (integer and float), including hex (0x), binary (0b), octal (0o)
+        if is_digit_str(c) {
+            let mut is_float = false
+            if c == "0" && pos + 1 < n {
+                let prefix = source.substring(pos + 1, pos + 2)
+                if prefix == "x" || prefix == "X" {
+                    pos = pos + 2
+                    while pos < n {
+                        let hc = source.substring(pos, pos + 1)
+                        if is_digit_str(hc) || hc == "a" || hc == "b" || hc == "c" || hc == "d" || hc == "e" || hc == "f" || hc == "A" || hc == "B" || hc == "C" || hc == "D" || hc == "E" || hc == "F" {
+                            pos = pos + 1
+                        } else {
+                            break
+                        }
+                    }
+                    tokens = tokens.push(130)
+                    starts = starts.push(tok_start)
+                    ends = ends.push(pos)
+                    continue
+                }
+                if prefix == "b" || prefix == "B" {
+                    pos = pos + 2
+                    while pos < n {
+                        let bc = source.substring(pos, pos + 1)
+                        if bc == "0" || bc == "1" { pos = pos + 1 } else { break }
+                    }
+                    tokens = tokens.push(130)
+                    starts = starts.push(tok_start)
+                    ends = ends.push(pos)
+                    continue
+                }
+                if prefix == "o" || prefix == "O" {
+                    pos = pos + 2
+                    while pos < n {
+                        let oc = source.substring(pos, pos + 1)
+                        if oc == "0" || oc == "1" || oc == "2" || oc == "3" || oc == "4" || oc == "5" || oc == "6" || oc == "7" {
+                            pos = pos + 1
+                        } else { break }
+                    }
+                    tokens = tokens.push(130)
+                    starts = starts.push(tok_start)
+                    ends = ends.push(pos)
+                    continue
+                }
+            }
+            // Decimal integer or float
+            pos = pos + 1
+            while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            if pos < n && source.substring(pos, pos + 1) == "." {
+                if pos + 1 < n && is_digit_str(source.substring(pos + 1, pos + 2)) {
+                    is_float = true
+                    pos = pos + 1
+                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                        pos = pos + 1
+                    }
+                }
+            }
+            if pos < n {
+                let ec = source.substring(pos, pos + 1)
+                if ec == "e" || ec == "E" {
+                    is_float = true
+                    pos = pos + 1
+                    if pos < n {
+                        let sign = source.substring(pos, pos + 1)
+                        if sign == "+" || sign == "-" { pos = pos + 1 }
+                    }
+                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                        pos = pos + 1
+                    }
+                }
+            }
+            if is_float {
+                tokens = tokens.push(131)
+            } else {
+                tokens = tokens.push(130)
+            }
+            starts = starts.push(tok_start)
+            ends = ends.push(pos)
+            continue
+        }
+
+        // Char literals
+        if c == "'" {
+            pos = pos + 1
+            if pos < n && source.substring(pos, pos + 1) == "\\" {
+                pos = pos + 2
+            } else {
+                pos = pos + 1
+            }
+            if pos < n && source.substring(pos, pos + 1) == "'" {
+                pos = pos + 1
+            }
+            tokens = tokens.push(134)
+            starts = starts.push(tok_start)
+            ends = ends.push(pos)
+            continue
+        }
+
+        // F-string literals
+        if c == "f" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "\"" {
+            pos = pos + 2
+            while pos < n && source.substring(pos, pos + 1) != "\"" {
+                if source.substring(pos, pos + 1) == "\\" {
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            if pos < n { pos = pos + 1 }
+            tokens = tokens.push(135)
+            starts = starts.push(tok_start)
+            ends = ends.push(pos)
+            continue
+        }
+
+        // Identifiers and keywords
+        if is_alpha_str(c) {
+            pos = pos + 1
+            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
+                pos = pos + 1
+            }
+            let word = source.substring(tok_start, pos)
+            let kw = lookup_keyword(word)
+            if kw > 0 {
+                tokens = tokens.push(kw)
+            } else {
+                tokens = tokens.push(133)
+            }
+            starts = starts.push(tok_start)
+            ends = ends.push(pos)
+            continue
+        }
+
+        // String literals
+        if c == "\"" {
+            pos = pos + 1
+            while pos < n && source.substring(pos, pos + 1) != "\"" {
+                if source.substring(pos, pos + 1) == "\\" {
+                    pos = pos + 2
+                } else {
+                    pos = pos + 1
+                }
+            }
+            if pos < n {
+                pos = pos + 1
+            }
+            tokens = tokens.push(132)
+            starts = starts.push(tok_start)
+            ends = ends.push(pos)
+            continue
+        }
+
+        // Three-character operators
+        if pos + 2 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            let c3 = source.substring(pos + 2, pos + 3)
+            if c == "<" && c2 == "<" && c3 == "=" { tokens = tokens.push(100); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == ">" && c2 == ">" && c3 == "=" { tokens = tokens.push(101); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "." && c2 == "." && c3 == "=" { tokens = tokens.push(103); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        }
+
+        // Two-character operators
+        if pos + 1 < n {
+            let c2 = source.substring(pos + 1, pos + 2)
+            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "<" && c2 == "<" { tokens = tokens.push(89); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == ">" && c2 == ">" { tokens = tokens.push(90); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "*" && c2 == "=" { tokens = tokens.push(94); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "/" && c2 == "=" { tokens = tokens.push(95); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "%" && c2 == "=" { tokens = tokens.push(96); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "&" && c2 == "=" { tokens = tokens.push(97); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "|" && c2 == "=" { tokens = tokens.push(98); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "^" && c2 == "=" { tokens = tokens.push(99); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        }
+
+        // Single-character tokens
+        if c == "+" { tokens = tokens.push(70); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "-" { tokens = tokens.push(71); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "*" { tokens = tokens.push(72); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "/" { tokens = tokens.push(73); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "%" { tokens = tokens.push(74); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "<" { tokens = tokens.push(78); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ">" { tokens = tokens.push(79); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "!" { tokens = tokens.push(84); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "&" { tokens = tokens.push(85); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "|" { tokens = tokens.push(86); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "^" { tokens = tokens.push(87); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "~" { tokens = tokens.push(88); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "=" { tokens = tokens.push(91); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "@" { tokens = tokens.push(105); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "(" { tokens = tokens.push(110); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ")" { tokens = tokens.push(111); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "{" { tokens = tokens.push(112); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "}" { tokens = tokens.push(113); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "[" { tokens = tokens.push(114); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "]" { tokens = tokens.push(115); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ";" { tokens = tokens.push(116); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ":" { tokens = tokens.push(118); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "," { tokens = tokens.push(119); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "." { tokens = tokens.push(120); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == "?" { tokens = tokens.push(123); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+
+        // Unknown character — skip (no token emitted, no span recorded)
+        pos = pos + 1
+    }
+
+    // Append EOF (use n as both start and end — past-the-end position)
+    tokens = tokens.push(0)
+    starts = starts.push(n)
+    ends = ends.push(n)
+
+    SpanResult { tokens: tokens, starts: starts, ends: ends }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // SQ11.8: Token spans — line:col tracking
 // ═══════════════════════════════════════════════════════════════════════
 
