@@ -1059,6 +1059,20 @@ fn full_p81_call_index_i64_baseline() {
 }
 
 #[test]
+fn full_p82_call_index_str_via_to_int() {
+    // CALL_INDEX P2.3: `to_int(make_strs()[0])` — verifies that
+    // to_int's BEGIN_INDEX dispatch reads idx_first_child = BEGIN_CALL,
+    // looks up callee's ret-type via lookup_fn_ret_type, and selects
+    // _fj_to_int (atoll) instead of (int64_t) cast (which would be
+    // a pointer-to-int silent miscompile per B0 headline finding).
+    let r = compile_subset_program(
+        "full_p82",
+        "fn make_strs() -> [str] { let mut a: [str] = []; a = a.push(\"42\"); return a } fn main() -> i64 { return to_int(make_strs()[0]) }",
+    );
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[test]
 fn full_p83_call_index_i64_nested_index_call() {
     // CALL_INDEX P2.1: index expression itself is a function call.
     // Verifies the index-side parse_expr_emit recursion (no special

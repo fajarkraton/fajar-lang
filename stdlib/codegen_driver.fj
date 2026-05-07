@@ -388,10 +388,24 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
             let arg_method_name = if arg_tag == "BEGIN_METHOD_CALL" { find_method_name(ast, pos + 2) } else { "" }
             // Phase 17.8: BEGIN_INDEX over [str] yields str; treat as str arg.
+            // CALL_INDEX P2.3 (Decision D1.A, 2026-05-07): subject of
+            // BEGIN_INDEX may also be BEGIN_CALL (per parser P1.1) or
+            // BEGIN_METHOD_CALL (per parser P1.2). Extend the type check.
             let arg_index_str = if arg_tag == "BEGIN_INDEX" {
-                let idx_arr_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
-                let idx_arr_type = lookup_var_type_in_table(vars, idx_arr_name)
-                idx_arr_type == "[str]"
+                let idx_first_child = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+                if idx_first_child == "BEGIN_CALL" {
+                    // f()[i]: subject is fn call. Look up callee's ret-type.
+                    let idx_callee = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                    lookup_fn_ret_type(cg, idx_callee) == "[str]"
+                } else if idx_first_child == "BEGIN_METHOD_CALL" {
+                    // obj.m()[i]: deferred to P3.2 (map_method_ret_type).
+                    // No method returns [str] today (B0.D0), so safe default.
+                    false
+                } else {
+                    // IDENT path: arr[i] over [str]-typed arr.
+                    let idx_arr_type = lookup_var_type_in_table(vars, idx_first_child)
+                    idx_arr_type == "[str]"
+                }
             } else { false }
             let arg_is_str = arg_tag == "STR" ||
                 (arg_tag == "IDENT" && pos + 3 < to_int(len(ast)) &&
