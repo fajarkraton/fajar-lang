@@ -342,6 +342,51 @@ impl TypeChecker {
                 Type::Str,
             ),
             ("random_bytes", vec![Type::I64], Type::Str),
+            // v35.3.0 Batch 3 (2026-05-09): AES-128/256 GCM + CBC.
+            // GCM encrypt returns Tuple(ciphertext_hex, tag_hex);
+            // GCM decrypt returns plaintext_hex or empty on auth fail.
+            // CBC encrypt returns ciphertext_hex; CBC decrypt returns
+            // plaintext_hex or empty on padding fail. All byte I/O hex.
+            (
+                "aes128_gcm_encrypt",
+                vec![Type::Str, Type::Str, Type::Str, Type::Str],
+                Type::Tuple(vec![Type::Str, Type::Str]),
+            ),
+            (
+                "aes128_gcm_decrypt",
+                vec![Type::Str, Type::Str, Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "aes256_gcm_encrypt",
+                vec![Type::Str, Type::Str, Type::Str, Type::Str],
+                Type::Tuple(vec![Type::Str, Type::Str]),
+            ),
+            (
+                "aes256_gcm_decrypt",
+                vec![Type::Str, Type::Str, Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "aes128_cbc_encrypt",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "aes128_cbc_decrypt",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "aes256_cbc_encrypt",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
+            (
+                "aes256_cbc_decrypt",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Str,
+            ),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins

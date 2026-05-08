@@ -266,3 +266,89 @@ fn main() {
 "#)
     .expect("random_bytes length");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.0 Batch 3 — AES variants (GCM + CBC × 128 + 256 = 8 fns)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_0_b3_aes128_gcm_roundtrip_and_tamper() {
+    run(r#"
+fn main() {
+    let key = "0102030405060708090a0b0c0d0e0f10"
+    let nonce = "010203040506070809101112"
+    let pt = hex_encode_str("hello aes-128-gcm")
+    let aad = hex_encode_str("aad")
+    let pair = aes128_gcm_encrypt(key, nonce, pt, aad)
+    let dec = aes128_gcm_decrypt(key, nonce, pair.0, pair.1, aad)
+    if hex_decode_str(dec) != "hello aes-128-gcm" {
+        println("AES128_GCM ROUNDTRIP FAILED")
+    }
+    let bad = aes128_gcm_decrypt(key, nonce, pair.0, pair.1, hex_encode_str("tampered-aad"))
+    if bad != "" {
+        println("AES128_GCM TAMPER NOT REJECTED")
+    }
+    println("aes128_gcm: OK")
+}
+"#)
+    .expect("aes128_gcm round-trip + tamper");
+}
+
+#[test]
+fn v35_3_0_b3_aes256_gcm_roundtrip_and_tamper() {
+    run(r#"
+fn main() {
+    let key = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    let nonce = "010203040506070809101112"
+    let pt = hex_encode_str("hello aes-256-gcm")
+    let aad = hex_encode_str("auth")
+    let pair = aes256_gcm_encrypt(key, nonce, pt, aad)
+    let dec = aes256_gcm_decrypt(key, nonce, pair.0, pair.1, aad)
+    if hex_decode_str(dec) != "hello aes-256-gcm" {
+        println("AES256_GCM ROUNDTRIP FAILED")
+    }
+    let bad = aes256_gcm_decrypt(key, nonce, pair.0, pair.1, hex_encode_str("wrong"))
+    if bad != "" {
+        println("AES256_GCM TAMPER NOT REJECTED")
+    }
+    println("aes256_gcm: OK")
+}
+"#)
+    .expect("aes256_gcm round-trip + tamper");
+}
+
+#[test]
+fn v35_3_0_b3_aes128_cbc_roundtrip() {
+    run(r#"
+fn main() {
+    let key = "0102030405060708090a0b0c0d0e0f10"
+    let iv = "00112233445566778899aabbccddeeff"
+    let pt = hex_encode_str("hello cbc-128")
+    let ct = aes128_cbc_encrypt(key, iv, pt)
+    let dec = aes128_cbc_decrypt(key, iv, ct)
+    if hex_decode_str(dec) != "hello cbc-128" {
+        println("AES128_CBC ROUNDTRIP FAILED")
+    }
+    println("aes128_cbc: OK")
+}
+"#)
+    .expect("aes128_cbc round-trip");
+}
+
+#[test]
+fn v35_3_0_b3_aes256_cbc_roundtrip() {
+    run(r#"
+fn main() {
+    let key = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    let iv = "00112233445566778899aabbccddeeff"
+    let pt = hex_encode_str("hello cbc-256")
+    let ct = aes256_cbc_encrypt(key, iv, pt)
+    let dec = aes256_cbc_decrypt(key, iv, ct)
+    if hex_decode_str(dec) != "hello cbc-256" {
+        println("AES256_CBC ROUNDTRIP FAILED")
+    }
+    println("aes256_cbc: OK")
+}
+"#)
+    .expect("aes256_cbc round-trip");
+}

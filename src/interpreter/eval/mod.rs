@@ -1839,6 +1839,15 @@ impl Interpreter {
             "pbkdf2_sha256",
             "hkdf_sha256",
             "random_bytes",
+            // v35.3.0 Batch 3 (2026-05-09): AES-128/256 GCM + CBC
+            "aes128_gcm_encrypt",
+            "aes128_gcm_decrypt",
+            "aes256_gcm_encrypt",
+            "aes256_gcm_decrypt",
+            "aes128_cbc_encrypt",
+            "aes128_cbc_decrypt",
+            "aes256_cbc_encrypt",
+            "aes256_cbc_decrypt",
             // WebSocket builtins
             "ws_connect",
             "ws_send",

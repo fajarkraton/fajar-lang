@@ -3532,6 +3532,31 @@ impl Interpreter {
                 if name == "random_bytes" {
                     return self.builtin_random_bytes(args);
                 }
+                // v35.3.0 Batch 3 (2026-05-09): AES variants.
+                if name == "aes128_gcm_encrypt" {
+                    return self.builtin_aes128_gcm_encrypt(args);
+                }
+                if name == "aes128_gcm_decrypt" {
+                    return self.builtin_aes128_gcm_decrypt(args);
+                }
+                if name == "aes256_gcm_encrypt" {
+                    return self.builtin_aes256_gcm_encrypt(args);
+                }
+                if name == "aes256_gcm_decrypt" {
+                    return self.builtin_aes256_gcm_decrypt(args);
+                }
+                if name == "aes128_cbc_encrypt" {
+                    return self.builtin_aes128_cbc_encrypt(args);
+                }
+                if name == "aes128_cbc_decrypt" {
+                    return self.builtin_aes128_cbc_decrypt(args);
+                }
+                if name == "aes256_cbc_encrypt" {
+                    return self.builtin_aes256_cbc_encrypt(args);
+                }
+                if name == "aes256_cbc_decrypt" {
+                    return self.builtin_aes256_cbc_decrypt(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -4936,6 +4961,217 @@ impl Interpreter {
         };
         let bytes = crate::stdlib_v3::crypto::random_bytes(len);
         Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&bytes)))
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // v35.3.0 Batch 3 (2026-05-09): AES-128/256 GCM + CBC
+    //
+    // GCM encrypt: returns Tuple(ciphertext_hex, tag_hex) — caller
+    //   destructures via .0 / .1.
+    // GCM decrypt: returns plaintext_hex on success, empty str on
+    //   auth failure (per Option A in B0 findings).
+    // CBC encrypt: returns ciphertext_hex.
+    // CBC decrypt: returns plaintext_hex on success, empty str on
+    //   padding/key error.
+    //
+    // Byte-length validation: AES-128 key=16, AES-256 key=32, GCM
+    // nonce=12, CBC IV=16. RuntimeError on wrong-length key/nonce/iv.
+    // ════════════════════════════════════════════════════════════════════
+
+    fn parse_hex_arg(args: &[Value], idx: usize, name: &str) -> Result<Vec<u8>, EvalError> {
+        let s = match &args[idx] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError(format!(
+                    "{name}: arg[{idx}] must be str (hex-encoded bytes)"
+                ))
+                .into());
+            }
+        };
+        crate::stdlib_v3::crypto::hex_decode(&s).map_err(|e| {
+            RuntimeError::TypeError(format!("{name}: arg[{idx}] hex decode error: {e}")).into()
+        })
+    }
+
+    fn check_len<const N: usize>(
+        bytes: &[u8],
+        what: &str,
+        fn_name: &str,
+    ) -> Result<[u8; N], EvalError> {
+        bytes.try_into().map_err(|_| {
+            RuntimeError::TypeError(format!(
+                "{fn_name}: {what} must be {} bytes ({} hex chars), got {} bytes",
+                N,
+                N * 2,
+                bytes.len()
+            ))
+            .into()
+        })
+    }
+
+    /// `aes128_gcm_encrypt(key_hex, nonce_hex, plaintext_hex, aad_hex) -> (ciphertext_hex, tag_hex)`.
+    fn builtin_aes128_gcm_encrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes128_gcm_encrypt")?;
+        let nonce_b = Self::parse_hex_arg(&args, 1, "aes128_gcm_encrypt")?;
+        let pt = Self::parse_hex_arg(&args, 2, "aes128_gcm_encrypt")?;
+        let aad = Self::parse_hex_arg(&args, 3, "aes128_gcm_encrypt")?;
+        let key: [u8; 16] = Self::check_len(&key_b, "key", "aes128_gcm_encrypt")?;
+        let nonce: [u8; 12] = Self::check_len(&nonce_b, "nonce", "aes128_gcm_encrypt")?;
+        let (ct, tag) = crate::stdlib_v3::crypto::aes128_gcm_encrypt(&key, &nonce, &pt, &aad)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Tuple(vec![
+            Value::Str(crate::stdlib_v3::crypto::hex_encode(&ct)),
+            Value::Str(crate::stdlib_v3::crypto::hex_encode(&tag)),
+        ]))
+    }
+
+    /// `aes128_gcm_decrypt(key_hex, nonce_hex, ciphertext_hex, tag_hex, aad_hex) -> plaintext_hex|""`.
+    fn builtin_aes128_gcm_decrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes128_gcm_decrypt")?;
+        let nonce_b = Self::parse_hex_arg(&args, 1, "aes128_gcm_decrypt")?;
+        let ct = Self::parse_hex_arg(&args, 2, "aes128_gcm_decrypt")?;
+        let tag_b = Self::parse_hex_arg(&args, 3, "aes128_gcm_decrypt")?;
+        let aad = Self::parse_hex_arg(&args, 4, "aes128_gcm_decrypt")?;
+        let key: [u8; 16] = Self::check_len(&key_b, "key", "aes128_gcm_decrypt")?;
+        let nonce: [u8; 12] = Self::check_len(&nonce_b, "nonce", "aes128_gcm_decrypt")?;
+        let tag: [u8; 16] = Self::check_len(&tag_b, "tag", "aes128_gcm_decrypt")?;
+        match crate::stdlib_v3::crypto::aes128_gcm_decrypt(&key, &nonce, &ct, &tag, &aad) {
+            Ok(pt) => Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&pt))),
+            Err(_) => Ok(Value::Str(String::new())),
+        }
+    }
+
+    fn builtin_aes256_gcm_encrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes256_gcm_encrypt")?;
+        let nonce_b = Self::parse_hex_arg(&args, 1, "aes256_gcm_encrypt")?;
+        let pt = Self::parse_hex_arg(&args, 2, "aes256_gcm_encrypt")?;
+        let aad = Self::parse_hex_arg(&args, 3, "aes256_gcm_encrypt")?;
+        let key: [u8; 32] = Self::check_len(&key_b, "key", "aes256_gcm_encrypt")?;
+        let nonce: [u8; 12] = Self::check_len(&nonce_b, "nonce", "aes256_gcm_encrypt")?;
+        let (ct, tag) = crate::stdlib_v3::crypto::aes256_gcm_encrypt(&key, &nonce, &pt, &aad)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Tuple(vec![
+            Value::Str(crate::stdlib_v3::crypto::hex_encode(&ct)),
+            Value::Str(crate::stdlib_v3::crypto::hex_encode(&tag)),
+        ]))
+    }
+
+    fn builtin_aes256_gcm_decrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 5 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 5,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes256_gcm_decrypt")?;
+        let nonce_b = Self::parse_hex_arg(&args, 1, "aes256_gcm_decrypt")?;
+        let ct = Self::parse_hex_arg(&args, 2, "aes256_gcm_decrypt")?;
+        let tag_b = Self::parse_hex_arg(&args, 3, "aes256_gcm_decrypt")?;
+        let aad = Self::parse_hex_arg(&args, 4, "aes256_gcm_decrypt")?;
+        let key: [u8; 32] = Self::check_len(&key_b, "key", "aes256_gcm_decrypt")?;
+        let nonce: [u8; 12] = Self::check_len(&nonce_b, "nonce", "aes256_gcm_decrypt")?;
+        let tag: [u8; 16] = Self::check_len(&tag_b, "tag", "aes256_gcm_decrypt")?;
+        match crate::stdlib_v3::crypto::aes256_gcm_decrypt(&key, &nonce, &ct, &tag, &aad) {
+            Ok(pt) => Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&pt))),
+            Err(_) => Ok(Value::Str(String::new())),
+        }
+    }
+
+    /// `aes128_cbc_encrypt(key_hex, iv_hex, plaintext_hex) -> ciphertext_hex` (PKCS#7 padded).
+    fn builtin_aes128_cbc_encrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes128_cbc_encrypt")?;
+        let iv_b = Self::parse_hex_arg(&args, 1, "aes128_cbc_encrypt")?;
+        let pt = Self::parse_hex_arg(&args, 2, "aes128_cbc_encrypt")?;
+        let key: [u8; 16] = Self::check_len(&key_b, "key", "aes128_cbc_encrypt")?;
+        let iv: [u8; 16] = Self::check_len(&iv_b, "iv", "aes128_cbc_encrypt")?;
+        let ct = crate::stdlib_v3::crypto::aes128_cbc_encrypt(&key, &iv, &pt)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&ct)))
+    }
+
+    fn builtin_aes128_cbc_decrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes128_cbc_decrypt")?;
+        let iv_b = Self::parse_hex_arg(&args, 1, "aes128_cbc_decrypt")?;
+        let ct = Self::parse_hex_arg(&args, 2, "aes128_cbc_decrypt")?;
+        let key: [u8; 16] = Self::check_len(&key_b, "key", "aes128_cbc_decrypt")?;
+        let iv: [u8; 16] = Self::check_len(&iv_b, "iv", "aes128_cbc_decrypt")?;
+        match crate::stdlib_v3::crypto::aes128_cbc_decrypt(&key, &iv, &ct) {
+            Ok(pt) => Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&pt))),
+            Err(_) => Ok(Value::Str(String::new())),
+        }
+    }
+
+    fn builtin_aes256_cbc_encrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes256_cbc_encrypt")?;
+        let iv_b = Self::parse_hex_arg(&args, 1, "aes256_cbc_encrypt")?;
+        let pt = Self::parse_hex_arg(&args, 2, "aes256_cbc_encrypt")?;
+        let key: [u8; 32] = Self::check_len(&key_b, "key", "aes256_cbc_encrypt")?;
+        let iv: [u8; 16] = Self::check_len(&iv_b, "iv", "aes256_cbc_encrypt")?;
+        let ct = crate::stdlib_v3::crypto::aes256_cbc_encrypt(&key, &iv, &pt)
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&ct)))
+    }
+
+    fn builtin_aes256_cbc_decrypt(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_b = Self::parse_hex_arg(&args, 0, "aes256_cbc_decrypt")?;
+        let iv_b = Self::parse_hex_arg(&args, 1, "aes256_cbc_decrypt")?;
+        let ct = Self::parse_hex_arg(&args, 2, "aes256_cbc_decrypt")?;
+        let key: [u8; 32] = Self::check_len(&key_b, "key", "aes256_cbc_decrypt")?;
+        let iv: [u8; 16] = Self::check_len(&iv_b, "iv", "aes256_cbc_decrypt")?;
+        match crate::stdlib_v3::crypto::aes256_cbc_decrypt(&key, &iv, &ct) {
+            Ok(pt) => Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&pt))),
+            Err(_) => Ok(Value::Str(String::new())),
+        }
     }
 
     /// Convert a `Value::Array` of params to `Vec<DbParam>`.
