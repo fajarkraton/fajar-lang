@@ -121,7 +121,8 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.3.1** patch | 2026-05-09 | 🚨 X25519 fix: v35.3.0 `x25519_generate` was Ed25519-proxy. v35.3.1 rewrites via x25519-dalek + adds `x25519_dh`. **BREAKING.** → V35_3_1_X25519_DH_B0_FINDINGS. |
+| **v35.3.2** patch | 2026-05-09 | 🐛 Analyzer fix: `s.char_at(i)` returns `Type::Char` (was incorrectly grouped as `Str`). Stdlib cascade migration (119 sites) deferred to v35.4.0. → V35_3_2_LEXER_PERF_B0_FINDINGS. |
+| **v35.3.1** patch | 2026-05-09 | 🚨 X25519 fix: `x25519_generate` was Ed25519-proxy. Rewrote via x25519-dalek + adds `x25519_dh`. **BREAKING.** → V35_3_1_X25519_DH_B0_FINDINGS. |
 | **v35.3.0** "FULL CRYPTO" | 2026-05-09 | 🎯 All 31 `crypto.rs` fns reachable from `.fj` (4 batches; +24 over v35.2.3). 19 integ tests. → V35_3_0_FULL_CRYPTO_FINDINGS. |
 | **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins (CQ1.4 + ed25519 + sha256). → CQ1_4_RSA_B0_FINDINGS. |
 | **v35.2.0..v35.2.2** | 2026-05-08 | FJARR_LEAK Phase 2 D-LITE + TQ12.2 SQLite analyzer fix + stdlib `to_int(len(...))` cleanup. → respective B0_FINDINGS docs. |

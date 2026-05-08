@@ -2,6 +2,59 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.3.2] — 2026-05-09 🐛 Analyzer fix: `String::char_at` returns `Type::Char` (was incorrectly grouped as `Type::Str`) — patch
+
+Bugfix: `s.char_at(i) == 'X'` was rejected by the analyzer with
+`SE004: type mismatch: expected str, found char` even though the
+interpreter correctly returned `Value::Char`. Pre-v35.3.2 the
+analyzer grouped `substring | char_at` together both returning
+`Type::Str` (`src/analyzer/type_check/check.rs:2773`); v35.3.2 splits
+the grouping so `char_at` correctly returns `Type::Char`.
+
+### Pre-fix vs post-fix
+
+```fj
+fn main() {
+    let s: str = "hello"
+    let c = s.char_at(0)
+    if c == 'h' { println("OK") } else { println("FAIL") }
+}
+```
+- **Pre-v35.3.2:** `SE004: type mismatch: expected str, found char`
+- **Post-v35.3.2:** `OK`
+
+### What's NOT in this patch (deferred)
+
+The original "language fix #4 lexer perf" pending item assumed a
+deeper migration (~2-4h, daily-impact 24× speedup for self-host
+lexer). The B0 audit (`docs/V35_3_2_LEXER_PERF_B0_FINDINGS.md`)
+revealed:
+- char_at IS implemented; the analyzer mistype was the only blocker
+- Stdlib cascade migration would touch **119 sites** (43 lexer.fj
+  + 76 parser_ast.fj) — 3× the original "41 sites" memory estimate
+- True 10-20× perf gain needs a NEW `byte_at(s, i) -> i64` builtin
+  (numeric compare, no allocation)
+
+Three deferred options for future ships:
+- **Option A** (v35.3.3 or v35.4.0): cascade-migrate stdlib to use
+  char_at + char literals. ~1.5-2h. ~5-10× lexer perf gain.
+- **Option B** (v35.4.0 minor): add `byte_at` builtin + cascade-migrate
+  to numeric compare. ~2-3h. ~10-20× lexer perf gain.
+
+v35.3.2 unblocks future perf work by making char_at correctly
+usable for new code; deeper cascade scope-decisions deferred to
+their own design pass.
+
+### Risks (per CLAUDE.md §6.8) — all NONE realized
+
+- No `stdlib/*.fj` nor codegen touched → Stage 2 byte-equality unaffected
+- Lib tests: 7,633 PASS (no regression; no-op for code that didn't compare char_at result)
+- Existing char_at callers: 0 usage in stdlib pre-fix (verified via grep) → no compatibility risk
+
+### Source of truth
+
+- `docs/V35_3_2_LEXER_PERF_B0_FINDINGS.md` — B0 audit + 4 scope options + Option C rationale + 119-site cascade scope for future Options A/B
+
 ## [v35.3.1] — 2026-05-09 🚨 X25519 correctness fix + `x25519_dh` shared-secret — patch (BREAKING for v35.3.0 keys)
 
 **SECURITY/CORRECTNESS:** v35.3.0 shipped `x25519_generate` with a
