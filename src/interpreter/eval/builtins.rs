@@ -3516,6 +3516,22 @@ impl Interpreter {
                 if name == "argon2_verify" {
                     return self.builtin_argon2_verify(args);
                 }
+                // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes.
+                if name == "hmac_sha256" {
+                    return self.builtin_hmac_sha256(args);
+                }
+                if name == "hmac_sha256_verify" {
+                    return self.builtin_hmac_sha256_verify(args);
+                }
+                if name == "pbkdf2_sha256" {
+                    return self.builtin_pbkdf2_sha256(args);
+                }
+                if name == "hkdf_sha256" {
+                    return self.builtin_hkdf_sha256(args);
+                }
+                if name == "random_bytes" {
+                    return self.builtin_random_bytes(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -4712,6 +4728,214 @@ impl Interpreter {
             password.as_bytes(),
             &hash_str,
         )))
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes
+    // ════════════════════════════════════════════════════════════════════
+
+    /// `hmac_sha256(key_hex: str, data: str) -> str` (hex tag 32 bytes).
+    fn builtin_hmac_sha256(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hmac_sha256: key_hex must be str".into()).into(),
+                );
+            }
+        };
+        let data = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError("hmac_sha256: data must be str".into()).into());
+            }
+        };
+        let key =
+            crate::stdlib_v3::crypto::hex_decode(&key_hex).map_err(RuntimeError::TypeError)?;
+        let tag = crate::stdlib_v3::crypto::hmac_sha256(&key, data.as_bytes());
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&tag)))
+    }
+
+    /// `hmac_sha256_verify(key_hex, data, tag_hex) -> bool`.
+    /// Returns false on any decode error (constant-time path preferred).
+    fn builtin_hmac_sha256_verify(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let key_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "hmac_sha256_verify: key_hex must be str".into(),
+                )
+                .into());
+            }
+        };
+        let data = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hmac_sha256_verify: data must be str".into()).into(),
+                );
+            }
+        };
+        let tag_hex = match &args[2] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "hmac_sha256_verify: tag_hex must be str".into(),
+                )
+                .into());
+            }
+        };
+        let key = match crate::stdlib_v3::crypto::hex_decode(&key_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let tag = match crate::stdlib_v3::crypto::hex_decode(&tag_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        Ok(Value::Bool(crate::stdlib_v3::crypto::hmac_sha256_verify(
+            &key,
+            data.as_bytes(),
+            &tag,
+        )))
+    }
+
+    /// `pbkdf2_sha256(password, salt_hex, iterations, output_len) -> str`.
+    fn builtin_pbkdf2_sha256(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let password = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pbkdf2_sha256: password must be str".into()).into(),
+                );
+            }
+        };
+        let salt_hex = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("pbkdf2_sha256: salt_hex must be str".into()).into(),
+                );
+            }
+        };
+        let iterations = match &args[2] {
+            Value::Int(n) if *n > 0 => *n as u32,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "pbkdf2_sha256: iterations must be positive i64".into(),
+                )
+                .into());
+            }
+        };
+        let output_len = match &args[3] {
+            Value::Int(n) if *n > 0 => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "pbkdf2_sha256: output_len must be positive i64".into(),
+                )
+                .into());
+            }
+        };
+        let salt =
+            crate::stdlib_v3::crypto::hex_decode(&salt_hex).map_err(RuntimeError::TypeError)?;
+        let key = crate::stdlib_v3::crypto::pbkdf2_sha256(
+            password.as_bytes(),
+            &salt,
+            iterations,
+            output_len,
+        );
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&key)))
+    }
+
+    /// `hkdf_sha256(ikm_hex, salt_hex, info, output_len) -> str`.
+    fn builtin_hkdf_sha256(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 4 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 4,
+                got: args.len(),
+            }
+            .into());
+        }
+        let ikm_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hkdf_sha256: ikm_hex must be str".into()).into(),
+                );
+            }
+        };
+        let salt_hex = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hkdf_sha256: salt_hex must be str".into()).into(),
+                );
+            }
+        };
+        let info = match &args[2] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError("hkdf_sha256: info must be str".into()).into());
+            }
+        };
+        let output_len = match &args[3] {
+            Value::Int(n) if *n > 0 => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "hkdf_sha256: output_len must be positive i64".into(),
+                )
+                .into());
+            }
+        };
+        let ikm =
+            crate::stdlib_v3::crypto::hex_decode(&ikm_hex).map_err(RuntimeError::TypeError)?;
+        let salt =
+            crate::stdlib_v3::crypto::hex_decode(&salt_hex).map_err(RuntimeError::TypeError)?;
+        let okm = crate::stdlib_v3::crypto::hkdf_sha256(&ikm, &salt, info.as_bytes(), output_len);
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&okm)))
+    }
+
+    /// `random_bytes(len: i64) -> str` — OS RNG; returns hex.
+    fn builtin_random_bytes(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let len = match &args[0] {
+            Value::Int(n) if *n >= 0 => *n as usize,
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "random_bytes: len must be non-negative i64".into(),
+                )
+                .into());
+            }
+        };
+        let bytes = crate::stdlib_v3::crypto::random_bytes(len);
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&bytes)))
     }
 
     /// Convert a `Value::Array` of params to `Vec<DbParam>`.

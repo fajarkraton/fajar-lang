@@ -1833,6 +1833,12 @@ impl Interpreter {
             "random_u64_range",
             "argon2_hash",
             "argon2_verify",
+            // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes
+            "hmac_sha256",
+            "hmac_sha256_verify",
+            "pbkdf2_sha256",
+            "hkdf_sha256",
+            "random_bytes",
             // WebSocket builtins
             "ws_connect",
             "ws_send",

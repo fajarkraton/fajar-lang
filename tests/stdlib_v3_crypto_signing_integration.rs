@@ -202,3 +202,67 @@ fn main() {
 "#)
     .expect("argon2 round-trip");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.0 Batch 2 — MAC + KDF + RNG bytes
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_0_b2_hmac_sha256_roundtrip() {
+    run(r#"
+fn main() {
+    let key = "0102030405060708090a0b0c0d0e0f10"
+    let tag = hmac_sha256(key, "hello")
+    if len(tag) != 64 { println("HMAC TAG WRONG LEN") }
+    let ok = hmac_sha256_verify(key, "hello", tag)
+    if !ok { println("HMAC VERIFY FAILED") }
+    let bad = hmac_sha256_verify(key, "tampered", tag)
+    if bad { println("HMAC TAMPER NOT REJECTED") }
+    println("hmac_sha256: OK")
+}
+"#)
+    .expect("hmac_sha256 round-trip");
+}
+
+#[test]
+fn v35_3_0_b2_pbkdf2_sha256_known_output_len() {
+    run(r#"
+fn main() {
+    let key = pbkdf2_sha256("password", "deadbeef", 1000, 32)
+    if len(key) != 64 { println("PBKDF2 OUTPUT WRONG LEN (expected 64 hex chars)") }
+    // Determinism: same inputs → same output
+    let key2 = pbkdf2_sha256("password", "deadbeef", 1000, 32)
+    if key != key2 { println("PBKDF2 NOT DETERMINISTIC") }
+    println("pbkdf2_sha256: OK")
+}
+"#)
+    .expect("pbkdf2_sha256 length + determinism");
+}
+
+#[test]
+fn v35_3_0_b2_hkdf_sha256_known_output_len() {
+    run(r#"
+fn main() {
+    let okm = hkdf_sha256("0123456789abcdef", "cafebabe", "info-context", 16)
+    if len(okm) != 32 { println("HKDF OUTPUT WRONG LEN (expected 32 hex chars)") }
+    println("hkdf_sha256: OK")
+}
+"#)
+    .expect("hkdf_sha256 output length");
+}
+
+#[test]
+fn v35_3_0_b2_random_bytes_correct_len() {
+    run(r#"
+fn main() {
+    let r1 = random_bytes(16)
+    if len(r1) != 32 { println("RANDOM_BYTES(16) WRONG LEN (expected 32 hex chars)") }
+    let r0 = random_bytes(0)
+    if len(r0) != 0 { println("RANDOM_BYTES(0) should produce empty hex") }
+    let r1024 = random_bytes(1024)
+    if len(r1024) != 2048 { println("RANDOM_BYTES(1024) WRONG LEN") }
+    println("random_bytes: OK")
+}
+"#)
+    .expect("random_bytes length");
+}

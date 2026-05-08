@@ -323,6 +323,25 @@ impl TypeChecker {
             ("random_u64_range", vec![Type::I64, Type::I64], Type::I64),
             ("argon2_hash", vec![Type::Str], Type::Str),
             ("argon2_verify", vec![Type::Str, Type::Str], Type::Bool),
+            // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes.
+            // Hex-encoded byte I/O for key/salt/ikm/tag inputs.
+            ("hmac_sha256", vec![Type::Str, Type::Str], Type::Str),
+            (
+                "hmac_sha256_verify",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Bool,
+            ),
+            (
+                "pbkdf2_sha256",
+                vec![Type::Str, Type::Str, Type::I64, Type::I64],
+                Type::Str,
+            ),
+            (
+                "hkdf_sha256",
+                vec![Type::Str, Type::Str, Type::Str, Type::I64],
+                Type::Str,
+            ),
+            ("random_bytes", vec![Type::I64], Type::Str),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins
