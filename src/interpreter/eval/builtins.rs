@@ -3561,6 +3561,10 @@ impl Interpreter {
                 if name == "x25519_generate" {
                     return self.builtin_x25519_generate(args);
                 }
+                // v35.3.1 (2026-05-09): X25519 DH shared-secret derivation.
+                if name == "x25519_dh" {
+                    return self.builtin_x25519_dh(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -5182,10 +5186,10 @@ impl Interpreter {
     // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange
     // ════════════════════════════════════════════════════════════════════
 
-    /// `x25519_generate() -> (pub_hex, secret_hex)`. Generates an X25519
-    /// keypair (clamped per spec). Note: shared-secret derivation
-    /// requires both parties' keys + a separate `x25519_dh` builtin,
-    /// which is out of scope for v35.3.0 (deferred to future patch).
+    /// `x25519_generate() -> (pub_hex, secret_hex)`. Generates a real
+    /// X25519 keypair via x25519-dalek (clamped per spec). v35.3.1
+    /// (2026-05-09) replaced the prior Ed25519-proxy impl — BREAKING
+    /// for v35.3.0-generated keys (which were not real X25519).
     fn builtin_x25519_generate(&mut self, args: Vec<Value>) -> EvalResult {
         if !args.is_empty() {
             return Err(RuntimeError::ArityMismatch {
@@ -5201,6 +5205,24 @@ impl Interpreter {
             Value::Str(pub_hex),
             Value::Str(secret_hex),
         ]))
+    }
+
+    /// `x25519_dh(secret_hex, peer_pub_hex) -> shared_secret_hex` —
+    /// 32-byte X25519 Diffie-Hellman. v35.3.1 (2026-05-09).
+    fn builtin_x25519_dh(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let secret_b = Self::parse_hex_arg(&args, 0, "x25519_dh")?;
+        let peer_pub_b = Self::parse_hex_arg(&args, 1, "x25519_dh")?;
+        let secret: [u8; 32] = Self::check_len(&secret_b, "secret_key", "x25519_dh")?;
+        let peer_pub: [u8; 32] = Self::check_len(&peer_pub_b, "peer_public_key", "x25519_dh")?;
+        let shared = crate::stdlib_v3::crypto::x25519_dh(&secret, &peer_pub);
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&shared)))
     }
 
     /// Convert a `Value::Array` of params to `Vec<DbParam>`.

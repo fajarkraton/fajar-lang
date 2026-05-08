@@ -539,25 +539,41 @@ pub struct X25519KeyExchange {
 }
 
 /// Generate an X25519 key pair for key exchange.
+///
+/// v35.3.1 (2026-05-09): rewritten to use proper x25519-dalek
+/// instead of the prior Ed25519-derivation proxy (which produced
+/// non-X25519 public keys per the TODO comment in v35.3.0). The
+/// fix is BREAKING for any v35.3.0-generated keypairs.
+///
+/// Per `docs/V35_3_1_X25519_DH_B0_FINDINGS.md`.
 pub fn x25519_generate() -> X25519KeyExchange {
-    let secret = random_bytes(32);
-    let mut secret_arr = [0u8; 32];
-    secret_arr.copy_from_slice(&secret);
-    // Clamp per X25519 spec
-    secret_arr[0] &= 248;
-    secret_arr[31] &= 127;
-    secret_arr[31] |= 64;
+    use rand::rngs::OsRng;
+    use x25519_dalek::{PublicKey, StaticSecret};
 
-    // Public key = secret * basepoint (simplified: just derive from secret)
-    // For real X25519, use x25519-dalek. Here we use Ed25519 key derivation as proxy.
-    use ed25519_dalek::SigningKey;
-    let signing = SigningKey::from_bytes(&secret_arr);
-    let public = signing.verifying_key().to_bytes();
+    let secret = StaticSecret::random_from_rng(OsRng);
+    let public = PublicKey::from(&secret);
 
     X25519KeyExchange {
-        public_key: public,
-        secret_key: secret_arr,
+        public_key: public.to_bytes(),
+        secret_key: secret.to_bytes(),
     }
+}
+
+/// X25519 Diffie-Hellman shared-secret derivation.
+///
+/// Computes the 32-byte shared secret given our `secret_key` and
+/// the peer's `peer_public_key`. After both parties exchange public
+/// keys and call `x25519_dh`, both arrive at the SAME shared secret
+/// without ever transmitting it.
+///
+/// v35.3.1 (2026-05-09): NEW — completes the X25519 picture started
+/// in v35.3.0 (which only shipped keypair generation).
+pub fn x25519_dh(secret_key: &[u8; 32], peer_public_key: &[u8; 32]) -> [u8; 32] {
+    use x25519_dalek::{PublicKey, StaticSecret};
+
+    let secret = StaticSecret::from(*secret_key);
+    let peer_pub = PublicKey::from(*peer_public_key);
+    secret.diffie_hellman(&peer_pub).to_bytes()
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1424,6 +1440,36 @@ mod tests {
         // Keys are 32 bytes
         assert_eq!(kx1.public_key.len(), 32);
         assert_eq!(kx1.secret_key.len(), 32);
+    }
+
+    #[test]
+    fn v35_3_1_x25519_dh_alice_bob_roundtrip() {
+        // Alice + Bob each generate keypair, exchange public keys,
+        // both compute DH; assert shared secrets are equal.
+        let alice = x25519_generate();
+        let bob = x25519_generate();
+        let alice_shared = x25519_dh(&alice.secret_key, &bob.public_key);
+        let bob_shared = x25519_dh(&bob.secret_key, &alice.public_key);
+        assert_eq!(
+            alice_shared, bob_shared,
+            "X25519 DH should produce same shared secret for both parties"
+        );
+        // Shared secret is 32 bytes
+        assert_eq!(alice_shared.len(), 32);
+    }
+
+    #[test]
+    fn v35_3_1_x25519_dh_different_peers_different_secret() {
+        // Same Alice secret + different peer pub → different shared secret.
+        let alice = x25519_generate();
+        let bob = x25519_generate();
+        let charlie = x25519_generate();
+        let s_with_bob = x25519_dh(&alice.secret_key, &bob.public_key);
+        let s_with_charlie = x25519_dh(&alice.secret_key, &charlie.public_key);
+        assert_ne!(
+            s_with_bob, s_with_charlie,
+            "DH with different peers must produce different shared secrets"
+        );
     }
 
     #[test]

@@ -388,14 +388,17 @@ impl TypeChecker {
                 Type::Str,
             ),
             // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange.
-            // Returns (pub_hex, secret_hex) tuple — keypair only;
-            // shared-secret derivation requires separate `x25519_dh`
-            // (out of scope for v35.3.0; can ship as future patch).
+            // Returns (pub_hex, secret_hex) tuple. v35.3.1 (2026-05-09)
+            // adds x25519_dh for shared-secret derivation; also fixed
+            // x25519_generate impl from broken Ed25519-proxy → real
+            // X25519 via x25519-dalek (BREAKING for v35.3.0 keys).
+            // Per docs/V35_3_1_X25519_DH_B0_FINDINGS.md.
             (
                 "x25519_generate",
                 vec![],
                 Type::Tuple(vec![Type::Str, Type::Str]),
             ),
+            ("x25519_dh", vec![Type::Str, Type::Str], Type::Str),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins

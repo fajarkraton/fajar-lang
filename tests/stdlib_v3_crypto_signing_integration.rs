@@ -374,3 +374,35 @@ fn main() {
 "#)
     .expect("x25519_generate keypair shape");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.1 — x25519_dh shared-secret derivation
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_1_x25519_dh_alice_bob_full_pipeline() {
+    run(r#"
+fn main() {
+    // Alice + Bob each generate keypair
+    let alice = x25519_generate()
+    let bob = x25519_generate()
+    // Both compute DH using their secret + peer's public
+    let alice_shared = x25519_dh(alice.1, bob.0)
+    let bob_shared = x25519_dh(bob.1, alice.0)
+    if alice_shared != bob_shared {
+        println("X25519_DH ALICE-BOB SHARED MISMATCH")
+    }
+    if len(alice_shared) != 64 {
+        println("X25519_DH SHARED WRONG LEN (expected 64 hex chars = 32 bytes)")
+    }
+    // Different peer → different secret
+    let charlie = x25519_generate()
+    let alice_with_charlie = x25519_dh(alice.1, charlie.0)
+    if alice_with_charlie == alice_shared {
+        println("X25519_DH DIFFERENT PEERS SAME SECRET (impossible)")
+    }
+    println("x25519_dh: OK")
+}
+"#)
+    .expect("x25519_dh Alice+Bob full pipeline");
+}
