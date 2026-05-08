@@ -1198,13 +1198,31 @@ impl TypeChecker {
 
     /// Looks up an identifier in the symbol table.
     fn check_ident(&mut self, name: &str, span: Span) -> Type {
-        // Check for use-after-move
+        // FJARR_LEAK Phase 2 / D-LITE: dispatch ME001 vs SE024 by type.
+        // In strict_ownership mode, `mark_moved` fires for non-Copy types
+        // (including `[T]`). This shim splits the resulting use-after-move
+        // diagnostic: arrays → SE024 (FJARR_LEAK Phase 2 catalog code),
+        // other types → ME001 (existing strict-ownership catalog code).
+        // No consume-site changes — the `is_copy_type_strict` gate at
+        // consume sites already enforces array affinity in strict mode.
         if let Some(move_span) = self.moves.check_use(name) {
-            self.errors.push(SemanticError::UseAfterMove {
-                name: name.to_string(),
-                span,
-                move_span,
-            });
+            let was_array = self
+                .symbols
+                .lookup(name)
+                .is_some_and(|s| matches!(s.ty, Type::Array(_)));
+            if was_array {
+                self.errors.push(SemanticError::UseAfterMoveArray {
+                    name: name.to_string(),
+                    span,
+                    move_span,
+                });
+            } else {
+                self.errors.push(SemanticError::UseAfterMove {
+                    name: name.to_string(),
+                    span,
+                    move_span,
+                });
+            }
         }
         match self.symbols.lookup(name) {
             Some(sym) => {

@@ -1,39 +1,37 @@
-//! FJARR_LEAK Phase 2 — 18.D.1 RED phase test fixtures for SE024.
+//! FJARR_LEAK Phase 2 — SE024 test fixtures (D-LITE GREEN, 2026-05-08).
 //!
 //! Per `docs/FJARR_LEAK_PLAN.md` row 18.D.1 + decision file
-//! `docs/decisions/2026-05-07-fjarr-leak-strategy.md` (Choice F:
-//! A-now arena + D-Phase-19 linear types) — adapted to SE024 naming
-//! (original plan said SE017 but SE017 = AwaitOutsideAsync; user picked
-//! SE024 in 2026-05-08 session).
+//! `docs/decisions/2026-05-07-fjarr-leak-strategy.md` (Choice F adapted
+//! to D-LITE: opt-in `--strict-ownership` flag + SE024 dispatch shim
+//! instead of always-on cascade). User picked SE024 catalog code in
+//! 2026-05-08 session (original plan said SE017 but SE017 = AwaitOutsideAsync).
 //!
-//! ## TDD discipline
+//! ## D-LITE semantics
 //!
-//! - **Format test** (`format_*`): direct construction of the
-//!   `SemanticError::UseAfterMoveArray` variant + assert the formatted
-//!   message contains `"SE024"`. **PASSES TODAY** as soon as the variant
-//!   exists in `src/analyzer/type_check/mod.rs` (this commit).
+//! SE024 fires when:
+//! 1. `--strict-ownership` mode is enabled (`tc.strict_ownership = true`),
+//!    which makes `is_copy_type_strict` treat `Array` as Move at consume
+//!    sites (`mark_moved` fires).
+//! 2. A use-after-move occurs on a `[T]`-typed binding (`check_use`
+//!    returns Some).
+//! 3. The dispatch shim in `check_ident` (FJARR_LEAK Phase 2 / D-LITE)
+//!    routes the diagnostic to SE024 when the symbol's type is `Array`,
+//!    or to ME001 otherwise.
 //!
-//! - **Emission tests** (`emit_*`): exercise an actual fj source pattern
-//!   that should trigger SE024. Currently `#[ignore]` — they FAIL today
-//!   because Phase 2 18.D.1.2 hasn't wired emission yet (analyzer doesn't
-//!   know to call `mark_moved` on `[T]` consumes nor `check_use` for SE024).
-//!   The RED→GREEN transition happens in 18.D.1.2 (next commit), where
-//!   the `#[ignore]` attributes get removed and the tests pass.
+//! In default (lenient) mode, arrays are Copy and SE024 NEVER fires —
+//! preserving the pre-Phase-2 contract documented in
+//! `src/analyzer/type_check/mod.rs:3390` and similar tests.
 //!
-//! - **OK tests** (`ok_*`): patterns that should NOT trigger SE024 even
-//!   after wiring (chain-grow, `.clone()`, single-use). Run today as a
-//!   regression baseline (analyzer compiles, no SE024 emitted).
+//! ## Test taxonomy
 //!
-//! ## RED→GREEN flow
+//! - **`format_*`**: direct variant construction + Display assertion.
+//!   Mode-independent (don't run analyzer).
+//! - **`emit_*`**: exercise fj source patterns through `TypeChecker::new_strict()`.
+//!   Verify SE024 fires.
+//! - **`ok_*`**: regression baselines (chain-grow, single-use, return-consumes)
+//!   that must NOT fire SE024 even in strict mode.
 //!
-//! ```text
-//! 18.D.1.1 (this commit):
-//!   format_* PASS · emit_* IGNORED · ok_* PASS
-//! 18.D.1.2 (next commit):
-//!   format_* PASS · emit_* un-ignored + PASS · ok_* PASS
-//! 18.D.1.3 (after self-host re-compile):
-//!   all PASS · stage1_full + phase17 still GREEN
-//! ```
+//! All 11 tests PASS GREEN as of D-LITE ship (2026-05-08).
 
 use fajar_lang::analyzer;
 use fajar_lang::analyzer::type_check::SemanticError;
@@ -129,7 +127,6 @@ fn format_se024_span_method_returns_use_site() {
 // remove the `#[ignore]` and these MUST pass.
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_basic_consume_then_use() {
     expect_se024(
         r#"
@@ -144,7 +141,6 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_branch_merge_then_use() {
     expect_se024(
         r#"
@@ -159,7 +155,6 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_let_alias_then_original_use() {
     expect_se024(
         r#"
@@ -174,7 +169,6 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_str_array_use_after_move() {
     expect_se024(
         r#"
@@ -247,20 +241,18 @@ fn main() {
 // ════════════════════════════════════════════════════════════════════════
 
 fn expect_se024(src: &str) {
+    // FJARR_LEAK Phase 2 D-LITE: SE024 fires in strict_ownership mode
+    // (the consume-site gate). Default-mode analysis treats arrays as
+    // Copy and never marks moved.
     let tokens = lexer::tokenize(src).expect("lex should succeed for SE024 emission test");
     let program = parser::parse(tokens).expect("parse should succeed for SE024 emission test");
-    let result = analyzer::analyze(&program);
-    let errs = match result {
-        Ok(()) => panic!(
-            "expected analyzer to emit SE024 for source:\n{src}\nbut analysis succeeded with no errors"
-        ),
-        Err(es) => es,
-    };
-    let any = errs.iter().any(|e| format!("{e}").contains("SE024"));
+    let mut tc = fajar_lang::analyzer::type_check::TypeChecker::new_strict();
+    let _ = tc.analyze(&program);
+    let errs: Vec<String> = tc.diagnostics().iter().map(|e| format!("{e}")).collect();
+    let any_se024 = errs.iter().any(|e| e.contains("SE024"));
     assert!(
-        any,
-        "expected SE024 in errors for source:\n{src}\ngot: {:#?}",
-        errs.iter().map(|e| format!("{e}")).collect::<Vec<_>>()
+        any_se024,
+        "expected SE024 in strict-mode diagnostics for source:\n{src}\ngot: {errs:#?}"
     );
 }
 
