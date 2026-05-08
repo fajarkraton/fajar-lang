@@ -570,6 +570,9 @@ fn map_method(method: str) -> str {
     if method == "push" { return "_fj_arr_push_i64" }
     if method == "len" { return "_fj_arr_len" }
     if method == "join" { return "_fj_arr_join_str" }
+    // FJARR_LEAK Phase 2 / E4: .clone() for [T] arrays lowers to
+    // _fj_arr_clone (deep copy via arena, defined in emit_preamble §E5).
+    if method == "clone" { return "_fj_arr_clone" }
     ""
 }
 

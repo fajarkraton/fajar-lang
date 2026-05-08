@@ -467,6 +467,22 @@ impl Interpreter {
             }
             // Array methods
             (Value::Array(a), "len") => Ok(Value::Int(a.len() as i64)),
+            // FJARR_LEAK Phase 2 / E4: .clone() returns a fresh Array
+            // value with the same elements. Pairs with self-host
+            // codegen mapping (stdlib/codegen_driver.fj map_method) and
+            // emit_preamble runtime helper (_fj_arr_clone). Interpreter
+            // semantics: Vec deep-clone matches the C-side memcpy.
+            (Value::Array(a), "clone") => {
+                if !arg_vals.is_empty() {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 0,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                let cloned: Vec<Value> = (**a).clone();
+                Ok(Value::array_from_vec(cloned))
+            }
             (Value::Array(a), "push") => {
                 if arg_vals.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {
