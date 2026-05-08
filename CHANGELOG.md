@@ -2,6 +2,146 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.3.0] — 2026-05-09 🎯 FULL CRYPTO EXPOSURE — all 31 meaningful crypto.rs fns reachable from `.fj` source — minor bump
+
+`.fj` source now has access to the **complete RustCrypto stdlib** via
+24 new builtins (added on top of v35.2.3's 7 signing-primitive fns).
+Closes the systemic gap surfaced by CQ1.4 B0: crypto.rs had 33 pub
+fns but only signing primitives were exposed. v35.3.0 lands the
+remaining 24 across 4 phased batches (B1+B2+B3+B4 + closure ship).
+
+Per Option C of `docs/CQ1_4_RSA_B0_FINDINGS.md` §3 (deferred from
+v35.2.3); execution per `docs/V35_3_0_FULL_CRYPTO_B0_FINDINGS.md`
+4-batch plan; closure rationale in
+`docs/V35_3_0_FULL_CRYPTO_FINDINGS.md`.
+
+### What `.fj` source can now do
+
+```fj
+fn main() {
+    // Hashing — SHA-2 family
+    let h256 = sha256("hello")        // → "2cf24dba5fb..."
+    let h384 = sha384("hello")
+    let h512 = sha512("hello")
+
+    // MAC — HMAC-SHA256 with constant-time verify
+    let key = "0102030405060708090a0b0c0d0e0f10"
+    let tag = hmac_sha256(key, "msg")
+    let ok = hmac_sha256_verify(key, "msg", tag)   // → true
+
+    // KDFs
+    let kdf = pbkdf2_sha256("password", "saltsalt", 100000, 32)
+    let okm = hkdf_sha256("0123456789abcdef", "salt", "context", 16)
+
+    // Password hashing
+    let hash = argon2_hash("user-password")
+    let v = argon2_verify("user-password", hash)   // → true
+
+    // AEAD encryption — AES-128/256-GCM
+    let nonce = "010203040506070809101112"
+    let pair = aes256_gcm_encrypt(key32, nonce, plaintext_hex, aad_hex)
+    let ct = pair.0
+    let auth_tag = pair.1
+    let dec = aes256_gcm_decrypt(key32, nonce, ct, auth_tag, aad_hex)
+    // dec is empty str on auth failure; otherwise plaintext_hex
+
+    // Classic block cipher — AES-128/256-CBC with PKCS#7 padding
+    let iv = "00112233445566778899aabbccddeeff"
+    let cbc_ct = aes128_cbc_encrypt(key128, iv, plaintext_hex)
+    let cbc_pt = aes128_cbc_decrypt(key128, iv, cbc_ct)
+
+    // Digital signing — Ed25519 (fast) + RSA-2048 (slow keygen ~1-3s)
+    // (already shipped in v35.2.3; included here for completeness)
+    let kp = ed25519_generate()
+    let sig = ed25519_sign(kp.1, "msg")
+    let valid = ed25519_verify(kp.0, "msg", sig)
+
+    // X25519 keypair generation (DH derivation deferred to v35.3.1)
+    let xkp = x25519_generate()
+
+    // Encoding helpers
+    let hex = hex_encode_str("ABC")              // → "414243"
+    let dec_str = hex_decode_str(hex)             // → "ABC"
+    let b64 = base64_encode_str("Hello")          // → "SGVsbG8="
+    let dec64 = base64_decode_str(b64)            // → "Hello"
+
+    // CSPRNG
+    let r = random_u64_range(0, 1000)
+    let r_bytes = random_bytes(16)                // → 32 hex chars
+
+    // Constant-time comparison
+    let eq = constant_time_eq(tag, expected_tag_hex)
+}
+```
+
+### 24 new builtins (in addition to v35.2.3's 7)
+
+| Category | Fns |
+|---|---|
+| **Hashing** | `sha384`, `sha512` |
+| **MAC** | `hmac_sha256`, `hmac_sha256_verify` |
+| **KDF** | `pbkdf2_sha256`, `hkdf_sha256`, `argon2_hash`, `argon2_verify` |
+| **AEAD** | `aes128_gcm_encrypt`, `aes128_gcm_decrypt`, `aes256_gcm_encrypt`, `aes256_gcm_decrypt` |
+| **Block cipher** | `aes128_cbc_encrypt`, `aes128_cbc_decrypt`, `aes256_cbc_encrypt`, `aes256_cbc_decrypt` |
+| **Key exchange** | `x25519_generate` (DH derivation deferred to v35.3.1) |
+| **Encoding** | `hex_encode_str`, `hex_decode_str`, `base64_encode_str`, `base64_decode_str` |
+| **CSPRNG** | `random_u64_range`, `random_bytes` |
+| **Utility** | `constant_time_eq` |
+
+### API design (consistent across all 31 fns)
+
+- **Byte I/O is hex-encoded `str`**: uniform across all crypto fns;
+  `hex_encode_str` / `hex_decode_str` bridge UTF-8 ↔ hex
+- **Tuple returns** for keypair generators + GCM encrypt:
+  `(pub_hex, secret_hex)` / `(ciphertext_hex, tag_hex)`. Caller
+  destructures via `.0` / `.1`
+- **Failure semantics**:
+  - decode/parse failures → empty `str`
+  - signature/MAC verify failures → `false`
+  - AEAD/CBC decrypt auth/padding errors → empty plaintext
+  - core crypto failures (e.g., RSA keygen) → `RuntimeError`
+- **Argument validation**: arity + type + byte-length checks at
+  wrapper boundary. Helper fns `parse_hex_arg` + `check_len::<N>`
+  factor out boilerplate.
+
+### Phased delivery (4 batches, 1 closure)
+
+| Batch | Commit | Fns | Effort |
+|---|---|---|---|
+| B0 audit + plan | `37857bdf` | scope verify | ~15min |
+| B1 trivial | `c124021d` | 10 fns | ~50min |
+| B2 MAC + KDF | `4c1f0b6b` | 5 fns | ~40min |
+| B3 AES variants | `cdf0b9f5` | 8 fns | ~1h |
+| B4 X25519 | `6c9f065d` | 1 fn | ~15min |
+| Z closure (this) | (this) | docs + ship | ~45min |
+| **Total** | 6 commits | 24 new fns | **~3.5h** (vs 5-7h estimate) |
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+- ✅ All 31 meaningful crypto.rs fns reachable from `.fj`
+- ✅ 19 integration tests exercise full parse→analyze→eval pipeline
+- ✅ Stage 2 byte-equality preserved (no codegen/stdlib touched)
+- ✅ Lib tests 7,629 → 7,631 (additive +2 RSA from v35.2.3; B1-B4 add only integration tests)
+- ⚠️ **`x25519_dh(secret, peer_pub) -> shared_secret`** — DH derivation deferred to v35.3.1 patch; current `crypto.rs` impl doesn't expose this primitive (would need `x25519-dalek` dep)
+- ⚠️ **`hash(algorithm, data)`** redundant dispatch — skipped (users call `sha256/384/512` directly)
+- ⚠️ **`secure_zero(buf: &mut [u8])`** — skipped; mutates byte slice; not meaningful from `.fj` (no mutable string semantics)
+- ⚠️ **Streaming APIs** — out of scope; crypto.rs is one-shot only
+
+### Stats
+
+- **Self-host + analyzer + crypto integration tests**: 18,134 + 16 = **18,150** approx (lib unchanged at 7,631; 16 new integration tests in `tests/stdlib_v3_crypto_signing_integration.rs`)
+- **`.fj`-callable crypto fns**: 7 → **31** (+24)
+- **Stage 2 byte-equality**: preserved
+- **Cumulative effort v33.4.0..v35.3.0**: ~52h Claude time across ~30 self-host + crypto + audit phases
+
+### Source of truth
+
+- `docs/V35_3_0_FULL_CRYPTO_FINDINGS.md` — Phase closure (this release)
+- `docs/V35_3_0_FULL_CRYPTO_B0_FINDINGS.md` — B0 audit + 4-batch plan
+- `docs/CQ1_4_RSA_B0_FINDINGS.md` — original B0 surfacing the systemic gap (v35.2.3 baseline)
+- `tests/stdlib_v3_crypto_signing_integration.rs` — 19 full-pipeline tests
+- `src/stdlib_v3/crypto.rs` — 31 implementing fns + 19 lib unit tests
+
 ## [v35.2.3] — 2026-05-09 🔐 CQ1.4 + ed25519 + sha256 — 7 crypto signing builtins exposed to `.fj` source — patch
 
 `.fj` source can now call SHA-256 hashing, Ed25519 digital signing, and

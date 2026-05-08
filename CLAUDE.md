@@ -121,7 +121,8 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins exposed to `.fj` source (sha256 + ed25519 generate/sign/verify + rsa generate/sign/verify). Closes systemic gap (30 crypto.rs fns were all unreachable). Per Option B; Option C full-exposure deferred to v35.3.0. → CQ1_4_RSA_B0_FINDINGS. |
+| **v35.3.0** "FULL CRYPTO" | 2026-05-09 | 🎯 All 31 `crypto.rs` fns reachable from `.fj` (4 batches; +24 over v35.2.3). 19 integ tests. Stage 2 unchanged. → V35_3_0_FULL_CRYPTO_FINDINGS. |
+| **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins (CQ1.4 + ed25519 + sha256). → CQ1_4_RSA_B0_FINDINGS. |
 | **v35.2.2** patch | 2026-05-08 | 🧹 stdlib cleanup: 109 redundant `to_int(len(...))` wrappers removed. Stage 2 byte-equality preserved. → LEN_RETURNS_I64_B0_FINDINGS. |
 | **v35.2.1** patch | 2026-05-08 | 🐛 TQ12.2 SQLite: register `db_close`/`db_begin`/`db_commit`/`db_rollback` in analyzer (were SE001-rejected). → TQ12_2_SQLITE_B0_FINDINGS. |
 | **v35.2.0** "FJARR_LEAK Phase 2 D-LITE" | 2026-05-08 | `[T]` affine via opt-in `--strict-ownership` + SE024 shim. 4 standalone correctness ships (E3/E5/E4/E1.5). Pivoted from 14h Strategy D cascade to ~7h D-LITE. Tests 102→120. → FJARR_LEAK_PHASE_2_FINDINGS. |
