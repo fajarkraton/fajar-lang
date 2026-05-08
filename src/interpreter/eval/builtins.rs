@@ -3462,6 +3462,29 @@ impl Interpreter {
                 if name == "db_rollback" {
                     return self.builtin_db_rollback(args);
                 }
+                // CQ1.4 (2026-05-09): Crypto signing builtins.
+                // Per docs/CQ1_4_RSA_B0_FINDINGS.md §3 Option B.
+                if name == "rsa_generate_2048" {
+                    return self.builtin_rsa_generate_2048(args);
+                }
+                if name == "rsa_sign" {
+                    return self.builtin_rsa_sign(args);
+                }
+                if name == "rsa_verify" {
+                    return self.builtin_rsa_verify(args);
+                }
+                if name == "ed25519_generate" {
+                    return self.builtin_ed25519_generate(args);
+                }
+                if name == "ed25519_sign" {
+                    return self.builtin_ed25519_sign(args);
+                }
+                if name == "ed25519_verify" {
+                    return self.builtin_ed25519_verify(args);
+                }
+                if name == "sha256" {
+                    return self.builtin_sha256(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -4150,6 +4173,241 @@ impl Interpreter {
             .rollback(handle)
             .map_err(RuntimeError::TypeError)?;
         Ok(Value::Null)
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // CQ1.4 (2026-05-09): Crypto signing builtins (RSA + ed25519 + sha256)
+    // Per docs/CQ1_4_RSA_B0_FINDINGS.md §3 Option B. All byte-array I/O
+    // is hex-encoded as `str` for .fj-source ergonomics.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// `rsa_generate_2048() -> (priv_hex, pub_hex)`. Slow ~1-3s.
+    fn builtin_rsa_generate_2048(&mut self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let kp = crate::stdlib_v3::crypto::rsa_generate_2048().map_err(RuntimeError::TypeError)?;
+        let pub_hex = crate::stdlib_v3::crypto::hex_encode(&kp.public_key);
+        let priv_hex = crate::stdlib_v3::crypto::hex_encode(&kp.private_key);
+        Ok(Value::Tuple(vec![
+            Value::Str(pub_hex),
+            Value::Str(priv_hex),
+        ]))
+    }
+
+    /// `rsa_sign(privkey_hex, msg) -> sig_hex`.
+    fn builtin_rsa_sign(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let priv_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("rsa_sign: privkey_hex must be str".into()).into(),
+                );
+            }
+        };
+        let msg = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError("rsa_sign: message must be str".into()).into());
+            }
+        };
+        let priv_der =
+            crate::stdlib_v3::crypto::hex_decode(&priv_hex).map_err(RuntimeError::TypeError)?;
+        let sig = crate::stdlib_v3::crypto::rsa_sign(&priv_der, msg.as_bytes())
+            .map_err(RuntimeError::TypeError)?;
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&sig)))
+    }
+
+    /// `rsa_verify(pubkey_hex, msg, sig_hex) -> bool`.
+    fn builtin_rsa_verify(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pub_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("rsa_verify: pubkey_hex must be str".into()).into(),
+                );
+            }
+        };
+        let msg = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("rsa_verify: message must be str".into()).into(),
+                );
+            }
+        };
+        let sig_hex = match &args[2] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("rsa_verify: sig_hex must be str".into()).into(),
+                );
+            }
+        };
+        let pub_der = match crate::stdlib_v3::crypto::hex_decode(&pub_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let sig = match crate::stdlib_v3::crypto::hex_decode(&sig_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        Ok(Value::Bool(crate::stdlib_v3::crypto::rsa_verify(
+            &pub_der,
+            msg.as_bytes(),
+            &sig,
+        )))
+    }
+
+    /// `ed25519_generate() -> (pub_hex, secret_hex)`.
+    fn builtin_ed25519_generate(&mut self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let kp = crate::stdlib_v3::crypto::ed25519_generate();
+        let pub_hex = crate::stdlib_v3::crypto::hex_encode(&kp.public_key);
+        let secret_hex = crate::stdlib_v3::crypto::hex_encode(&kp.secret_key);
+        Ok(Value::Tuple(vec![
+            Value::Str(pub_hex),
+            Value::Str(secret_hex),
+        ]))
+    }
+
+    /// `ed25519_sign(secret_hex, msg) -> sig_hex`.
+    fn builtin_ed25519_sign(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let secret_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ed25519_sign: secret_hex must be str".into()).into(),
+                );
+            }
+        };
+        let msg = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ed25519_sign: message must be str".into()).into(),
+                );
+            }
+        };
+        let secret_bytes =
+            crate::stdlib_v3::crypto::hex_decode(&secret_hex).map_err(RuntimeError::TypeError)?;
+        let secret_arr: [u8; 64] = secret_bytes.as_slice().try_into().map_err(|_| {
+            RuntimeError::TypeError(format!(
+                "ed25519_sign: secret_hex must be 128 hex chars (64 bytes), got {}",
+                secret_bytes.len()
+            ))
+        })?;
+        let sig = crate::stdlib_v3::crypto::ed25519_sign(&secret_arr, msg.as_bytes());
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&sig)))
+    }
+
+    /// `ed25519_verify(pubkey_hex, msg, sig_hex) -> bool`.
+    fn builtin_ed25519_verify(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 3 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 3,
+                got: args.len(),
+            }
+            .into());
+        }
+        let pub_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "ed25519_verify: pubkey_hex must be str".into(),
+                )
+                .into());
+            }
+        };
+        let msg = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ed25519_verify: message must be str".into()).into(),
+                );
+            }
+        };
+        let sig_hex = match &args[2] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("ed25519_verify: sig_hex must be str".into()).into(),
+                );
+            }
+        };
+        let pub_bytes = match crate::stdlib_v3::crypto::hex_decode(&pub_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let pub_arr: [u8; 32] = match pub_bytes.as_slice().try_into() {
+            Ok(a) => a,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let sig_bytes = match crate::stdlib_v3::crypto::hex_decode(&sig_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let sig_arr: [u8; 64] = match sig_bytes.as_slice().try_into() {
+            Ok(a) => a,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        Ok(Value::Bool(crate::stdlib_v3::crypto::ed25519_verify(
+            &pub_arr,
+            msg.as_bytes(),
+            &sig_arr,
+        )))
+    }
+
+    /// `sha256(data) -> hex_digest_str`.
+    fn builtin_sha256(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let data = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError("sha256: data must be str".into()).into());
+            }
+        };
+        let digest = crate::stdlib_v3::crypto::sha256(data.as_bytes());
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(
+            &digest.bytes,
+        )))
     }
 
     /// Convert a `Value::Array` of params to `Vec<DbParam>`.

@@ -47,6 +47,7 @@ cbc = { version = "0.1", features = ["alloc"] }
 aes = "0.8"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 argon2 = "0.5"
+rsa = { version = "0.9", features = ["sha2"] }  # CQ1.4 (2026-05-09): RSA signing/verification (sha2 feature for re-export)
 
 # V8 NQ2.1: TLS/HTTPS support
 rustls = { version = "0.23", optional = true }

@@ -781,6 +781,71 @@ pub enum SignatureAlgorithm {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// CQ1.4 (2026-05-09): RSA signing via rsa crate (PKCS#1 v1.5 + SHA-256)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Generate an RSA-2048 key pair (DER-encoded private + public). Slow
+/// (~1-3s due to bignum prime search); intended for setup, not hot paths.
+pub fn rsa_generate_2048() -> Result<RsaKeyPair, String> {
+    use rsa::pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey};
+    use rsa::{RsaPrivateKey, RsaPublicKey};
+
+    let mut rng = rand::thread_rng();
+    let private =
+        RsaPrivateKey::new(&mut rng, 2048).map_err(|e| format!("rsa_generate_2048: {e}"))?;
+    let public = RsaPublicKey::from(&private);
+    let priv_der = private
+        .to_pkcs1_der()
+        .map_err(|e| format!("rsa_generate_2048 priv encode: {e}"))?
+        .as_bytes()
+        .to_vec();
+    let pub_der = public
+        .to_pkcs1_der()
+        .map_err(|e| format!("rsa_generate_2048 pub encode: {e}"))?
+        .to_vec();
+    Ok(RsaKeyPair {
+        public_key: pub_der,
+        private_key: priv_der,
+        key_size: RsaKeySize::Rsa2048,
+    })
+}
+
+/// RSA-PKCS#1 v1.5 sign of `message` using the DER-encoded `private_key_der`.
+/// Returns the raw signature bytes.
+pub fn rsa_sign(private_key_der: &[u8], message: &[u8]) -> Result<Vec<u8>, String> {
+    use rsa::RsaPrivateKey;
+    use rsa::pkcs1::DecodeRsaPrivateKey;
+    use rsa::pkcs1v15::SigningKey;
+    use rsa::sha2::Sha256;
+    use rsa::signature::{SignatureEncoding, Signer};
+
+    let private = RsaPrivateKey::from_pkcs1_der(private_key_der)
+        .map_err(|e| format!("rsa_sign decode key: {e}"))?;
+    let signing_key: SigningKey<Sha256> = SigningKey::new(private);
+    let sig = signing_key.sign(message);
+    Ok(sig.to_bytes().to_vec())
+}
+
+/// RSA-PKCS#1 v1.5 verify `signature` over `message` using the
+/// DER-encoded `public_key_der`. Returns true on valid signature.
+pub fn rsa_verify(public_key_der: &[u8], message: &[u8], signature: &[u8]) -> bool {
+    use rsa::RsaPublicKey;
+    use rsa::pkcs1::DecodeRsaPublicKey;
+    use rsa::pkcs1v15::{Signature, VerifyingKey};
+    use rsa::sha2::Sha256;
+    use rsa::signature::Verifier;
+
+    let Ok(public) = RsaPublicKey::from_pkcs1_der(public_key_der) else {
+        return false;
+    };
+    let Ok(sig) = Signature::try_from(signature) else {
+        return false;
+    };
+    let verifying_key: VerifyingKey<Sha256> = VerifyingKey::new(public);
+    verifying_key.verify(message, &sig).is_ok()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // S2.7-S2.8: Key Exchange + Password Hashing
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1035,6 +1100,32 @@ mod tests {
     fn s2_5_rsa_key_sizes() {
         assert_eq!(RsaKeySize::Rsa2048.bits(), 2048);
         assert_eq!(RsaKeySize::Rsa4096.bits(), 4096);
+    }
+
+    #[test]
+    fn cq1_4_rsa_sign_verify_roundtrip() {
+        // Generate a 2048-bit keypair (slow ~1-3s due to bignum prime
+        // search), sign a message, verify the signature succeeds.
+        let kp = rsa_generate_2048().expect("rsa_generate_2048");
+        let msg = b"hello fajar lang";
+        let sig = rsa_sign(&kp.private_key, msg).expect("rsa_sign");
+        assert!(
+            rsa_verify(&kp.public_key, msg, &sig),
+            "rsa_verify should succeed for matching key+msg+sig"
+        );
+    }
+
+    #[test]
+    fn cq1_4_rsa_verify_rejects_tampered() {
+        // Verify that a tampered message produces a verify failure.
+        let kp = rsa_generate_2048().expect("rsa_generate_2048");
+        let msg = b"original message";
+        let sig = rsa_sign(&kp.private_key, msg).expect("rsa_sign");
+        let tampered = b"tampered message";
+        assert!(
+            !rsa_verify(&kp.public_key, tampered, &sig),
+            "rsa_verify should reject signature on different message"
+        );
     }
 
     #[test]

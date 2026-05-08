@@ -282,6 +282,35 @@ impl TypeChecker {
             ("db_begin", vec![Type::I64], Type::Void),
             ("db_commit", vec![Type::I64], Type::Void),
             ("db_rollback", vec![Type::I64], Type::Void),
+            // CQ1.4 closure (2026-05-09): expose 7 crypto fns to .fj
+            // source (RSA + ed25519 + sha256). All byte-array I/O is
+            // hex-encoded as `str` per docs/CQ1_4_RSA_B0_FINDINGS.md §3
+            // Option B. Closes the systemic gap where 30 crypto.rs fns
+            // were unreachable from .fj source. Slow keygen (~1-3s) is
+            // accepted trade-off for a usable signing capability.
+            (
+                "rsa_generate_2048",
+                vec![],
+                Type::Tuple(vec![Type::Str, Type::Str]),
+            ),
+            ("rsa_sign", vec![Type::Str, Type::Str], Type::Str),
+            (
+                "rsa_verify",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Bool,
+            ),
+            (
+                "ed25519_generate",
+                vec![],
+                Type::Tuple(vec![Type::Str, Type::Str]),
+            ),
+            ("ed25519_sign", vec![Type::Str, Type::Str], Type::Str),
+            (
+                "ed25519_verify",
+                vec![Type::Str, Type::Str, Type::Str],
+                Type::Bool,
+            ),
+            ("sha256", vec![Type::Str], Type::Str),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins

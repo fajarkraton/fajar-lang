@@ -1814,6 +1814,14 @@ impl Interpreter {
             "db_begin",
             "db_commit",
             "db_rollback",
+            // CQ1.4 (2026-05-09): Crypto signing builtins
+            "rsa_generate_2048",
+            "rsa_sign",
+            "rsa_verify",
+            "ed25519_generate",
+            "ed25519_sign",
+            "ed25519_verify",
+            "sha256",
             // WebSocket builtins
             "ws_connect",
             "ws_send",
