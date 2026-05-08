@@ -277,6 +277,59 @@ surfaces what B0 + 18.D.1.1 RED could not predict. ~2h spent here
 saves the ~12h that would have been wasted naively grinding through
 E1-E7 without the over-fire data.
 
+## §5 — 2026-05-08 third update: E1.5 + cascade-scope discovery
+
+**E1.5 finding:** `check_assign` was calling `moves.declare()` which inserts
+into INNERMOST scope. For `a = a.push(x)` chain-grow inside a loop body
+where `a` is declared in an outer fn scope, the RHS `mark_moved` updated
+outer-scope state to Moved, then `declare()` created NEW Owned record in
+inner loop scope. After loop scope popped, only outer-scope record remained
+— Moved.
+
+**E1.5 fix shipped:** `MoveTracker::reset()` API that finds variable in
+innermost-out search (like `mark_moved`) and resets state in-place.
+`check_assign` switched from `declare()` to `reset()` at both pre-RHS and
+post-assign sites. Chain-grow re-assign now correctly resets across nested
+scope boundaries.
+
+**Empirical SE024 over-fire count progression:**
+
+| State | Unique source sites |
+|---|---|
+| Pre-E3 (rolled-back naive wire) | 17 |
+| Post-E3 only (branch-merge w/ terminator) | 17 (E3 fixed branch-with-return but didn't help loop-scope) |
+| **Post-E3 + E1.5 (reset across scopes)** | **5** (71% reduction) |
+
+> Note: my earlier "80" / "111" counts were total SE024 *mentions* in
+> stage1_full output (each test re-runs the chain on the same source).
+> Counted as unique source sites, the actual numbers are much smaller.
+
+**Cascade-scope discovery (2026-05-08):** Of the remaining 5 sites, all
+fire when `vars` (a `[str]` parameter) is consumed by
+`lookup_var_type_in_table(vars, ...)` inside one branch of a c_type-
+inference if/else chain in `stdlib/codegen_driver.fj`. Empirical attempt:
+adding `.clone()` to all 18 `lookup_var_type_in_table` call sites did NOT
+clear all 5 sites — there are still 4 remaining. Investigation revealed:
+
+`grep -nE "\(vars[^.]" stdlib/codegen_driver.fj` shows **19+ MORE bare-vars
+consume sites** in `parse_expr_emit(ast, vars, ...)` calls throughout
+codegen_driver.fj. Plus similar patterns in parser_ast.fj. Each .clone()
+insertion only fixes the downstream uses for THAT call site; subsequent
+fn-arg consumes of `vars` re-Move it.
+
+**Real cascade-fix scope:** ~20-40 `.clone()` insertions in
+codegen_driver.fj + ~10-20 in parser_ast.fj + similar in other stdlib
+files = **30-60 mechanical insertions total**. Estimated effort: **~4-8h**
+of focused work, NOT the 3-6h previously estimated. Each insertion is
+reversible but requires re-running stage1_full to verify no new sites
+surfaced (since each insertion may reveal more downstream fires).
+
+**E1.5 ships as standalone correctness fix.** Even without SE024 wire,
+any user of `strict_ownership` mode benefits from correct chain-grow
+reset across nested scopes. The cascade work is parked pending user
+decision on whether to commit to the larger ~4-8h scope OR pivot to
+D-LITE (~4h opt-in flag) OR defer Phase 2.
+
 ---
 
 *FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS — written 2026-05-08.

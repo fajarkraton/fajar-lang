@@ -202,6 +202,26 @@ impl MoveTracker {
         }
     }
 
+    /// Resets a variable's ownership state to Owned. Unlike `declare()`,
+    /// which inserts into the innermost scope (creating a fresh binding),
+    /// `reset()` finds the variable in whichever scope it lives (like
+    /// `mark_moved`) and resets state in-place. Used by `check_assign`
+    /// to handle re-assign reset across nested scope boundaries —
+    /// FJARR_LEAK Phase 2 / E1.5 fix for `a = a.push(x)` chain-grow
+    /// inside loop bodies where the binding is declared outside the loop.
+    pub fn reset(&mut self, name: &str, span: Span) {
+        for scope in self.states.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.to_string(), (OwnershipState::Owned, span));
+                return;
+            }
+        }
+        // Defensive: not found in any scope → declare in innermost
+        if let Some(scope) = self.states.last_mut() {
+            scope.insert(name.to_string(), (OwnershipState::Owned, span));
+        }
+    }
+
     /// Checks if a variable is in a Moved state.
     /// Returns the move span if the variable was moved.
     pub fn check_use(&self, name: &str) -> Option<Span> {

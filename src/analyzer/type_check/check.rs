@@ -692,6 +692,7 @@ impl TypeChecker {
                         .map(|s| s.ty.clone())
                         .unwrap_or(Type::Unknown);
                     if !self.is_copy(&src_type) {
+                        // ME003: cannot move while borrowed
                         if let Some(borrow_span) = self.moves.check_can_move(src_name) {
                             self.errors.push(SemanticError::MoveWhileBorrowed {
                                 name: src_name.clone(),
@@ -2191,13 +2192,15 @@ impl TypeChecker {
         // evaluating the RHS. This allows the moved variable to be consumed by f()
         // and then reassigned. Without this, `state = define_fn(state, ...)` would
         // trigger ME001 because state was marked moved in a previous iteration.
+        // E1.5 fix (FJARR_LEAK Phase 2): use `reset()` not `declare()` so
+        // outer-scope bindings are reset in-place (not shadowed by inner-scope).
         if let Expr::Ident {
             name,
             span: id_span,
             ..
         } = target
         {
-            self.moves.declare(name, *id_span);
+            self.moves.reset(name, *id_span);
         }
 
         let val_ty = self.check_expr(value);
@@ -2244,7 +2247,8 @@ impl TypeChecker {
 
             // Revive moved variable on reassignment: `state = f(state)` is valid.
             // The old value was consumed by `f`, and a new value is being assigned.
-            self.moves.declare(name, *id_span);
+            // E1.5 fix: reset() finds existing scope; declare() would shadow.
+            self.moves.reset(name, *id_span);
         } else {
             // Field/index assignment — just check the value
             self.check_expr(target);
