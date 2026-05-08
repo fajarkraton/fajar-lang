@@ -59,7 +59,7 @@ md5 `d47fb8a...`; ~57× speedup interpreter → native (38s → 0.66s); 24
 self-host phases closed across 102 dedicated self-host tests; ~38h
 cumulative across v33.4.0..v35.1.0.
 
-> **Source of truth:** `docs/FJARR_LEAK_PHASE_2_FINDINGS.md` (v35.2.0 D-LITE closure, written 2026-05-08) + `docs/FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS.md` (cascade-scope evidence) + `docs/FJARR_LEAK_PHASE_1_FINDINGS.md` (v35.1.0 closure) + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` (v34..v35 self-host audit-trail) + `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` (v33.2.0 caps it) + `docs/HONEST_AUDIT_V33.md`. Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
+> **Source of truth:** `docs/FJARR_LEAK_PHASE_{1,2}_FINDINGS.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` + `docs/HONEST_AUDIT_V33.md`. Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
 
 **Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
 lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
