@@ -2,6 +2,94 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.2.3] — 2026-05-09 🔐 CQ1.4 + ed25519 + sha256 — 7 crypto signing builtins exposed to `.fj` source — patch
+
+`.fj` source can now call SHA-256 hashing, Ed25519 digital signing, and
+RSA-2048 PKCS#1v1.5 signing directly. Closes the systemic gap surfaced
+by `docs/CQ1_4_RSA_B0_FINDINGS.md`: `src/stdlib_v3/crypto.rs` had 30
+pub fns but **all** were unreachable from `.fj` source — analyzer name
+table had zero crypto entries; interpreter dispatch had zero matches.
+
+Per Option B (signing exposure) of the B0 audit. Option C (full crypto
+exposure of all 30 fns) remains documented for v35.3.0 minor bump.
+
+### What `.fj` source can now do
+
+```fj
+fn main() {
+    // SHA-256 hashing
+    let h = sha256("hello fajar lang")
+    println(h)  // → "02e8f33c79d71ad5947a197f28ba71ffec89d0237c6524c8b98d0edaa566a799"
+
+    // Ed25519 digital signing (fast keygen ~1ms)
+    let kp = ed25519_generate()
+    let pubkey = kp.0    // hex-encoded 32-byte public key
+    let secret = kp.1    // hex-encoded 64-byte secret (seed + pub)
+    let sig = ed25519_sign(secret, "message to sign")
+    let ok = ed25519_verify(pubkey, "message to sign", sig)  // → true
+    let bad = ed25519_verify(pubkey, "tampered", sig)         // → false
+
+    // RSA-2048 PKCS#1v1.5 signing (slow keygen ~1-3s due to bignum)
+    let rkp = rsa_generate_2048()
+    let rpub = rkp.0     // hex-encoded DER public key
+    let rpriv = rkp.1    // hex-encoded DER private key
+    let rsig = rsa_sign(rpriv, "message")
+    let rok = rsa_verify(rpub, "message", rsig)               // → true
+}
+```
+
+### 7 new builtins
+
+| Builtin | Signature | Notes |
+|---|---|---|
+| `sha256(data: str) -> str` | hex-encoded 64-char digest | Uses `sha2` crate; ~µs |
+| `ed25519_generate() -> (str, str)` | `(pub_hex, secret_hex)` | Ed25519-dalek; fast ~1ms |
+| `ed25519_sign(secret_hex: str, msg: str) -> str` | hex-encoded 64-byte sig | |
+| `ed25519_verify(pubkey_hex: str, msg: str, sig_hex: str) -> bool` | true/false | Returns false on any decode error |
+| `rsa_generate_2048() -> (str, str)` | `(pub_der_hex, priv_der_hex)` | rsa crate; **slow ~1-3s** (bignum prime search); intended for setup, not hot paths |
+| `rsa_sign(privkey_hex: str, msg: str) -> str` | hex-encoded sig | PKCS#1 v1.5 + SHA-256 |
+| `rsa_verify(pubkey_hex: str, msg: str, sig_hex: str) -> bool` | true/false | Returns false on any decode error |
+
+### API design notes
+
+All byte-array I/O is hex-encoded as `str` for `.fj`-source ergonomics
+(avoids needing to design `[u8]` byte-array conversion at the analyzer
+`Type::*` level for this patch). Keypair generators return `Tuple(str, str)`
+unpackable via `.0` / `.1` field access.
+
+### Risks (per CLAUDE.md §6.8) — all NONE realized
+
+- No `stdlib/*.fj` nor codegen touched → Stage 2 byte-equality unaffected (verified via `phase17_stage2_native_triple_test` 4/4 PASS @ 99.69s)
+- Lib regressions: 7,629 → 7,631 (additive +2 RSA tests in `crypto.rs`)
+- `rsa` crate compile time: ~30s extra one-time cost (bignum + sha2 feature for re-export)
+- `RsaKeySize` + `RsaKeyPair` enum/struct scaffolding had existed since earlier era; this patch fills in the missing fns + wiring
+
+### Added
+
+- **`tests/stdlib_v3_crypto_signing_integration.rs`** (NEW, 3 tests):
+  full-pipeline `parse → analyze → eval` tests for the 7 builtins.
+  - `cq1_4_sha256_known_vector` — asserts SHA256("") + SHA256("hello") match known hex constants
+  - `cq1_4_ed25519_sign_verify_roundtrip_full_pipeline`
+  - `cq1_4_rsa_sign_verify_roundtrip_full_pipeline` (~1-3s due to keygen)
+- **`pub fn rsa_generate_2048` / `rsa_sign` / `rsa_verify`** in `src/stdlib_v3/crypto.rs`
+- **2 RSA unit tests** in `crypto.rs` (`cq1_4_rsa_sign_verify_roundtrip` + `cq1_4_rsa_verify_rejects_tampered`)
+- **`rsa = { version = "0.9", features = ["sha2"] }`** in `Cargo.toml`
+- **7 analyzer name-table registrations** in `src/analyzer/type_check/register.rs`
+- **7 interpreter dispatch sites** in `src/interpreter/eval/builtins.rs`
+- **7 `builtin_*` methods** with hex encode/decode + arity + type checks
+- **7 entries in interpreter builtin name list** (`src/interpreter/eval/mod.rs`)
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+- ✅ 7 crypto signing builtins fully wired end-to-end (analyzer + interpreter + tests)
+- ⚠️ **23 OTHER crypto.rs fns still unreachable from `.fj`**: HMAC, AES-128/256-GCM/CBC, Argon2, X25519, PBKDF2, HKDF, base64/hex encoding builtins, constant_time_eq. Per Option B scope (signing only). Option C (full exposure) is the natural next-step for a v35.3.0 minor bump.
+
+### Source of truth
+
+- `docs/CQ1_4_RSA_B0_FINDINGS.md` — B0 audit + 3 scope options (A/B/C)
+- `tests/stdlib_v3_crypto_signing_integration.rs` — 3 full-pipeline tests
+- `src/stdlib_v3/crypto.rs` (L730-870 area) — RSA implementation
+
 ## [v35.2.2] — 2026-05-08 🧹 stdlib cleanup: 109 redundant `to_int(len(...))` wrappers removed — patch
 
 Internal cleanup. `len()` already returned `i64` at all 9 interpreter
