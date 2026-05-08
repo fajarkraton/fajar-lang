@@ -2770,7 +2770,13 @@ impl TypeChecker {
             (Type::Str, "index_of") => Type::Unknown, // returns Option
             (Type::Str, "parse_int") => Type::Unknown, // returns Result
             (Type::Str, "parse_float") => Type::Unknown, // returns Result
-            (Type::Str, "substring" | "char_at") => Type::Str,
+            (Type::Str, "substring") => Type::Str,
+            // v35.3.2 (2026-05-09): char_at returns Char (not Str). The
+            // interpreter has always returned Value::Char; the prior
+            // analyzer-side Type::Str grouping caused SE004 mismatch
+            // when callers compared `s.char_at(i) == 'X'`. Per
+            // docs/V35_3_2_LEXER_PERF_B0_FINDINGS.md.
+            (Type::Str, "char_at") => Type::Char,
             // Array methods
             (Type::Array(_), "len") => Type::I64,
             (Type::Array(inner), "push") => Type::Array(inner.clone()),

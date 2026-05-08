@@ -177,6 +177,52 @@ fn main() {
     );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.2 — String::char_at returns Char (was Str in pre-v35.3.2 analyzer)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_2_char_at_returns_char_not_str() {
+    // Pre-v35.3.2 the analyzer registered char_at returning Type::Str
+    // even though the interpreter returned Value::Char. So `s.char_at(i)
+    // == 'X'` failed with SE004 type-mismatch. v35.3.2 splits the
+    // grouping so char_at correctly returns Type::Char.
+    use fajar_lang::interpreter::Interpreter;
+    let src = r#"
+fn main() {
+    let s: str = "hello"
+    let c = s.char_at(0)
+    if c == 'h' { println("OK") } else { println("FAIL") }
+}
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(src);
+    assert!(
+        result.is_ok(),
+        "expected `s.char_at(i) == 'X'` to analyze + eval cleanly, got: {result:#?}"
+    );
+}
+
+#[test]
+fn v35_3_2_substring_still_returns_str() {
+    // Regression check: substring grouping was split from char_at;
+    // substring should STILL return Str (not Char).
+    use fajar_lang::interpreter::Interpreter;
+    let src = r#"
+fn main() {
+    let s: str = "hello"
+    let sub = s.substring(0, 1)
+    if sub == "h" { println("OK") } else { println("FAIL") }
+}
+"#;
+    let mut interp = Interpreter::new();
+    let result = interp.eval_source(src);
+    assert!(
+        result.is_ok(),
+        "expected `s.substring(0, 1) == \"h\"` to still work, got: {result:#?}"
+    );
+}
+
 #[test]
 fn clone_independent_returns_distinct_array_value() {
     // Sanity: the cloned value is independent of the original.
