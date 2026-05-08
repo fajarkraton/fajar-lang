@@ -21,27 +21,29 @@
 // 132    = StringLit
 // 133    = Ident
 
-fn is_digit_str(c: str) -> bool {
-    c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
-    c == "5" || c == "6" || c == "7" || c == "8" || c == "9"
+// v35.4.0 (2026-05-09): char-typed helpers replacing prior is_*_str
+// variants. Per docs/V35_4_0_LEXER_PERF_B0_FINDINGS.md Sub-A1.
+fn is_digit_char(c: char) -> bool {
+    c == '0' || c == '1' || c == '2' || c == '3' || c == '4' ||
+    c == '5' || c == '6' || c == '7' || c == '8' || c == '9'
 }
 
-fn is_alpha_str(c: str) -> bool {
-    c == "_" ||
-    c == "a" || c == "b" || c == "c" || c == "d" || c == "e" || c == "f" ||
-    c == "g" || c == "h" || c == "i" || c == "j" || c == "k" || c == "l" ||
-    c == "m" || c == "n" || c == "o" || c == "p" || c == "q" || c == "r" ||
-    c == "s" || c == "t" || c == "u" || c == "v" || c == "w" || c == "x" ||
-    c == "y" || c == "z" ||
-    c == "A" || c == "B" || c == "C" || c == "D" || c == "E" || c == "F" ||
-    c == "G" || c == "H" || c == "I" || c == "J" || c == "K" || c == "L" ||
-    c == "M" || c == "N" || c == "O" || c == "P" || c == "Q" || c == "R" ||
-    c == "S" || c == "T" || c == "U" || c == "V" || c == "W" || c == "X" ||
-    c == "Y" || c == "Z"
+fn is_alpha_char(c: char) -> bool {
+    c == '_' ||
+    c == 'a' || c == 'b' || c == 'c' || c == 'd' || c == 'e' || c == 'f' ||
+    c == 'g' || c == 'h' || c == 'i' || c == 'j' || c == 'k' || c == 'l' ||
+    c == 'm' || c == 'n' || c == 'o' || c == 'p' || c == 'q' || c == 'r' ||
+    c == 's' || c == 't' || c == 'u' || c == 'v' || c == 'w' || c == 'x' ||
+    c == 'y' || c == 'z' ||
+    c == 'A' || c == 'B' || c == 'C' || c == 'D' || c == 'E' || c == 'F' ||
+    c == 'G' || c == 'H' || c == 'I' || c == 'J' || c == 'K' || c == 'L' ||
+    c == 'M' || c == 'N' || c == 'O' || c == 'P' || c == 'Q' || c == 'R' ||
+    c == 'S' || c == 'T' || c == 'U' || c == 'V' || c == 'W' || c == 'X' ||
+    c == 'Y' || c == 'Z'
 }
 
-fn is_alnum_str(c: str) -> bool {
-    is_alpha_str(c) || is_digit_str(c)
+fn is_alnum_char(c: char) -> bool {
+    is_alpha_char(c) || is_digit_char(c)
 }
 
 fn lookup_keyword(word: str) -> i64 {
@@ -127,32 +129,32 @@ pub fn tokenize(source: str) -> [i64] {
     let mut tokens: [i64] = []
 
     while pos < n {
-        let c = source.substring(pos, pos + 1)
+        let c = source.char_at(pos)
 
         // Skip whitespace
-        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+        if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
             pos = pos + 1
             continue
         }
 
         // Skip line comments
-        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+        if c == '/' && pos + 1 < n && source.char_at(pos + 1) == '/' {
             pos = pos + 2
-            while pos < n && source.substring(pos, pos + 1) != "\n" {
+            while pos < n && source.char_at(pos) != '\n' {
                 pos = pos + 1
             }
             continue
         }
 
         // Skip block comments (nested)
-        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+        if c == '/' && pos + 1 < n && source.char_at(pos + 1) == '*' {
             pos = pos + 2
             let mut depth = 1
             while pos < n && depth > 0 {
-                if source.substring(pos, pos + 1) == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+                if source.char_at(pos) == '/' && pos + 1 < n && source.char_at(pos + 1) == '*' {
                     depth = depth + 1
                     pos = pos + 2
-                } else if source.substring(pos, pos + 1) == "*" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+                } else if source.char_at(pos) == '*' && pos + 1 < n && source.char_at(pos + 1) == '/' {
                     depth = depth - 1
                     pos = pos + 2
                 } else {
@@ -163,17 +165,17 @@ pub fn tokenize(source: str) -> [i64] {
         }
 
         // Numbers (integer and float), including hex (0x), binary (0b), octal (0o)
-        if is_digit_str(c) {
+        if is_digit_char(c) {
             let mut is_float = false
             // Check for 0x, 0b, 0o prefix
-            if c == "0" && pos + 1 < n {
-                let prefix = source.substring(pos + 1, pos + 2)
-                if prefix == "x" || prefix == "X" {
+            if c == '0' && pos + 1 < n {
+                let prefix = source.char_at(pos + 1)
+                if prefix == 'x' || prefix == 'X' {
                     // Hex literal: 0x[0-9a-fA-F]+
                     pos = pos + 2
                     while pos < n {
-                        let hc = source.substring(pos, pos + 1)
-                        if is_digit_str(hc) || hc == "a" || hc == "b" || hc == "c" || hc == "d" || hc == "e" || hc == "f" || hc == "A" || hc == "B" || hc == "C" || hc == "D" || hc == "E" || hc == "F" {
+                        let hc = source.char_at(pos)
+                        if is_digit_char(hc) || hc == 'a' || hc == 'b' || hc == 'c' || hc == 'd' || hc == 'e' || hc == 'f' || hc == 'A' || hc == 'B' || hc == 'C' || hc == 'D' || hc == 'E' || hc == 'F' {
                             pos = pos + 1
                         } else {
                             break
@@ -182,22 +184,22 @@ pub fn tokenize(source: str) -> [i64] {
                     tokens = tokens.push(130)
                     continue
                 }
-                if prefix == "b" || prefix == "B" {
+                if prefix == 'b' || prefix == 'B' {
                     // Binary literal: 0b[01]+
                     pos = pos + 2
                     while pos < n {
-                        let bc = source.substring(pos, pos + 1)
-                        if bc == "0" || bc == "1" { pos = pos + 1 } else { break }
+                        let bc = source.char_at(pos)
+                        if bc == '0' || bc == '1' { pos = pos + 1 } else { break }
                     }
                     tokens = tokens.push(130)
                     continue
                 }
-                if prefix == "o" || prefix == "O" {
+                if prefix == 'o' || prefix == 'O' {
                     // Octal literal: 0o[0-7]+
                     pos = pos + 2
                     while pos < n {
-                        let oc = source.substring(pos, pos + 1)
-                        if oc == "0" || oc == "1" || oc == "2" || oc == "3" || oc == "4" || oc == "5" || oc == "6" || oc == "7" {
+                        let oc = source.char_at(pos)
+                        if oc == '0' || oc == '1' || oc == '2' || oc == '3' || oc == '4' || oc == '5' || oc == '6' || oc == '7' {
                             pos = pos + 1
                         } else { break }
                     }
@@ -207,30 +209,30 @@ pub fn tokenize(source: str) -> [i64] {
             }
             // Decimal integer or float
             pos = pos + 1
-            while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+            while pos < n && is_digit_char(source.char_at(pos)) {
                 pos = pos + 1
             }
             // Check for decimal point
-            if pos < n && source.substring(pos, pos + 1) == "." {
-                if pos + 1 < n && is_digit_str(source.substring(pos + 1, pos + 2)) {
+            if pos < n && source.char_at(pos) == '.' {
+                if pos + 1 < n && is_digit_char(source.char_at(pos + 1)) {
                     is_float = true
                     pos = pos + 1
-                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                    while pos < n && is_digit_char(source.char_at(pos)) {
                         pos = pos + 1
                     }
                 }
             }
             // Check for scientific notation (e/E)
             if pos < n {
-                let ec = source.substring(pos, pos + 1)
-                if ec == "e" || ec == "E" {
+                let ec = source.char_at(pos)
+                if ec == 'e' || ec == 'E' {
                     is_float = true
                     pos = pos + 1
                     if pos < n {
-                        let sign = source.substring(pos, pos + 1)
-                        if sign == "+" || sign == "-" { pos = pos + 1 }
+                        let sign = source.char_at(pos)
+                        if sign == '+' || sign == '-' { pos = pos + 1 }
                     }
-                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                    while pos < n && is_digit_char(source.char_at(pos)) {
                         pos = pos + 1
                     }
                 }
@@ -244,14 +246,14 @@ pub fn tokenize(source: str) -> [i64] {
         }
 
         // Char literals: 'a', '\n', '\0'  (token kind 134)
-        if c == "'" {
+        if c == '\'' {
             pos = pos + 1
-            if pos < n && source.substring(pos, pos + 1) == "\\" {
+            if pos < n && source.char_at(pos) == '\\' {
                 pos = pos + 2  // skip escape sequence
             } else {
                 pos = pos + 1  // skip single char
             }
-            if pos < n && source.substring(pos, pos + 1) == "'" {
+            if pos < n && source.char_at(pos) == '\'' {
                 pos = pos + 1
             }
             tokens = tokens.push(134)
@@ -259,10 +261,10 @@ pub fn tokenize(source: str) -> [i64] {
         }
 
         // F-string literals: f"..." (token kind 135)
-        if c == "f" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "\"" {
+        if c == 'f' && pos + 1 < n && source.char_at(pos + 1) == '"' {
             pos = pos + 2  // skip f"
-            while pos < n && source.substring(pos, pos + 1) != "\"" {
-                if source.substring(pos, pos + 1) == "\\" {
+            while pos < n && source.char_at(pos) != '"' {
+                if source.char_at(pos) == '\\' {
                     pos = pos + 2
                 } else {
                     pos = pos + 1
@@ -274,10 +276,10 @@ pub fn tokenize(source: str) -> [i64] {
         }
 
         // Identifiers and keywords
-        if is_alpha_str(c) {
+        if is_alpha_char(c) {
             let start = pos
             pos = pos + 1
-            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
+            while pos < n && is_alnum_char(source.char_at(pos)) {
                 pos = pos + 1
             }
             let word = source.substring(start, pos)
@@ -291,10 +293,10 @@ pub fn tokenize(source: str) -> [i64] {
         }
 
         // String literals
-        if c == "\"" {
+        if c == '"' {
             pos = pos + 1
-            while pos < n && source.substring(pos, pos + 1) != "\"" {
-                if source.substring(pos, pos + 1) == "\\" {
+            while pos < n && source.char_at(pos) != '"' {
+                if source.char_at(pos) == '\\' {
                     pos = pos + 2
                 } else {
                     pos = pos + 1
@@ -309,66 +311,66 @@ pub fn tokenize(source: str) -> [i64] {
 
         // Three-character operators
         if pos + 2 < n {
-            let c2 = source.substring(pos + 1, pos + 2)
-            let c3 = source.substring(pos + 2, pos + 3)
-            if c == "<" && c2 == "<" && c3 == "=" { tokens = tokens.push(100); pos = pos + 3; continue }
-            if c == ">" && c2 == ">" && c3 == "=" { tokens = tokens.push(101); pos = pos + 3; continue }
-            if c == "." && c2 == "." && c3 == "=" { tokens = tokens.push(103); pos = pos + 3; continue }
+            let c2 = source.char_at(pos + 1)
+            let c3 = source.char_at(pos + 2)
+            if c == '<' && c2 == '<' && c3 == '=' { tokens = tokens.push(100); pos = pos + 3; continue }
+            if c == '>' && c2 == '>' && c3 == '=' { tokens = tokens.push(101); pos = pos + 3; continue }
+            if c == '.' && c2 == '.' && c3 == '=' { tokens = tokens.push(103); pos = pos + 3; continue }
         }
 
         // Two-character operators
         if pos + 1 < n {
-            let c2 = source.substring(pos + 1, pos + 2)
-            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; continue }
-            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; continue }
-            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; continue }
-            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; continue }
-            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; continue }
-            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; continue }
-            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; continue }
-            if c == "<" && c2 == "<" { tokens = tokens.push(89); pos = pos + 2; continue }
-            if c == ">" && c2 == ">" { tokens = tokens.push(90); pos = pos + 2; continue }
-            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; continue }
-            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; continue }
-            if c == "*" && c2 == "=" { tokens = tokens.push(94); pos = pos + 2; continue }
-            if c == "/" && c2 == "=" { tokens = tokens.push(95); pos = pos + 2; continue }
-            if c == "%" && c2 == "=" { tokens = tokens.push(96); pos = pos + 2; continue }
-            if c == "&" && c2 == "=" { tokens = tokens.push(97); pos = pos + 2; continue }
-            if c == "|" && c2 == "=" { tokens = tokens.push(98); pos = pos + 2; continue }
-            if c == "^" && c2 == "=" { tokens = tokens.push(99); pos = pos + 2; continue }
-            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; continue }
-            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; continue }
-            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; continue }
-            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; continue }
-            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; continue }
+            let c2 = source.char_at(pos + 1)
+            if c == '*' && c2 == '*' { tokens = tokens.push(75); pos = pos + 2; continue }
+            if c == '=' && c2 == '=' { tokens = tokens.push(76); pos = pos + 2; continue }
+            if c == '!' && c2 == '=' { tokens = tokens.push(77); pos = pos + 2; continue }
+            if c == '<' && c2 == '=' { tokens = tokens.push(80); pos = pos + 2; continue }
+            if c == '>' && c2 == '=' { tokens = tokens.push(81); pos = pos + 2; continue }
+            if c == '&' && c2 == '&' { tokens = tokens.push(82); pos = pos + 2; continue }
+            if c == '|' && c2 == '|' { tokens = tokens.push(83); pos = pos + 2; continue }
+            if c == '<' && c2 == '<' { tokens = tokens.push(89); pos = pos + 2; continue }
+            if c == '>' && c2 == '>' { tokens = tokens.push(90); pos = pos + 2; continue }
+            if c == '+' && c2 == '=' { tokens = tokens.push(92); pos = pos + 2; continue }
+            if c == '-' && c2 == '=' { tokens = tokens.push(93); pos = pos + 2; continue }
+            if c == '*' && c2 == '=' { tokens = tokens.push(94); pos = pos + 2; continue }
+            if c == '/' && c2 == '=' { tokens = tokens.push(95); pos = pos + 2; continue }
+            if c == '%' && c2 == '=' { tokens = tokens.push(96); pos = pos + 2; continue }
+            if c == '&' && c2 == '=' { tokens = tokens.push(97); pos = pos + 2; continue }
+            if c == '|' && c2 == '=' { tokens = tokens.push(98); pos = pos + 2; continue }
+            if c == '^' && c2 == '=' { tokens = tokens.push(99); pos = pos + 2; continue }
+            if c == '.' && c2 == '.' { tokens = tokens.push(102); pos = pos + 2; continue }
+            if c == '|' && c2 == '>' { tokens = tokens.push(104); pos = pos + 2; continue }
+            if c == '-' && c2 == '>' { tokens = tokens.push(121); pos = pos + 2; continue }
+            if c == '=' && c2 == '>' { tokens = tokens.push(122); pos = pos + 2; continue }
+            if c == ':' && c2 == ':' { tokens = tokens.push(117); pos = pos + 2; continue }
         }
 
         // Single-character tokens
-        if c == "+" { tokens = tokens.push(70); pos = pos + 1; continue }
-        if c == "-" { tokens = tokens.push(71); pos = pos + 1; continue }
-        if c == "*" { tokens = tokens.push(72); pos = pos + 1; continue }
-        if c == "/" { tokens = tokens.push(73); pos = pos + 1; continue }
-        if c == "%" { tokens = tokens.push(74); pos = pos + 1; continue }
-        if c == "<" { tokens = tokens.push(78); pos = pos + 1; continue }
-        if c == ">" { tokens = tokens.push(79); pos = pos + 1; continue }
-        if c == "!" { tokens = tokens.push(84); pos = pos + 1; continue }
-        if c == "&" { tokens = tokens.push(85); pos = pos + 1; continue }
-        if c == "|" { tokens = tokens.push(86); pos = pos + 1; continue }
-        if c == "^" { tokens = tokens.push(87); pos = pos + 1; continue }
-        if c == "~" { tokens = tokens.push(88); pos = pos + 1; continue }
-        if c == "=" { tokens = tokens.push(91); pos = pos + 1; continue }
-        if c == "@" { tokens = tokens.push(105); pos = pos + 1; continue }
-        if c == "(" { tokens = tokens.push(110); pos = pos + 1; continue }
-        if c == ")" { tokens = tokens.push(111); pos = pos + 1; continue }
-        if c == "{" { tokens = tokens.push(112); pos = pos + 1; continue }
-        if c == "}" { tokens = tokens.push(113); pos = pos + 1; continue }
-        if c == "[" { tokens = tokens.push(114); pos = pos + 1; continue }
-        if c == "]" { tokens = tokens.push(115); pos = pos + 1; continue }
-        if c == ";" { tokens = tokens.push(116); pos = pos + 1; continue }
-        if c == ":" { tokens = tokens.push(118); pos = pos + 1; continue }
-        if c == "," { tokens = tokens.push(119); pos = pos + 1; continue }
-        if c == "." { tokens = tokens.push(120); pos = pos + 1; continue }
-        if c == "?" { tokens = tokens.push(123); pos = pos + 1; continue }
+        if c == '+' { tokens = tokens.push(70); pos = pos + 1; continue }
+        if c == '-' { tokens = tokens.push(71); pos = pos + 1; continue }
+        if c == '*' { tokens = tokens.push(72); pos = pos + 1; continue }
+        if c == '/' { tokens = tokens.push(73); pos = pos + 1; continue }
+        if c == '%' { tokens = tokens.push(74); pos = pos + 1; continue }
+        if c == '<' { tokens = tokens.push(78); pos = pos + 1; continue }
+        if c == '>' { tokens = tokens.push(79); pos = pos + 1; continue }
+        if c == '!' { tokens = tokens.push(84); pos = pos + 1; continue }
+        if c == '&' { tokens = tokens.push(85); pos = pos + 1; continue }
+        if c == '|' { tokens = tokens.push(86); pos = pos + 1; continue }
+        if c == '^' { tokens = tokens.push(87); pos = pos + 1; continue }
+        if c == '~' { tokens = tokens.push(88); pos = pos + 1; continue }
+        if c == '=' { tokens = tokens.push(91); pos = pos + 1; continue }
+        if c == '@' { tokens = tokens.push(105); pos = pos + 1; continue }
+        if c == '(' { tokens = tokens.push(110); pos = pos + 1; continue }
+        if c == ')' { tokens = tokens.push(111); pos = pos + 1; continue }
+        if c == '{' { tokens = tokens.push(112); pos = pos + 1; continue }
+        if c == '}' { tokens = tokens.push(113); pos = pos + 1; continue }
+        if c == '[' { tokens = tokens.push(114); pos = pos + 1; continue }
+        if c == ']' { tokens = tokens.push(115); pos = pos + 1; continue }
+        if c == ';' { tokens = tokens.push(116); pos = pos + 1; continue }
+        if c == ':' { tokens = tokens.push(118); pos = pos + 1; continue }
+        if c == ',' { tokens = tokens.push(119); pos = pos + 1; continue }
+        if c == '.' { tokens = tokens.push(120); pos = pos + 1; continue }
+        if c == '?' { tokens = tokens.push(123); pos = pos + 1; continue }
 
         // Unknown character — skip
         pos = pos + 1
@@ -415,32 +417,32 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
     let mut ends: [i64] = []
 
     while pos < n {
-        let c = source.substring(pos, pos + 1)
+        let c = source.char_at(pos)
 
         // Skip whitespace
-        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+        if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
             pos = pos + 1
             continue
         }
 
         // Skip line comments
-        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+        if c == '/' && pos + 1 < n && source.char_at(pos + 1) == '/' {
             pos = pos + 2
-            while pos < n && source.substring(pos, pos + 1) != "\n" {
+            while pos < n && source.char_at(pos) != '\n' {
                 pos = pos + 1
             }
             continue
         }
 
         // Skip block comments (nested)
-        if c == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+        if c == '/' && pos + 1 < n && source.char_at(pos + 1) == '*' {
             pos = pos + 2
             let mut depth = 1
             while pos < n && depth > 0 {
-                if source.substring(pos, pos + 1) == "/" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "*" {
+                if source.char_at(pos) == '/' && pos + 1 < n && source.char_at(pos + 1) == '*' {
                     depth = depth + 1
                     pos = pos + 2
-                } else if source.substring(pos, pos + 1) == "*" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "/" {
+                } else if source.char_at(pos) == '*' && pos + 1 < n && source.char_at(pos + 1) == '/' {
                     depth = depth - 1
                     pos = pos + 2
                 } else {
@@ -454,15 +456,15 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
         let tok_start = pos
 
         // Numbers (integer and float), including hex (0x), binary (0b), octal (0o)
-        if is_digit_str(c) {
+        if is_digit_char(c) {
             let mut is_float = false
-            if c == "0" && pos + 1 < n {
-                let prefix = source.substring(pos + 1, pos + 2)
-                if prefix == "x" || prefix == "X" {
+            if c == '0' && pos + 1 < n {
+                let prefix = source.char_at(pos + 1)
+                if prefix == 'x' || prefix == 'X' {
                     pos = pos + 2
                     while pos < n {
-                        let hc = source.substring(pos, pos + 1)
-                        if is_digit_str(hc) || hc == "a" || hc == "b" || hc == "c" || hc == "d" || hc == "e" || hc == "f" || hc == "A" || hc == "B" || hc == "C" || hc == "D" || hc == "E" || hc == "F" {
+                        let hc = source.char_at(pos)
+                        if is_digit_char(hc) || hc == 'a' || hc == 'b' || hc == 'c' || hc == 'd' || hc == 'e' || hc == 'f' || hc == 'A' || hc == 'B' || hc == 'C' || hc == 'D' || hc == 'E' || hc == 'F' {
                             pos = pos + 1
                         } else {
                             break
@@ -473,22 +475,22 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
                     ends = ends.push(pos)
                     continue
                 }
-                if prefix == "b" || prefix == "B" {
+                if prefix == 'b' || prefix == 'B' {
                     pos = pos + 2
                     while pos < n {
-                        let bc = source.substring(pos, pos + 1)
-                        if bc == "0" || bc == "1" { pos = pos + 1 } else { break }
+                        let bc = source.char_at(pos)
+                        if bc == '0' || bc == '1' { pos = pos + 1 } else { break }
                     }
                     tokens = tokens.push(130)
                     starts = starts.push(tok_start)
                     ends = ends.push(pos)
                     continue
                 }
-                if prefix == "o" || prefix == "O" {
+                if prefix == 'o' || prefix == 'O' {
                     pos = pos + 2
                     while pos < n {
-                        let oc = source.substring(pos, pos + 1)
-                        if oc == "0" || oc == "1" || oc == "2" || oc == "3" || oc == "4" || oc == "5" || oc == "6" || oc == "7" {
+                        let oc = source.char_at(pos)
+                        if oc == '0' || oc == '1' || oc == '2' || oc == '3' || oc == '4' || oc == '5' || oc == '6' || oc == '7' {
                             pos = pos + 1
                         } else { break }
                     }
@@ -500,28 +502,28 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
             }
             // Decimal integer or float
             pos = pos + 1
-            while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+            while pos < n && is_digit_char(source.char_at(pos)) {
                 pos = pos + 1
             }
-            if pos < n && source.substring(pos, pos + 1) == "." {
-                if pos + 1 < n && is_digit_str(source.substring(pos + 1, pos + 2)) {
+            if pos < n && source.char_at(pos) == '.' {
+                if pos + 1 < n && is_digit_char(source.char_at(pos + 1)) {
                     is_float = true
                     pos = pos + 1
-                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                    while pos < n && is_digit_char(source.char_at(pos)) {
                         pos = pos + 1
                     }
                 }
             }
             if pos < n {
-                let ec = source.substring(pos, pos + 1)
-                if ec == "e" || ec == "E" {
+                let ec = source.char_at(pos)
+                if ec == 'e' || ec == 'E' {
                     is_float = true
                     pos = pos + 1
                     if pos < n {
-                        let sign = source.substring(pos, pos + 1)
-                        if sign == "+" || sign == "-" { pos = pos + 1 }
+                        let sign = source.char_at(pos)
+                        if sign == '+' || sign == '-' { pos = pos + 1 }
                     }
-                    while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
+                    while pos < n && is_digit_char(source.char_at(pos)) {
                         pos = pos + 1
                     }
                 }
@@ -537,14 +539,14 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
         }
 
         // Char literals
-        if c == "'" {
+        if c == '\'' {
             pos = pos + 1
-            if pos < n && source.substring(pos, pos + 1) == "\\" {
+            if pos < n && source.char_at(pos) == '\\' {
                 pos = pos + 2
             } else {
                 pos = pos + 1
             }
-            if pos < n && source.substring(pos, pos + 1) == "'" {
+            if pos < n && source.char_at(pos) == '\'' {
                 pos = pos + 1
             }
             tokens = tokens.push(134)
@@ -554,10 +556,10 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
         }
 
         // F-string literals
-        if c == "f" && pos + 1 < n && source.substring(pos + 1, pos + 2) == "\"" {
+        if c == 'f' && pos + 1 < n && source.char_at(pos + 1) == '"' {
             pos = pos + 2
-            while pos < n && source.substring(pos, pos + 1) != "\"" {
-                if source.substring(pos, pos + 1) == "\\" {
+            while pos < n && source.char_at(pos) != '"' {
+                if source.char_at(pos) == '\\' {
                     pos = pos + 2
                 } else {
                     pos = pos + 1
@@ -571,9 +573,9 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
         }
 
         // Identifiers and keywords
-        if is_alpha_str(c) {
+        if is_alpha_char(c) {
             pos = pos + 1
-            while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
+            while pos < n && is_alnum_char(source.char_at(pos)) {
                 pos = pos + 1
             }
             let word = source.substring(tok_start, pos)
@@ -589,10 +591,10 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
         }
 
         // String literals
-        if c == "\"" {
+        if c == '"' {
             pos = pos + 1
-            while pos < n && source.substring(pos, pos + 1) != "\"" {
-                if source.substring(pos, pos + 1) == "\\" {
+            while pos < n && source.char_at(pos) != '"' {
+                if source.char_at(pos) == '\\' {
                     pos = pos + 2
                 } else {
                     pos = pos + 1
@@ -609,66 +611,66 @@ pub fn tokenize_with_spans(source: str) -> SpanResult {
 
         // Three-character operators
         if pos + 2 < n {
-            let c2 = source.substring(pos + 1, pos + 2)
-            let c3 = source.substring(pos + 2, pos + 3)
-            if c == "<" && c2 == "<" && c3 == "=" { tokens = tokens.push(100); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == ">" && c2 == ">" && c3 == "=" { tokens = tokens.push(101); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "." && c2 == "." && c3 == "=" { tokens = tokens.push(103); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            let c2 = source.char_at(pos + 1)
+            let c3 = source.char_at(pos + 2)
+            if c == '<' && c2 == '<' && c3 == '=' { tokens = tokens.push(100); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '>' && c2 == '>' && c3 == '=' { tokens = tokens.push(101); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '.' && c2 == '.' && c3 == '=' { tokens = tokens.push(103); pos = pos + 3; starts = starts.push(tok_start); ends = ends.push(pos); continue }
         }
 
         // Two-character operators
         if pos + 1 < n {
-            let c2 = source.substring(pos + 1, pos + 2)
-            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "<" && c2 == "<" { tokens = tokens.push(89); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == ">" && c2 == ">" { tokens = tokens.push(90); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "*" && c2 == "=" { tokens = tokens.push(94); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "/" && c2 == "=" { tokens = tokens.push(95); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "%" && c2 == "=" { tokens = tokens.push(96); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "&" && c2 == "=" { tokens = tokens.push(97); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "|" && c2 == "=" { tokens = tokens.push(98); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "^" && c2 == "=" { tokens = tokens.push(99); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            let c2 = source.char_at(pos + 1)
+            if c == '*' && c2 == '*' { tokens = tokens.push(75); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '=' && c2 == '=' { tokens = tokens.push(76); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '!' && c2 == '=' { tokens = tokens.push(77); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '<' && c2 == '=' { tokens = tokens.push(80); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '>' && c2 == '=' { tokens = tokens.push(81); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '&' && c2 == '&' { tokens = tokens.push(82); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '|' && c2 == '|' { tokens = tokens.push(83); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '<' && c2 == '<' { tokens = tokens.push(89); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '>' && c2 == '>' { tokens = tokens.push(90); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '+' && c2 == '=' { tokens = tokens.push(92); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '-' && c2 == '=' { tokens = tokens.push(93); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '*' && c2 == '=' { tokens = tokens.push(94); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '/' && c2 == '=' { tokens = tokens.push(95); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '%' && c2 == '=' { tokens = tokens.push(96); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '&' && c2 == '=' { tokens = tokens.push(97); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '|' && c2 == '=' { tokens = tokens.push(98); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '^' && c2 == '=' { tokens = tokens.push(99); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '.' && c2 == '.' { tokens = tokens.push(102); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '|' && c2 == '>' { tokens = tokens.push(104); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '-' && c2 == '>' { tokens = tokens.push(121); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == '=' && c2 == '>' { tokens = tokens.push(122); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+            if c == ':' && c2 == ':' { tokens = tokens.push(117); pos = pos + 2; starts = starts.push(tok_start); ends = ends.push(pos); continue }
         }
 
         // Single-character tokens
-        if c == "+" { tokens = tokens.push(70); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "-" { tokens = tokens.push(71); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "*" { tokens = tokens.push(72); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "/" { tokens = tokens.push(73); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "%" { tokens = tokens.push(74); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "<" { tokens = tokens.push(78); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == ">" { tokens = tokens.push(79); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "!" { tokens = tokens.push(84); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "&" { tokens = tokens.push(85); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "|" { tokens = tokens.push(86); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "^" { tokens = tokens.push(87); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "~" { tokens = tokens.push(88); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "=" { tokens = tokens.push(91); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "@" { tokens = tokens.push(105); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "(" { tokens = tokens.push(110); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == ")" { tokens = tokens.push(111); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "{" { tokens = tokens.push(112); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "}" { tokens = tokens.push(113); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "[" { tokens = tokens.push(114); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "]" { tokens = tokens.push(115); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == ";" { tokens = tokens.push(116); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == ":" { tokens = tokens.push(118); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "," { tokens = tokens.push(119); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "." { tokens = tokens.push(120); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
-        if c == "?" { tokens = tokens.push(123); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '+' { tokens = tokens.push(70); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '-' { tokens = tokens.push(71); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '*' { tokens = tokens.push(72); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '/' { tokens = tokens.push(73); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '%' { tokens = tokens.push(74); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '<' { tokens = tokens.push(78); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '>' { tokens = tokens.push(79); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '!' { tokens = tokens.push(84); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '&' { tokens = tokens.push(85); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '|' { tokens = tokens.push(86); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '^' { tokens = tokens.push(87); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '~' { tokens = tokens.push(88); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '=' { tokens = tokens.push(91); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '@' { tokens = tokens.push(105); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '(' { tokens = tokens.push(110); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ')' { tokens = tokens.push(111); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '{' { tokens = tokens.push(112); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '}' { tokens = tokens.push(113); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '[' { tokens = tokens.push(114); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ']' { tokens = tokens.push(115); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ';' { tokens = tokens.push(116); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ':' { tokens = tokens.push(118); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == ',' { tokens = tokens.push(119); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '.' { tokens = tokens.push(120); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
+        if c == '?' { tokens = tokens.push(123); pos = pos + 1; starts = starts.push(tok_start); ends = ends.push(pos); continue }
 
         // Unknown character — skip (no token emitted, no span recorded)
         pos = pos + 1
@@ -696,7 +698,7 @@ pub fn offset_to_line(source: str, offset: i64) -> i64 {
     let mut line = 1
     let mut i = 0
     while i < offset && i < len(source) {
-        if source.substring(i, i + 1) == "\n" {
+        if source.char_at(i) == '\n' {
             line = line + 1
         }
         i = i + 1
@@ -709,7 +711,7 @@ pub fn offset_to_col(source: str, offset: i64) -> i64 {
     let mut col = 1
     let mut i = 0
     while i < offset && i < len(source) {
-        if source.substring(i, i + 1) == "\n" {
+        if source.char_at(i) == '\n' {
             col = 1
         } else {
             col = col + 1
