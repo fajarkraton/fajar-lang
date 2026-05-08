@@ -271,10 +271,17 @@ impl TypeChecker {
             ),
             ("nvme_read_block", vec![Type::Unknown], Type::I64),
             ("nvme_write_block", vec![Type::Unknown], Type::I64),
-            // Database builtins (variadic — 2 or 3 args)
+            // Database builtins (TQ12.2 SQLite via rusqlite)
             ("db_open", vec![Type::Unknown], Type::I64),
             ("db_execute", vec![Type::Unknown], Type::I64),
             ("db_query", vec![Type::Unknown], Type::Unknown),
+            // TQ12.2 closure (2026-05-08): register the 4 builtins that
+            // were dispatched in interpreter but missing from analyzer
+            // name table. Per docs/TQ12_2_SQLITE_B0_FINDINGS.md.
+            ("db_close", vec![Type::I64], Type::Void),
+            ("db_begin", vec![Type::I64], Type::Void),
+            ("db_commit", vec![Type::I64], Type::Void),
+            ("db_rollback", vec![Type::I64], Type::Void),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins
