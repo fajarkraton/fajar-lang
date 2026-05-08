@@ -3557,6 +3557,10 @@ impl Interpreter {
                 if name == "aes256_cbc_decrypt" {
                     return self.builtin_aes256_cbc_decrypt(args);
                 }
+                // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange.
+                if name == "x25519_generate" {
+                    return self.builtin_x25519_generate(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -5172,6 +5176,31 @@ impl Interpreter {
             Ok(pt) => Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(&pt))),
             Err(_) => Ok(Value::Str(String::new())),
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange
+    // ════════════════════════════════════════════════════════════════════
+
+    /// `x25519_generate() -> (pub_hex, secret_hex)`. Generates an X25519
+    /// keypair (clamped per spec). Note: shared-secret derivation
+    /// requires both parties' keys + a separate `x25519_dh` builtin,
+    /// which is out of scope for v35.3.0 (deferred to future patch).
+    fn builtin_x25519_generate(&mut self, args: Vec<Value>) -> EvalResult {
+        if !args.is_empty() {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: args.len(),
+            }
+            .into());
+        }
+        let kp = crate::stdlib_v3::crypto::x25519_generate();
+        let pub_hex = crate::stdlib_v3::crypto::hex_encode(&kp.public_key);
+        let secret_hex = crate::stdlib_v3::crypto::hex_encode(&kp.secret_key);
+        Ok(Value::Tuple(vec![
+            Value::Str(pub_hex),
+            Value::Str(secret_hex),
+        ]))
     }
 
     /// Convert a `Value::Array` of params to `Vec<DbParam>`.

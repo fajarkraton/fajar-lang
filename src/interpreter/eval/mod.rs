@@ -1848,6 +1848,8 @@ impl Interpreter {
             "aes128_cbc_decrypt",
             "aes256_cbc_encrypt",
             "aes256_cbc_decrypt",
+            // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange
+            "x25519_generate",
             // WebSocket builtins
             "ws_connect",
             "ws_send",

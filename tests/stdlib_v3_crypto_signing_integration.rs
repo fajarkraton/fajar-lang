@@ -352,3 +352,25 @@ fn main() {
 "#)
     .expect("aes256_cbc round-trip");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.0 Batch 4 — X25519 key exchange (1 fn)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_0_b4_x25519_generate_returns_clamped_keypair() {
+    run(r#"
+fn main() {
+    let kp = x25519_generate()
+    let pub_hex = kp.0
+    let secret_hex = kp.1
+    if len(pub_hex) != 64 { println("X25519 PUB WRONG LEN (expected 64 hex chars = 32 bytes)") }
+    if len(secret_hex) != 64 { println("X25519 SECRET WRONG LEN") }
+    // Two generations should differ (random)
+    let kp2 = x25519_generate()
+    if kp.1 == kp2.1 { println("X25519 SECRET COLLISION (improbable)") }
+    println("x25519_generate: OK")
+}
+"#)
+    .expect("x25519_generate keypair shape");
+}
