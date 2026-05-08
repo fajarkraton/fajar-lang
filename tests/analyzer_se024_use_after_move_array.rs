@@ -129,7 +129,7 @@ fn format_se024_span_method_returns_use_site() {
 // remove the `#[ignore]` and these MUST pass.
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — branch-merge analysis (E3) needed before re-attempt"]
+#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_basic_consume_then_use() {
     expect_se024(
         r#"
@@ -144,7 +144,7 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — branch-merge analysis (E3) needed before re-attempt"]
+#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_branch_merge_then_use() {
     expect_se024(
         r#"
@@ -159,7 +159,7 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — branch-merge analysis (E3) needed before re-attempt"]
+#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_let_alias_then_original_use() {
     expect_se024(
         r#"
@@ -174,7 +174,7 @@ fn main() {
 }
 
 #[test]
-#[ignore = "18.D.1.2 OVERFIRE — branch-merge analysis (E3) needed before re-attempt"]
+#[ignore = "18.D.1.2 OVERFIRE — even with E3, 80 cascade sites remain in stdlib (need .clone() insertions or pivot)"]
 fn emit_se024_str_array_use_after_move() {
     expect_se024(
         r#"

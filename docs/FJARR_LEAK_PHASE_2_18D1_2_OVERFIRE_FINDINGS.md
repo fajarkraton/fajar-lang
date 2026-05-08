@@ -124,13 +124,46 @@ plan didn't itemize.
 > (the materialized concatenated stdlib). All 111 are the
 > branch-with-return / branch-merge pattern (E3 issue). **Zero**
 > chain-grow over-fires (E1 already handled).
+>
+> **2026-05-08 second update (E3 implementation + experiment):**
+> E3 (branch-merge analysis with terminator awareness) shipped:
+> - `MoveSnapshot` + `snapshot()` / `restore()` / `merge_snapshots()`
+>   added to `MoveTracker` (`src/analyzer/borrow_lite.rs:138-237`).
+> - `branch_always_terminates(e: &Expr) -> bool` helper added
+>   (`src/analyzer/type_check/check.rs:13-46`).
+> - `check_if` rewritten to snapshot pre-branch state, restore for
+>   else, and merge with terminator skip (4-case logic).
+> - Standalone unit tests: `tests/analyzer_branch_merge_terminator.rs`
+>   (5/5 PASS), exercising strict-mode ME001 paths.
+>
+> **E3 result on full SE024 wire**: 111 → **80** unique sites
+> (28% reduction). Better but still 4× the <20 GREEN threshold.
+> The remaining 80 sites are NOT branch-merge issues — they're
+> genuine affine-vs-error-propagation conflicts in self-host source:
+> ```fj
+> let r_subj = parse_expr_ast(src, pos, a)   // a Moved here (fn-arg consume)
+> if p_lb < 0 { return pr_err(a, ...) }       // a still Moved (consume happened
+>                                              // BEFORE the if; E3 doesn't help)
+> a = r_subj.ast                               // re-bind would reset, but
+>                                              // never reached if branch returned
+> ```
+> The user wants to use `a` once for the error message in the
+> error-path, but affine semantics rejects this without `&[T]`
+> borrow type or `.clone()` insertion.
+>
+> **E3 was shipped as a standalone correctness fix** (improves the
+> existing ME001 strict-mode path even without SE024 wire). SE024
+> wire was rolled back; emit_* tests re-#[ignore]'d.
 
 | Metric | Value |
 |---|---|
-| SE024 occurrences in 86-test stage1_full run (raw) | **12,384** |
-| Unique source sites per single-test chain run | **111** |
-| All 111 attributed to E3 branch-merge issue | ✅ |
+| SE024 occurrences in 86-test stage1_full run (raw, pre-E3) | **12,384** |
+| Unique source sites per single-test chain run, pre-E3 | **111** |
+| Unique source sites per single-test chain run, **with E3** | **80** (28% reduction) |
+| Of those 80, attributed to E3 branch-merge | **0** (E3 is doing its job; remaining is E2/E7) |
+| Of those 80, attributed to fn-arg consume + later use in same scope | **~80** (cascade-`.clone()` work — E7) |
 | Chain-grow over-fires (E1 issue) | **0** ✅ |
+| Branch-with-return false positives (E3 issue) | **0** ✅ (E3 ships) |
 | Trigger threshold (B0 §1 early-warning) | **>20 = pause** |
 | Magnitude of overshoot | **~620× the threshold** |
 | stage1_full pass rate post-wire | **0/86** (chain entirely broken) |

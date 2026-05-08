@@ -7,6 +7,50 @@ use crate::parser::ast::*;
 
 use super::*;
 
+/// Returns true if every code path through `e` ends with a control-flow
+/// terminator (`return`, `break`, `continue`) — i.e., execution does not
+/// fall through past `e`. Used by branch-merge analysis (FJARR_LEAK
+/// Phase 2 / E3) to skip propagating a terminating branch's consume
+/// side-effects past the if/match.
+///
+/// Conservative: returns false if uncertain. False negatives just
+/// reduce optimization (false SE024 fires); false positives would
+/// hide real use-after-move and cannot happen with this rule.
+fn branch_always_terminates(e: &Expr) -> bool {
+    match e {
+        Expr::Block { stmts, expr, .. } => {
+            // A block terminates if any statement is a terminator OR if
+            // the tail expression always terminates.
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Return { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {
+                        return true;
+                    }
+                    Stmt::Expr { expr, .. } => {
+                        if branch_always_terminates(expr) {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            expr.as_ref().is_some_and(|t| branch_always_terminates(t))
+        }
+        // Nested if: terminates if BOTH branches terminate (else must exist)
+        Expr::If {
+            then_branch,
+            else_branch,
+            ..
+        } => else_branch.as_ref().is_some_and(|else_e| {
+            branch_always_terminates(then_branch) && branch_always_terminates(else_e)
+        }),
+        // Match: terminates if ALL arms terminate
+        Expr::Match { arms, .. } => arms.iter().all(|arm| branch_always_terminates(&arm.body)),
+        // Other expressions don't unconditionally terminate
+        _ => false,
+    }
+}
+
 impl TypeChecker {
     /// Second pass: type-check an item.
     pub(super) fn check_item(&mut self, item: &Item) {
@@ -648,7 +692,6 @@ impl TypeChecker {
                         .map(|s| s.ty.clone())
                         .unwrap_or(Type::Unknown);
                     if !self.is_copy(&src_type) {
-                        // ME003: cannot move while borrowed
                         if let Some(borrow_span) = self.moves.check_can_move(src_name) {
                             self.errors.push(SemanticError::MoveWhileBorrowed {
                                 name: src_name.clone(),
@@ -2077,13 +2120,45 @@ impl TypeChecker {
             });
         }
 
+        // FJARR_LEAK Phase 2 / E3: branch-merge analysis with terminator
+        // awareness. Snapshot pre-branch ownership state. Evaluate then,
+        // capture state. Restore pre. Evaluate else, capture state.
+        // Merge with terminator skip: branches ending in
+        // return/break/continue don't propagate their consume side-effects
+        // past the if. Without this, `if cond { return pr_err(a, ...) }`
+        // marks `a` Moved unconditionally, fires spurious SE024 on
+        // continued use after the if.
+        let pre_snap = self.moves.snapshot();
         let then_ty = self.check_expr(then_branch);
+        let then_snap = self.moves.snapshot();
+        let then_terminates = branch_always_terminates(then_branch);
 
         if let Some(else_e) = else_branch {
+            self.moves.restore(pre_snap.clone());
             let else_ty = self.check_expr(else_e);
-            // If used as expression, both branches should match.
-            // When either branch is Void, the if/else is used as a statement —
-            // no need to require matching types.
+            let else_snap = self.moves.snapshot();
+            let else_terminates = branch_always_terminates(else_e);
+
+            match (then_terminates, else_terminates) {
+                (true, true) => {
+                    // Both escape → post-merge unreachable; restore pre to be safe
+                    self.moves.restore(pre_snap);
+                }
+                (true, false) => {
+                    // Only then escapes → post-merge inherits else state
+                    self.moves.restore(else_snap);
+                }
+                (false, true) => {
+                    // Only else escapes → post-merge inherits then state
+                    self.moves.restore(then_snap);
+                }
+                (false, false) => {
+                    // Neither escapes → conservative merge (any-moved-wins)
+                    self.moves.restore(pre_snap);
+                    self.moves.merge_snapshots(&then_snap, &else_snap);
+                }
+            }
+
             if !then_ty.is_compatible(&else_ty)
                 && !matches!(then_ty, Type::Void)
                 && !matches!(else_ty, Type::Void)
@@ -2097,6 +2172,15 @@ impl TypeChecker {
             }
             then_ty
         } else {
+            // No else branch — implicit else is no-op (pre_snap state)
+            if then_terminates {
+                // then escapes → post-merge keeps pre-state
+                self.moves.restore(pre_snap);
+            } else {
+                // then doesn't escape → merge then with pre (no-op else)
+                self.moves.restore(pre_snap.clone());
+                self.moves.merge_snapshots(&then_snap, &pre_snap);
+            }
             Type::Void
         }
     }

@@ -133,6 +133,15 @@ impl BorrowPath {
     }
 }
 
+/// Snapshot of `MoveTracker` ownership state. Used by branch-merge
+/// analysis (FJARR_LEAK Phase 2 / E3) to save and restore state
+/// across if/match branches with terminator-aware semantics.
+#[derive(Debug, Clone)]
+pub struct MoveSnapshot {
+    /// Cloned per-scope ownership-state stack at snapshot time.
+    states: Vec<HashMap<String, (OwnershipState, Span)>>,
+}
+
 /// Tracks variable ownership and borrow states within scoped regions.
 #[derive(Debug)]
 pub struct MoveTracker {
@@ -205,6 +214,66 @@ impl MoveTracker {
             }
         }
         None
+    }
+
+    /// Snapshots the current ownership state of all variables.
+    ///
+    /// Used by branch-merge analysis (FJARR_LEAK Phase 2 / E3): the
+    /// caller takes a pre-branch snapshot, evaluates one branch, takes
+    /// the post-branch snapshot, restores pre-state, evaluates the
+    /// other branch, then merges via [`Self::merge_snapshots`]. Branches
+    /// terminating with `return`/`break`/`continue` skip the merge so
+    /// their consume side-effects don't propagate past the branch.
+    pub fn snapshot(&self) -> MoveSnapshot {
+        MoveSnapshot {
+            states: self.states.clone(),
+        }
+    }
+
+    /// Restores ownership state from a snapshot.
+    pub fn restore(&mut self, snap: MoveSnapshot) {
+        self.states = snap.states;
+    }
+
+    /// Merges two snapshots into the current state. For each variable
+    /// at each scope level, if EITHER snapshot marks it as `Moved`, the
+    /// merged state is `Moved` (with the move span from whichever
+    /// snapshot had it). This is the conservative branch-merge rule:
+    /// after `if cond { foo(v) } else { ... }` where `then` consumes
+    /// `v`, the post-merge state must treat `v` as moved on the path
+    /// taken through the `then` branch.
+    pub fn merge_snapshots(&mut self, a: &MoveSnapshot, b: &MoveSnapshot) {
+        let max_depth = a.states.len().max(b.states.len()).max(self.states.len());
+        // Ensure self has at least max_depth scopes (should already, but defensive)
+        while self.states.len() < max_depth {
+            self.states.push(HashMap::new());
+        }
+        for (scope_idx, scope) in self.states.iter_mut().enumerate() {
+            // Collect names appearing in either snapshot at this scope
+            let a_scope = a.states.get(scope_idx);
+            let b_scope = b.states.get(scope_idx);
+            let mut names: std::collections::HashSet<String> = std::collections::HashSet::new();
+            if let Some(s) = a_scope {
+                names.extend(s.keys().cloned());
+            }
+            if let Some(s) = b_scope {
+                names.extend(s.keys().cloned());
+            }
+            for name in names {
+                let a_st = a_scope.and_then(|s| s.get(&name));
+                let b_st = b_scope.and_then(|s| s.get(&name));
+                let merged = match (a_st, b_st) {
+                    (Some(&(OwnershipState::Moved, sp)), _)
+                    | (_, Some(&(OwnershipState::Moved, sp))) => Some((OwnershipState::Moved, sp)),
+                    (Some(&(OwnershipState::Owned, sp)), _)
+                    | (_, Some(&(OwnershipState::Owned, sp))) => Some((OwnershipState::Owned, sp)),
+                    _ => None,
+                };
+                if let Some(state) = merged {
+                    scope.insert(name, state);
+                }
+            }
+        }
     }
 
     /// Creates an immutable borrow of a variable.
