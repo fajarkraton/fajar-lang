@@ -32,27 +32,32 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.0.0, 2026-05-06 — STAGE 2 SELF-HOST TRIPLE-TEST: fj-lang self-hosts at fixed point)
+### Completion Status (v35.1.0, 2026-05-08 — FJARR_LEAK Phase 1: `_FjArr` realloc-leak class CLOSED, 88 bytes/array → 0)
 
-**54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs.
-Every public mod has a callable surface from `.fj` or `fj` CLI. 39 CLI
-subcommands, all production. **FAJAR_LANG_PERFECTION_PLAN P0-P9 closed
-engineering-side; 22/25 work-items PASS**. **FAJAROS_100PCT_FJ_PLAN
-TERMINAL COMPLETE** (2026-05-05): 9/9 fj-lang LLVM compiler gaps closed
-+ ZERO non-fj LOC in fajaros-x86 kernel build path. All 4 C mailbox
-functions migrated to pure fj; vecmat_v8.c (585 LOC) deleted.
-**FAJARQUANT_RUST_TO_FJ_PLAN closed** (2026-05-05): 7 algorithm modules
-(~2,649 LOC Rust) ported to `stdlib/fajarquant.fj` (986 LOC, 39 fj fns);
-70+ I/O pairs verified bit-exact at full f64 precision; 1 fj-lang core
-change (analyzer wrapping_*); cumulative ~115min vs 10-17d budget (-99%).
-**SELF-HOST PHASES 16+17 CLOSED** (2026-05-06, v34.5.0..v35.0.0): fjc
-Stage 1 binary (140KB ELF) compiles its own source byte-identical to
-chain output (md5 `1d6c52a...`); Stage 2 == Stage 1 cross-equivalence
-on third-party input (md5 `d47fb8a...`); ~57× speedup interpreter →
-native (38s → 0.66s); 22 self-host phases closed across 95 dedicated
-self-host tests; ~32h cumulative across v33.4.0..v35.0.0.
+**54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero
+stubs. Every public mod has a callable surface from `.fj` or `fj` CLI.
+39 CLI subcommands, all production. **FJARR_LEAK Phase 1 CLOSED**
+(2026-05-08, v35.1.0): `_fj_arr_new` + `_fj_arr_grow` migrated from
+malloc/realloc to existing R15 arena (`_fj_arena_alloc` + atexit copy-
+grow). Per-fjc-self-compile leak 2.73 MB / 53,818 blocks → **0 bytes
+definitely+indirectly lost**. Stage 2 byte-equality preserved (no md5
+rebase). Per Choice F: Phase 2 (D linear-types-lite) deferred to v36.x.
+**SELF-HOST PHASE 18 CALL_INDEX CLOSED** (2026-05-07, commit `9c9ff2a8`):
+silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved per D1.A +
+D2.A + D3.B; 6 new P-tests + pre-push regression hook. **FAJAR_LANG_
+PERFECTION_PLAN P0-P9 closed engineering-side; 22/25 work-items PASS**.
+**FAJAROS_100PCT_FJ_PLAN TERMINAL COMPLETE** (2026-05-05): 9/9 fj-lang
+LLVM compiler gaps closed + ZERO non-fj LOC in fajaros-x86 kernel build
+path. **FAJARQUANT_RUST_TO_FJ_PLAN closed** (2026-05-05): 7 algorithm
+modules (~2,649 LOC Rust) ported to `stdlib/fajarquant.fj` (986 LOC, 39
+fj fns); 70+ I/O pairs verified bit-exact. **SELF-HOST PHASES 16+17
+CLOSED** (2026-05-06): fjc Stage 1 binary (140KB ELF) compiles its own
+source byte-identical (md5 `1d6c52a...`); Stage 2 cross-equivalence
+md5 `d47fb8a...`; ~57× speedup interpreter → native (38s → 0.66s); 24
+self-host phases closed across 102 dedicated self-host tests; ~38h
+cumulative across v33.4.0..v35.1.0.
 
-> **Source of truth:** `docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md` (v34..v35 self-host audit-trail closure, written 2026-05-06) + `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` series (v33.2.0 tag `b49e197b` caps it) + `docs/HONEST_AUDIT_V33.md` (perfection-plan exit scorecard, 2026-05-03). Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
+> **Source of truth:** `docs/FJARR_LEAK_PHASE_1_FINDINGS.md` (v35.1.0 closure, written 2026-05-08) + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` (v34..v35 self-host audit-trail) + `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` series (v33.2.0 caps it) + `docs/HONEST_AUDIT_V33.md` (perfection-plan exit scorecard, 2026-05-03). Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
 
 **Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
 lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
@@ -85,23 +90,27 @@ detailed entries.
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (v35.0.0 "STAGE 2 SELF-HOST TRIPLE-TEST", 2026-05-06)
+### Current Totals (v35.1.0 "FJARR_LEAK Phase 1 CLOSED", 2026-05-08)
 
 ```
-Tests:     7,629 lib + 10,489 integ (72 files) + 14 doc + 1 ignored = 18,132 (0 fail, 0 flake, 2026-05-06)
+Tests:     7,629 lib + 10,489 integ (72 files) + 14 doc + 1 fjarr_leak + 1 ignored = 18,134
+           (0 fail, 0 flake; phase17 4/4 byte-equality preserved post-arena migration)
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
 LOC:       ~449,000 Rust (391+ files) | Binary 18 MB | MSRV 1.87 | 243 .fj examples
 Modules:   42 pub mods | 54 [x], 0 [sim]/[f]/[s] (HONEST_AUDIT_V33; V26 A3 closed all gaps)
 CLI:       39 subcommands (all production) | CI: 7 workflows | Features: 11 flags
 Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.79% pub-doc | 100% stdlib_v3 doc
            0 error-code gap (135 cataloged, scripts/audit_error_codes.py --strict)
+           Heap-leak classes closed: R15 string-arena + _FjArr realloc (FJARR_LEAK Phase 1)
+           Per-fjc-self-compile leak: 2.73 MB → 0 bytes definitely+indirectly lost ✅
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, 3× speedup)
-Tags:      v32.1.0 → v33.{0,1,2}.0 → v33.4.0..v33.8.0 → v34.{0..5.13} → v35.0.0 LIVE
+Tags:      v32.1.0 → v33.{0,1,2}.0 → v33.4.0..v33.8.0 → v34.{0..5.13} → v35.0.0 → v35.1.0
            v33.2.0: FAJAROS_100PCT TERMINAL (9/9 gaps, ZERO non-fj LOC)
            v35.0.0: 🎯 Stage 2 self-host triple-test (fjc 140KB ELF, ~57× speedup)
+           v35.1.0: 🎯 FJARR_LEAK Phase 1 (88 bytes/array → 0; arena copy-grow)
 
 Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
-Drift history → docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md + docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md
+Drift history → docs/FJARR_LEAK_PHASE_1_FINDINGS.md + docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md + docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md
 ```
 
 ### Version History
@@ -110,7 +119,8 @@ Drift history → docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md + docs/FAJAROS_100P
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. |
+| **v35.1.0** "FJARR_LEAK Phase 1" | 2026-05-08 | `_FjArr` realloc-leak class CLOSED (88 bytes/array → 0). Arena copy-grow in `_fj_arr_new`/`_fj_arr_grow`. Stage 2 byte-equality preserved (no md5 rebase). Phase 2 (D linear-types) deferred to v36.x. → FJARR_LEAK_PHASE_1_FINDINGS. |
+| **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. Phase 18 CALL_INDEX (silent miscompile `f()[i]` / `obj.m()[i]`) closed 2026-05-07 commit 9c9ff2a8. |
 | **v34.5.0..v34.5.13** | 2026-05-05..06 | Phase 16+17 build-up: Pratt precedence, struct sigs, [T] fields, chained methods, parser_ast.fj+codegen.fj self-compile. |
 | **v34.0.0..v34.4.0** | 2026-05-05 | R14: string + dyn arrays + concat! + match expression. |
 | **v33.4.0..v33.8.0** | 2026-05-05 | Self-host phases 9–11: Stage-1-Full closure, struct lit/field, match. |
@@ -673,7 +683,9 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 | When You Need... | Read This |
 |---|---|
-| **Open plans awaiting user decision (2026-05-07)** | **`docs/FJARR_LEAK_PLAN.md`** (5 strategy options A/B/C/D/E/F) + **`docs/CALL_INDEX_PLAN.md`** (3 sub-decisions D1/D2/D3) + **`docs/T4_DUP_FN_PLAN.md`** (Option A vs B). Each surfaces decision gates that need user input before implementation; none auto-decided per CLAUDE.md §6.8 R6. Total scope 18.5h–35h depending on selections. |
+| **FJARR_LEAK Phase 1 CLOSED (2026-05-08, v35.1.0)** | **`docs/FJARR_LEAK_PHASE_1_FINDINGS.md`** + plan `docs/FJARR_LEAK_PLAN.md` + B0 `docs/FJARR_LEAK_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-fjarr-leak-strategy.md` (Choice F: A-now arena + D-Phase-19 linear types). `_FjArr` realloc-leak class CLOSED 88 bytes/array → 0; 102 self-host tests; Stage 2 byte-equality preserved. Phase 2 (D linear-types) deferred to v36.x roadmap. |
+| **Phase 18 CALL_INDEX CLOSED (2026-05-07, commit 9c9ff2a8)** | **`docs/SELFHOST_FJ_PHASE_18_FINDINGS.md`** + plan `docs/CALL_INDEX_PLAN.md` + B0 `docs/CALL_INDEX_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-call-index-shape.md` (D1.A + D2.A + D3.B). Silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved; 6 new P-tests (P81..P86) + pre-push regression hook. |
+| **T4 dup-fn detection CLOSED (commit 38e23f56)** | **`docs/T4_DUP_FN_PLAN.md`** — closed independently from FJARR_LEAK / CALL_INDEX. |
 | **FAJAROS_100PCT_FJ_PLAN (TERMINAL COMPLETE 2026-05-05)** | **`docs/FAJAROS_100PCT_FJ_PLAN.md`** + per-phase findings `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md`. 9/9 fj-lang LLVM compiler gaps closed (G-A through G-N); ZERO non-fj LOC in fajaros kernel build path. v33.2.0 caps the plan. |
 | **Latest audit (V33) — perfection plan** | **`docs/HONEST_AUDIT_V33.md`** — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 module classification (still authoritative; V33 added no demotions) |
@@ -716,5 +728,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 35.0 (**v35.0.0 STAGE 2 SELF-HOST TRIPLE-TEST 2026-05-06**: fj-lang self-hosts at fixed point — fjc binary 140KB ELF compiles its own source byte-identical to chain output, ~57× speedup interpreter→native, 22 self-host phases closed). Predecessor v33.2.0 (FAJAROS_100PCT TERMINAL COMPLETE 2026-05-05): 9/9 LLVM gaps closed; ZERO non-fj LOC in fajaros-x86. Quality gates: 18,132 total tests (7,629 lib + 10,489 integ + 14 doc), 0 clippy / 0 fmt / 0 unwrap warnings. Tags v33.{0.0..2.0} + v34.{0..5.13} + v35.0.0 LIVE on GitHub Releases. Source of truth: `docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md` (v34..v35) + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` (v33). Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-06*
+*CLAUDE.md Version: 35.1 (**v35.1.0 FJARR_LEAK Phase 1 2026-05-08**: `_FjArr` realloc-leak class CLOSED — 88 bytes/array → 0 via arena copy-grow; Stage 2 byte-equality preserved; 24 self-host phases closed; 102 dedicated self-host tests; ~38h cumulative across v33.4.0..v35.1.0). Predecessor v35.0.0 (STAGE 2 SELF-HOST TRIPLE-TEST 2026-05-06): fjc binary 140KB ELF self-compiles byte-identical, ~57× speedup. Phase 18 CALL_INDEX (silent miscompile `f()[i]` / `obj.m()[i]`) closed 2026-05-07 commit 9c9ff2a8. Quality gates: 18,134 total tests (7,629 lib + 10,489 integ + 14 doc + 1 fjarr_leak), 0 clippy / 0 fmt / 0 unwrap warnings. Tags v33.{0.0..2.0} + v34.{0..5.13} + v35.0.0 + v35.1.0. Source of truth: `docs/FJARR_LEAK_PHASE_1_FINDINGS.md` (v35.1.0) + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` (v34..v35) + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` (v33). Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-08*

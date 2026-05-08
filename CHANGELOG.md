@@ -2,6 +2,106 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.1.0] — 2026-05-08 🎯 FJARR_LEAK Phase 1 — `_FjArr` realloc-leak class CLOSED — minor bump
+
+The residual `_FjArr` heap-leak class documented in `docs/FJARR_LEAK_B0_FINDINGS.md`
+is closed. Every `[i64]` / `[str]` value in fj-emitted code previously leaked
+**88 bytes per array** (24-byte struct + 64-byte initial buffer) through
+`malloc(sizeof(_FjArr))` and `realloc(...)` calls in `stdlib/codegen.fj`'s
+`_fj_arr_new` / `_fj_arr_grow`. B0 measured this at **2.73 MB / 53,818 blocks
+per fjc-stage1 self-compile run** (54,125 allocs vs 307 frees, 176:1 leak
+ratio, exactly linear at 88 bytes × N arrays). Phase 1 / Strategy A migrates
+both functions to the existing R15 arena (`_fj_arena_alloc`, freed at exit
+via `atexit(_fj_arena_free_all)`); valgrind now reports
+**`definitely lost: 0` AND `indirectly lost: 0`** for the regression baseline.
+
+### The fix in 6 lines (`stdlib/codegen.fj` `emit_preamble`)
+
+- `_fj_arr_new`: `malloc(sizeof(_FjArr))` → `_fj_arena_alloc(sizeof(_FjArr))`.
+- `_fj_arr_grow`: `realloc(a->data, ...)` replaced with copy-grow:
+  ```c
+  size_t new_cap = a->cap == 0 ? 8 : a->cap * 2;
+  void** new_data = (void**)_fj_arena_alloc(new_cap * sizeof(void*));
+  if (a->data) memcpy(new_data, a->data, a->len * sizeof(void*));
+  a->data = new_data;
+  a->cap = new_cap;
+  ```
+- Doubling-cap strategy preserved → amortized O(1) push, identical asymptotic
+  shape. Old buffer slot is abandoned to the arena (reaped at process exit
+  via the existing `_fj_arena_free_all` atexit handler).
+
+### Stage 2 byte-equality preserved (no md5 rebase)
+
+Decision file claim "Phase 1 (A) is text-only and deterministic → preserves
+byte-equality (md5 unchanged)" VINDICATED. `phase17_stage2_native_triple_test`
+4/4 PASS (~112s) post-commit; both Stage 1 and Stage 2 emit the same new
+arena-using preamble text; the test compares `stage1.c == stage2.c` directly
+without any hardcoded md5 constants.
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+- ✅ Default fj-source array allocations (`[1, 2, 3]`, `["a", "b"]`, push chains, fn returns of `[T]`): 0 bytes definitely+indirectly lost.
+- ⚠️ **Heap-still-heap caveat**: the arena IS heap memory, just freed at process exit. Compass §4.1 (@kernel must reject heap at compile time) is not yet satisfied. Phase 1 is "compatible-by-deferral" — a future @kernel mode forbids `_fj_arr_new` calls entirely (user code uses `[T; N]` fixed arrays).
+- ⚠️ **Long-running embedded consumer (STM32N6 / Cortex-M55 niche)**: between v35.1.0 and v36.x, arena retention grows monotonically until process exit. Mitigation today: use `[T; N]` fixed-size arrays in firmware loops; reserve dynamic `[T]` for setup / one-shot tasks.
+- ⏸️ **Phase 2 (Strategy D / linear-types-lite — affine `[T]`, SE017 UseAfterMove, `.clone()` builtin, codegen emits `free` at last-use)** deferred to v36.x roadmap. ~14h estimate per FJARR_LEAK_PLAN §5. One-way-door per decision file §Reverse-cost; deliberately not auto-chained.
+
+### Added
+
+- **`tests/selfhost_fjarr_leak_baseline.rs`** (NEW) — `_FjArr` leak regression
+  GREEN gate. Compiles `fn main() { let v: [i64] = [1, 2, 3]; ... }` via
+  `cargo run -- run --emit-c`, links with `gcc -O0`, runs under
+  `valgrind --leak-check=full`, asserts `definitely_lost + indirectly_lost == 0`.
+  Auto-skips when `valgrind` binary absent (macOS / sandbox CI runners) — no
+  false-RED. Default-`#[ignore]`d (chain + gcc + valgrind ~30-50s); pre-push
+  hook + per-PR CI gate exercise via `--include-ignored`.
+- **`scripts/check_decision_file.sh`** (NEW) — structural validator for
+  `docs/decisions/*.md`. Greps for required headers per FJARR_LEAK_PLAN §1.3:
+  Choice / Rationale / @kernel-future-compat / Migration path / Surprise budget
+  / Rejected candidates / Reverse-cost. Exit 0 → pass; exit 1 → missing
+  required header. Used by pre-commit hook + future decision-file gates.
+- **`scripts/git-hooks/pre-commit` FJARR_LEAK gate** — detects
+  `+...(_fj_arr_new|_fj_arr_grow|emit_preamble.*malloc|emit_preamble.*realloc)`
+  in staged diff; requires `docs/decisions/2026-05-07-fjarr-leak-strategy.md`
+  to exist AND pass `scripts/check_decision_file.sh`. Blocks ad-hoc reversal
+  of the arena strategy without a follow-up decision-file amendment. Fired
+  correctly during the 18.A.1+A.2 commit, validating end-to-end.
+- **`docs/FJARR_LEAK_PHASE_1_FINDINGS.md`** (NEW) — Phase 1 closure findings
+  doc. §0 B0 recap, §1 decision recap, §2 sub-task closure (B0 → 18.0.2 →
+  18.0.4 → 18.A.1+A.2 → 18.Z.*), §3 test additions, §4 effort recap (~3.5h
+  actual vs 7.5h ceiling, **-53%**), §5 prevention layer, §6 honest scope,
+  §7 cumulative state, §8 decision gate.
+
+### Changed
+
+- **`stdlib/codegen.fj`** `emit_preamble` `_fj_arr_new` + `_fj_arr_grow`
+  (lines ~388–401): malloc/realloc → arena copy-grow per §The fix in 6 lines.
+  +15 / -5 LOC text-only change. Stage 2 byte-equality preserved.
+- **`tests/selfhost_fjarr_leak_baseline.rs`** assertion flipped from
+  `assert!(lost >= 88)` (RED baseline per commit `f13ac484`) to
+  `assert_eq!(lost, 0)` (GREEN gate). Removed `MIN_LEAK_BYTES_PRE_FIX`
+  constant. Doc-comment rewritten as lifecycle-history form (pre-18.A.1 vs
+  post-18.A.1 expected behavior). **Parser fix**: when valgrind reports
+  "All heap blocks were freed", per-class `definitely lost:` /
+  `indirectly lost:` lines are OMITTED — `parse_valgrind_lost` now checks
+  for `HEAP SUMMARY:` marker and defaults to 0 when class lines absent.
+  Missing HEAP SUMMARY → panic (valgrind didn't run cleanly).
+
+### Stats
+
+- **Self-host tests:** 101 → **102** (+1 `fjarr_leak_baseline_minimal_array`)
+- **Stage1-full:** 86 (unchanged) | **phase17_self_compile:** 4/4 (unchanged, byte-equality preserved)
+- **Per-fjc-self-compile leak:** 2.73 MB → **0 bytes definitely+indirectly lost** ✅
+- **Heap-leak classes closed:** R15 string-arena → **+1 `_FjArr` realloc** (88 bytes/array → 0)
+- **Pre-commit gates:** + FJARR_LEAK decision-file gate (script + hook)
+- **Cumulative effort v33.4.0..v35.1.0:** ~38h Claude time across 24 self-host phases (0..18 + FJARR_LEAK Phase 1)
+
+### Source of truth
+
+- `docs/FJARR_LEAK_PHASE_1_FINDINGS.md` — Phase 1 closure (this release)
+- `docs/FJARR_LEAK_B0_FINDINGS.md` — B0 pre-flight evidence (commit `f5448b03`)
+- `docs/decisions/2026-05-07-fjarr-leak-strategy.md` — Choice F (A-now + D-Phase-19)
+- `docs/FJARR_LEAK_PLAN.md` — full plan w/ 5 strategy candidates + risk register
+
 ## [v35.0.0] — 2026-05-06 🎯 STAGE 2 SELF-HOST TRIPLE-TEST — major bump
 
 Fajar Lang now has a self-hosted compiler that reaches a fixed point: the
