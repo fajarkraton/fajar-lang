@@ -410,6 +410,18 @@ pub fn emit_preamble(state: CodegenState) -> CodegenState {
     s = emit_line(s, "static int64_t _fj_arr_get_i64(_FjArr* a, int64_t i) { return (int64_t)(intptr_t)a->data[i]; }")
     s = emit_line(s, "static const char* _fj_arr_get_str(_FjArr* a, int64_t i) { return (const char*)a->data[i]; }")
     s = emit_line(s, "static int64_t _fj_arr_len(_FjArr* a) { return (int64_t)a->len; }")
+    // FJARR_LEAK Phase 2 / E5: deep-copy clone for `[T]` arrays. Pairs
+    // with future analyzer recognition (E4) of `arr.clone()` to skip
+    // mark_moved on receiver. Allocates fresh _FjArr + buffer from arena.
+    s = emit_line(s, "static _FjArr* _fj_arr_clone(_FjArr* a) {")
+    s = emit_line(s, "    _FjArr* b = (_FjArr*)_fj_arena_alloc(sizeof(_FjArr));")
+    s = emit_line(s, "    b->len = a->len; b->cap = a->cap; b->data = NULL;")
+    s = emit_line(s, "    if (a->cap > 0) {")
+    s = emit_line(s, "        b->data = (void**)_fj_arena_alloc(a->cap * sizeof(void*));")
+    s = emit_line(s, "        if (a->data) memcpy(b->data, a->data, a->len * sizeof(void*));")
+    s = emit_line(s, "    }")
+    s = emit_line(s, "    return b;")
+    s = emit_line(s, "}")
     s = emit_line(s, "static const char* _fj_arr_join_str(_FjArr* a, const char* sep) {")
     s = emit_line(s, "    if (a->len == 0) { char* o = (char*)_fj_arena_alloc(1); o[0] = 0; return o; }")
     s = emit_line(s, "    size_t sl = strlen(sep); size_t total = 0;")
