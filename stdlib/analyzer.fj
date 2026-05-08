@@ -50,7 +50,7 @@ const TY_ARRAY: i64 = 6
 /// Checks if a name exists in the scope (array of names).
 fn scope_contains(names: [str], name: str) -> bool {
     let mut i = 0
-    while i < to_int(len(names)) {
+    while i < len(names) {
         if names[i] == name {
             return true
         }
@@ -63,7 +63,7 @@ fn scope_contains(names: [str], name: str) -> bool {
 fn scope_find(names: [str], name: str) -> i64 {
     let mut i = 0
     let mut result = -1
-    while i < to_int(len(names)) {
+    while i < len(names) {
         if names[i] == name {
             if result == -1 { result = i }
         }
@@ -160,7 +160,7 @@ pub fn pop_scope(state: AnalyzerState) -> AnalyzerState {
     let mut new_depths: [i64] = []
 
     let mut i = 0
-    while i < to_int(len(state.var_names)) {
+    while i < len(state.var_names) {
         if state.var_depths[i] < depth {
             new_names = push(new_names, state.var_names[i])
             new_types = push(new_types, state.var_types[i])
@@ -276,7 +276,7 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
     let tokens = spans.tokens
     let starts = spans.starts
     let ends = spans.ends
-    let n = to_int(len(tokens))
+    let n = len(tokens)
 
     // Pass 1: register all top-level fn/struct/enum names + dup guard
     let mut i = 0
@@ -421,9 +421,9 @@ pub fn type_name(ty: i64) -> str {
 pub fn analyze(items: [str]) -> AnalyzerState {
     let mut state = new_analyzer()
     let mut i = 0
-    while i < to_int(len(items)) {
+    while i < len(items) {
         if items[i] == "fn" {
-            if i + 1 < to_int(len(items)) {
+            if i + 1 < len(items) {
                 state = define_fn(state, items[i + 1], 0)
             }
         }

@@ -33,7 +33,7 @@ fn lir(code: str, pos: i64, new_vars: [str]) -> LetInlineResult {
 // Parse an atom (INT / IDENT / BEGIN_CALL ... END_CALL) starting at pos.
 // Returns (code, new_pos).
 fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n { return exr("0", pos) }
 
     let tag = ast[pos]
@@ -80,7 +80,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             if p2 < n && ast[p2] == "ARG_END" { p2 = p2 + 1 }
         }
         p2 = p2 + 1  // past END_MACRO_CALL
-        let m = to_int(len(args))
+        let m = len(args)
         if name == "concat" {
             if m == 0 { exr("\"\"", p2) }
             else if m == 1 { exr(args[0], p2) }
@@ -116,7 +116,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             if p2 < n && ast[p2] == "ARG_END" { p2 = p2 + 1 }
         }
         p2 = p2 + 1  // past END_ARRAY_LIT
-        let m = to_int(len(elems))
+        let m = len(elems)
         if m == 0 {
             exr("_fj_arr_new()", p2)
         } else {
@@ -240,7 +240,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         }
         let mut argstr = r_subj.code
         let mut k = 0
-        while k < to_int(len(args)) {
+        while k < len(args) {
             argstr = concat!(argstr, ", ", args[k])
             k = k + 1
         }
@@ -375,7 +375,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         // For println, peek the first arg's tag to choose the right helper.
         let mut name = raw_name
         if raw_name == "println" {
-            let first_arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let first_arg_tag = if pos + 2 < len(ast) { ast[pos + 2] } else { "" }
             if first_arg_tag == "STR" { name = "fj_println_str" }
             else if first_arg_tag == "FLOAT" { name = "fj_println_float" }
             else if first_arg_tag == "BOOL" { name = "fj_println_bool" }
@@ -388,17 +388,17 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             // arg lookup) — GCC stmt-expr lowering in BEGIN_IF_EXPR now supports
             // preceding lets, but we still don't have bare-block expressions.
             // So inline lookup must stay as a single conjunction.
-            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
+            let arg_tag = if pos + 2 < len(ast) { ast[pos + 2] } else { "" }
             let arg_method_name = if arg_tag == "BEGIN_METHOD_CALL" { find_method_name(ast, pos + 2) } else { "" }
             // Phase 17.8: BEGIN_INDEX over [str] yields str; treat as str arg.
             // CALL_INDEX P2.3 (Decision D1.A, 2026-05-07): subject of
             // BEGIN_INDEX may also be BEGIN_CALL (per parser P1.1) or
             // BEGIN_METHOD_CALL (per parser P1.2). Extend the type check.
             let arg_index_str = if arg_tag == "BEGIN_INDEX" {
-                let idx_first_child = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+                let idx_first_child = if pos + 3 < len(ast) { ast[pos + 3] } else { "" }
                 if idx_first_child == "BEGIN_CALL" {
                     // f()[i]: subject is fn call. Look up callee's ret-type.
-                    let idx_callee = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                    let idx_callee = if pos + 4 < len(ast) { ast[pos + 4] } else { "" }
                     lookup_fn_ret_type(cg, idx_callee) == "[str]"
                 } else if idx_first_child == "BEGIN_METHOD_CALL" {
                     // CALL_INDEX P3.2 (2026-05-07): wire map_method_ret_type.
@@ -413,7 +413,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                 }
             } else { false }
             let arg_is_str = arg_tag == "STR" ||
-                (arg_tag == "IDENT" && pos + 3 < to_int(len(ast)) &&
+                (arg_tag == "IDENT" && pos + 3 < len(ast) &&
                  lookup_var_type_in_table(vars, ast[pos + 3]) == "str") ||
                 (arg_tag == "BEGIN_METHOD_CALL" && (arg_method_name == "substring" || arg_method_name == "concat")) ||
                 (arg_tag == "BEGIN_MACRO_CALL") ||
@@ -437,14 +437,14 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         //   STR literal     → strlen(x)
         //   other          → unmapped (compile error surfaces if wrong)
         if raw_name == "len" {
-            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
-            let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+            let arg_tag = if pos + 2 < len(ast) { ast[pos + 2] } else { "" }
+            let arg_name = if pos + 3 < len(ast) { ast[pos + 3] } else { "" }
             if arg_tag == "IDENT" {
                 // Phase 17.8: if IDENT is followed by FIELD, the arg is a
                 // struct field — derive the type via cg.struct_fields.
-                let next_tok = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                let next_tok = if pos + 4 < len(ast) { ast[pos + 4] } else { "" }
                 if next_tok == "FIELD" {
-                    let field_n = if pos + 5 < to_int(len(ast)) { ast[pos + 5] } else { "" }
+                    let field_n = if pos + 5 < len(ast) { ast[pos + 5] } else { "" }
                     let struct_t = lookup_var_type_in_table(vars, arg_name)
                     let field_t = lookup_struct_field(cg, struct_t, field_n)
                     if field_t == "[str]" || field_t == "[i64]" || field_t == "[int]" || field_t == "[i32]" {
@@ -468,12 +468,12 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         // Dispatch on first arg: if it's an IDENT (or IDENT.field) typed
         // [str], emit _fj_arr_push_str; else default to _fj_arr_push_i64.
         if raw_name == "push" {
-            let arg_tag = if pos + 2 < to_int(len(ast)) { ast[pos + 2] } else { "" }
-            let arg_name = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+            let arg_tag = if pos + 2 < len(ast) { ast[pos + 2] } else { "" }
+            let arg_name = if pos + 3 < len(ast) { ast[pos + 3] } else { "" }
             if arg_tag == "IDENT" {
-                let next_tok = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                let next_tok = if pos + 4 < len(ast) { ast[pos + 4] } else { "" }
                 if next_tok == "FIELD" {
-                    let field_n = if pos + 5 < to_int(len(ast)) { ast[pos + 5] } else { "" }
+                    let field_n = if pos + 5 < len(ast) { ast[pos + 5] } else { "" }
                     let struct_t = lookup_var_type_in_table(vars, arg_name)
                     let field_t = lookup_struct_field(cg, struct_t, field_n)
                     if field_t == "[str]" { name = "_fj_arr_push_str" }
@@ -488,11 +488,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
                 // free `push` may be a BEGIN_INDEX expression
                 // (`push(arrs[i], elem)` or `push(f()[i], elem)`).
                 // Mirror the P2.3 to_int pattern: case-split on idx_first_child.
-                let idx_first_child = if pos + 3 < to_int(len(ast)) { ast[pos + 3] } else { "" }
+                let idx_first_child = if pos + 3 < len(ast) { ast[pos + 3] } else { "" }
                 if idx_first_child == "BEGIN_CALL" {
                     // f()[i]: subject is fn call. Look up callee's ret-type.
                     // [[str]] → push-element is [str]-typed arr → push_str.
-                    let idx_callee = if pos + 4 < to_int(len(ast)) { ast[pos + 4] } else { "" }
+                    let idx_callee = if pos + 4 < len(ast) { ast[pos + 4] } else { "" }
                     let ret_t = lookup_fn_ret_type(cg, idx_callee)
                     if ret_t == "[[str]]" { name = "_fj_arr_push_str" }
                     else { name = "_fj_arr_push_i64" }
@@ -524,7 +524,7 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
         p = p + 1  // past END_CALL
         let mut argstr = ""
         let mut i = 0
-        while i < to_int(len(args)) {
+        while i < len(args) {
             if i > 0 { argstr = concat!(argstr, ", ") }
             argstr = concat!(argstr, args[i])
             i = i + 1
@@ -554,7 +554,7 @@ fn is_atom_start(tag: str) -> bool {
 // Phase 15.1: linear scan of [name, type, name, type, ...] table.
 // Returns "" if name not found.
 pub fn lookup_var_type_in_table(vars: [str], name: str) -> str {
-    let n = to_int(len(vars))
+    let n = len(vars)
     let mut i = 0
     while i + 1 < n {
         if vars[i] == name { return vars[i + 1] }
@@ -592,7 +592,7 @@ fn map_method_ret_type(method: str) -> str {
 // Walk a BEGIN_METHOD_CALL block starting at pos and return the METHOD name.
 // Returns "" if not found.
 fn find_method_name(ast: [str], pos: i64) -> str {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_METHOD_CALL" { return "" }
     // Phase 16.5: nested BEGIN_METHOD_CALL chains — skip inner blocks so we
     // return the OUTER (top-level) method name for the call rooted at pos.
@@ -631,7 +631,7 @@ fn combine_binop(lhs_code: str, lhs_is_str: bool,
 
 // Determine if an atom at `atom_pos` is string-typed.
 fn atom_is_str(ast: [str], vars: [str], atom_pos: i64) -> bool {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if atom_pos >= n { return false }
     let tag = ast[atom_pos]
     if tag == "STR" { return true }
@@ -656,7 +656,7 @@ fn atom_is_str(ast: [str], vars: [str], atom_pos: i64) -> bool {
 // Used by the BEGIN_IF_EXPR handler when the then/else block is a multi-stmt
 // `{ let X = ...; <trailing_expr> }` block.
 pub fn inline_let_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> LetInlineResult {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_LET" { return lir("/* err */", pos + 1, vars) }
     let name = ast[pos + 1]
     let mut p_after_name = pos + 2
@@ -701,7 +701,7 @@ pub fn inline_let_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> L
 }
 
 pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n { return exr("0", pos) }
 
     // Parallel stacks: code + str-typed flag + atom_start_pos (for type lookup)
@@ -710,7 +710,7 @@ pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> E
     let mut p = pos
     while p < n {
         if ast[p] == "BINOP" {
-            let m = to_int(len(codes))
+            let m = len(codes)
             if m < 2 { break }
             let op = ast[p + 1]
             let rhs_code = codes[m - 1]
@@ -743,7 +743,7 @@ pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> E
             break
         }
     }
-    let m = to_int(len(codes))
+    let m = len(codes)
     if m == 0 { exr("0", p) }
     else if m == 1 { exr(codes[0], p) }
     else {
@@ -764,7 +764,7 @@ pub fn parse_expr_emit(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> E
 // would falsely match the BEGIN_x tag, throwing depth off and dropping
 // adjacent statements. Recursive node-walk via this helper avoids that.
 pub fn skip_one_node(ast: [str], pos: i64) -> i64 {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n { return n }
     let t = ast[pos]
     // Skip-2 atom-with-value tokens
@@ -825,7 +825,7 @@ pub fn stmt_end(ast: [str], pos: i64) -> i64 {
 
 // Emit a single statement; pos advancement is the caller's job (via stmt_end).
 pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n { return cg }
 
     // Phase 15.1: var_types snapshot for parse_expr_emit / parse_atom dispatch
@@ -847,11 +847,11 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
         // Optional TYPE <type_str> after name
         let mut p_after_name = pos + 2
         let mut declared_type = ""
-        if p_after_name + 1 < to_int(len(ast)) && ast[p_after_name] == "TYPE" {
+        if p_after_name + 1 < len(ast) && ast[p_after_name] == "TYPE" {
             declared_type = ast[p_after_name + 1]
             p_after_name = p_after_name + 2
         }
-        let first_atom = if p_after_name < to_int(len(ast)) { ast[p_after_name] } else { "" }
+        let first_atom = if p_after_name < len(ast) { ast[p_after_name] } else { "" }
         // Phase 15.1: derive fj-type for var_types record (declared wins, else infer)
         let mut fj_type = declared_type
         if fj_type == "" {
@@ -863,7 +863,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                 // Phase 17.8: peek first element to choose [str] vs [i64].
                 // Declared annotation still wins via the outer `if fj_type == "" {}`.
                 let first_elem_pos = p_after_name + 1
-                if first_elem_pos < to_int(len(ast)) && ast[first_elem_pos] != "END_ARRAY_LIT" && atom_is_str(ast, vars, first_elem_pos) {
+                if first_elem_pos < len(ast) && ast[first_elem_pos] != "END_ARRAY_LIT" && atom_is_str(ast, vars, first_elem_pos) {
                     fj_type = "[str]"
                 } else {
                     fj_type = "[i64]"
@@ -879,7 +879,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             else if first_atom == "BEGIN_MACRO_CALL" { fj_type = "str" }
             else if first_atom == "BEGIN_CALL" {
                 // Phase 16.2: derive fj-type from callee's registered ret type
-                let callee = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                let callee = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
                 let r = lookup_fn_ret_type(cg, callee)
                 if r != "" { fj_type = r }
             }
@@ -890,11 +890,11 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                 // fj-type via the struct (cg.struct_fields). E.g.,
                 // `let vars = cg.var_types` declares vars as [str] (not the
                 // generic int64_t). Falls back to int64_t if struct unknown.
-                let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
-                let next_after_ident = if p_after_name + 2 < to_int(len(ast)) { ast[p_after_name + 2] } else { "" }
+                let src_name = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
+                let next_after_ident = if p_after_name + 2 < len(ast) { ast[p_after_name + 2] } else { "" }
                 if next_after_ident == "FIELD" {
                     let struct_t = lookup_var_type_in_table(vars, src_name)
-                    let field_n = if p_after_name + 3 < to_int(len(ast)) { ast[p_after_name + 3] } else { "" }
+                    let field_n = if p_after_name + 3 < len(ast) { ast[p_after_name + 3] } else { "" }
                     let field_t = lookup_struct_field(cg, struct_t, field_n)
                     if field_t != "" { fj_type = field_t }
                 } else {
@@ -906,7 +906,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
             // recorded fj-type. Without this, x defaults to int64_t even when
             // arr is [str], producing pointer-truncation bugs at native link.
             else if first_atom == "BEGIN_INDEX" {
-                let arr_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                let arr_name = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
                 let arr_type = lookup_var_type_in_table(vars, arr_name)
                 if arr_type == "[str]" { fj_type = "str" }
                 else if arr_type == "[i64]" || arr_type == "[int]" || arr_type == "[i32]" { fj_type = "i64" }
@@ -930,13 +930,13 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                          else { c_type }
                      }
                      else if first_atom == "BEGIN_STRUCT_LIT" {
-                         if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "int64_t" }
+                         if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "int64_t" }
                      }
                      else if first_atom == "BEGIN_ARRAY_LIT" { "_FjArr*" }
                      else if first_atom == "BEGIN_MACRO_CALL" { "const char*" }
                      else if first_atom == "BEGIN_CALL" {
                          // Phase 16.2: if callee returns a struct, declare with the struct typedef
-                         let callee = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                         let callee = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
                          let r = lookup_fn_ret_type(cg, callee)
                          if r != "" && is_struct_name(cg, r) { r }
                          else if r != "" { map_type_ctx(r, cg) }
@@ -947,11 +947,11 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                          // the source ident's recorded fj-type.
                          // Phase 17.6: when FIELD follows, derive C type via
                          // struct field types (cg.struct_fields).
-                         let src_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
-                         let next_after_ident = if p_after_name + 2 < to_int(len(ast)) { ast[p_after_name + 2] } else { "" }
+                         let src_name = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
+                         let next_after_ident = if p_after_name + 2 < len(ast) { ast[p_after_name + 2] } else { "" }
                          if next_after_ident == "FIELD" {
                              let struct_t = lookup_var_type_in_table(vars, src_name)
-                             let field_n = if p_after_name + 3 < to_int(len(ast)) { ast[p_after_name + 3] } else { "" }
+                             let field_n = if p_after_name + 3 < len(ast) { ast[p_after_name + 3] } else { "" }
                              let field_t = lookup_struct_field(cg, struct_t, field_n)
                              if field_t != "" { map_type_ctx(field_t, cg) } else { "int64_t" }
                          }
@@ -962,7 +962,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
                      }
                      // Phase 17.8: `let x = arr[i]` — element type from arr's fj-type.
                      else if first_atom == "BEGIN_INDEX" {
-                         let arr_name = if p_after_name + 1 < to_int(len(ast)) { ast[p_after_name + 1] } else { "" }
+                         let arr_name = if p_after_name + 1 < len(ast) { ast[p_after_name + 1] } else { "" }
                          let arr_type = lookup_var_type_in_table(vars, arr_name)
                          if arr_type == "[str]" { "const char*" }
                          else { "int64_t" }
@@ -1057,7 +1057,7 @@ pub fn emit_stmt(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 // Phase 17.0: emit forward declaration `RetType name(params);` for a fn.
 // Used by emit_program's pre-pass so out-of-order calls compile in C.
 pub fn emit_fn_forward_decl(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
     let name = ast[pos + 1]
     // Phase 17.8: `main` renders as `int main(int argc, char** argv)` in
@@ -1082,7 +1082,7 @@ pub fn emit_fn_forward_decl(ast: [str], pos: i64, cg: CodegenState) -> CodegenSt
     }
     let c_ret = map_type_ctx(ret_type, cg)
     let mut param_str = ""
-    let pn = to_int(len(param_pairs))
+    let pn = len(param_pairs)
     let mut i = 0
     let mut first = true
     while i + 1 < pn {
@@ -1100,7 +1100,7 @@ pub fn emit_fn_forward_decl(ast: [str], pos: i64, cg: CodegenState) -> CodegenSt
 // AST shape: BEGIN_FN <name> BEGIN_PARAMS [<pname> <ptype>]* END_PARAMS
 //            RET_TYPE <ret_type> BEGIN_BODY <stmts> END_BODY END_FN
 pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_FN" { return cg }
     let name = ast[pos + 1]
     // Phase 15.1: clear var_types at fn boundary; we'll re-populate from params + body lets
@@ -1173,7 +1173,7 @@ pub fn emit_fn(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
 // (else-if chain), recurses so each leaf's tail also returns. Non-final branch
 // stmts emit as regular stmts.
 pub fn emit_if_implicit_return(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     let vars = cg.var_types
     let er = parse_expr_emit(ast, vars, pos + 1, cg)
     let mut cg2 = emit_if(cg, er.code)
@@ -1232,7 +1232,7 @@ pub fn fn_end(ast: [str], pos: i64) -> i64 {
 // Emit a `struct Name { ... }` as a C struct.
 // AST: BEGIN_STRUCT <name> [<fname> <ftype>]* END_STRUCT
 pub fn emit_struct(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_STRUCT" { return cg }
     let name = ast[pos + 1]
     let mut s = emit_line(cg, concat!("typedef struct {"))
@@ -1257,7 +1257,7 @@ pub fn struct_end(ast: [str], pos: i64) -> i64 {
 // Emit a `enum Name { Variant, ... }` as a C enum.
 // AST: BEGIN_ENUM <name> <variants...> END_ENUM
 pub fn emit_enum(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_ENUM" { return cg }
     let name = ast[pos + 1]
     let mut s = emit_line(cg, concat!("typedef enum {"))
@@ -1285,7 +1285,7 @@ pub fn enum_end(ast: [str], pos: i64) -> i64 {
 // Phase 17.0: emit `const NAME: TYPE = VALUE` as `static const TYPE NAME = VALUE;`
 // AST: BEGIN_CONST <name> <type> <expr> END_CONST
 pub fn emit_const(ast: [str], pos: i64, cg: CodegenState) -> CodegenState {
-    let n = to_int(len(ast))
+    let n = len(ast)
     if pos >= n || ast[pos] != "BEGIN_CONST" { return cg }
     let name = ast[pos + 1]
     let fj_type = ast[pos + 2]
@@ -1301,7 +1301,7 @@ pub fn const_end(ast: [str], pos: i64) -> i64 {
 // Top-level emitter: walks the AST, returns full C source as a single string.
 pub fn emit_program(ast: [str]) -> str {
     let mut cg = new_codegen()
-    let n = to_int(len(ast))
+    let n = len(ast)
     // Phase 17.8: seed return types for native I/O builtins so
     // `let src = read_file(path)` infers `const char*` rather than int64_t.
     cg = add_fn_ret_type(cg, "read_file", "str")

@@ -108,7 +108,7 @@ pub fn ast_is(node: [str], tag: str) -> bool {
 /// Pretty-print an AST node (SQ11.2).
 pub fn ast_print(node: [str], indent: i64) -> str {
     let pad = repeat_str("  ", indent)
-    let tag = if to_int(len(node)) > 0 { node[0] } else { "?" }
+    let tag = if len(node) > 0 { node[0] } else { "?" }
 
     if tag == "int" || tag == "float" || tag == "str" || tag == "bool" || tag == "ident" {
         return f"{pad}{tag}({node[1]})"
@@ -135,7 +135,7 @@ pub fn ast_print(node: [str], indent: i64) -> str {
     // Default: show all elements
     let mut result = f"{pad}[{tag}"
     let mut i = 1
-    while i < to_int(len(node)) {
+    while i < len(node) {
         result = result + ", " + node[i]
         i = i + 1
     }
@@ -164,7 +164,7 @@ fn repeat_str(s: str, n: i64) -> str {
 /// A full AST would use nested arrays, but Fajar Lang's type system
 /// currently requires homogeneous arrays, so we use string encoding.
 pub fn parse_expr_ast(tokens: [i64], source: str, pos: i64) -> [str] {
-    let kind = if pos < to_int(len(tokens)) { tokens[pos] } else { 0 }
+    let kind = if pos < len(tokens) { tokens[pos] } else { 0 }
 
     if kind == 130 {
         // IntLit — extract value from source (simplified: return tag)
@@ -192,7 +192,7 @@ pub fn parse_expr_ast(tokens: [i64], source: str, pos: i64) -> [str] {
 
 /// Parse a top-level item and return an AST node description.
 pub fn parse_item_ast(tokens: [i64], source: str, pos: i64) -> [str] {
-    let kind = if pos < to_int(len(tokens)) { tokens[pos] } else { 0 }
+    let kind = if pos < len(tokens) { tokens[pos] } else { 0 }
 
     // fn definition
     if kind == 15 || kind == 25 {

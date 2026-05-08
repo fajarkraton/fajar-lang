@@ -190,7 +190,7 @@ pub fn add_struct_name(state: CodegenState, name: str) -> CodegenState {
 
 pub fn is_struct_name(state: CodegenState, name: str) -> bool {
     let sn = state.struct_names
-    let n = to_int(len(sn))
+    let n = len(sn)
     let mut i = 0
     while i < n {
         if sn[i] == name { return true }
@@ -218,7 +218,7 @@ pub fn add_fn_ret_type(state: CodegenState, fn_name: str, ret_type: str) -> Code
 
 pub fn lookup_fn_ret_type(state: CodegenState, fn_name: str) -> str {
     let rt = state.fn_ret_types
-    let n = to_int(len(rt))
+    let n = len(rt)
     let mut i = 0
     while i + 1 < n {
         if rt[i] == fn_name { return rt[i + 1] }
@@ -248,7 +248,7 @@ pub fn add_struct_field(state: CodegenState, struct_name: str, field_name: str, 
 pub fn lookup_struct_field(state: CodegenState, struct_name: str, field_name: str) -> str {
     let key = concat!(struct_name, ".", field_name)
     let sf = state.struct_fields
-    let n = to_int(len(sf))
+    let n = len(sf)
     let mut i = 0
     while i + 1 < n {
         if sf[i] == key { return sf[i + 1] }
@@ -275,7 +275,7 @@ pub fn map_type_ctx(ty: str, state: CodegenState) -> str {
 // Look up variable's declared C type. Returns "" if not found.
 pub fn lookup_var_type(state: CodegenState, name: str) -> str {
     let vt = state.var_types
-    let n = to_int(len(vt))
+    let n = len(vt)
     let mut i = 0
     while i + 1 < n {
         if vt[i] == name { return vt[i + 1] }
@@ -482,7 +482,7 @@ pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], r
     // native C entry point that takes argc/argv and stashes them into
     // file-scope globals so `argv(i)` / `read_file(p)` / `write_file(p, c)`
     // work from fj source. Other functions render normally.
-    if name == "main" && to_int(len(param_pairs)) == 0 {
+    if name == "main" && len(param_pairs) == 0 {
         s = emit_line(s, "int main(int argc, char** argv) {")
         s = indent(s)
         s = emit_line(s, "g_fj_argc = argc;")
@@ -493,7 +493,7 @@ pub fn emit_function_typed(state: CodegenState, name: str, param_pairs: [str], r
     let c_ret = map_type_ctx(ret_type, state)
 
     let mut param_str = ""
-    let pn = to_int(len(param_pairs))
+    let pn = len(param_pairs)
     let mut i = 0
     let mut first = true
     while i + 1 < pn {

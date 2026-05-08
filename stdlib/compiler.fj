@@ -31,7 +31,7 @@ struct CompileResult {
 pub fn compile(source: str, file: str) -> CompileResult {
     // Phase 1: Tokenize
     let tokens = tokenize(source)
-    let token_count = to_int(len(tokens))
+    let token_count = len(tokens)
 
     // Phase 2: Parse
     let item_count = parse_program(tokens)
@@ -199,7 +199,7 @@ pub fn differential_test() -> bool {
     let mut i = 0
     while i < 5 {
         let tokens = tokenize(tests[i])
-        let count = to_int(len(tokens))
+        let count = len(tokens)
         if count == expected[i] {
             println(f"  MATCH: \"{tests[i]}\" → {count} tokens")
             pass = pass + 1
@@ -237,7 +237,7 @@ pub fn stress_test() -> void {
 
         let tokens = tokenize(src)
         let items = parse_program(tokens)
-        println(f"  {n} statements: {to_int(len(tokenize(src)))} tokens, {items} items")
+        println(f"  {n} statements: {len(tokenize(src))} tokens, {items} items")
         j = j + 1
     }
 }

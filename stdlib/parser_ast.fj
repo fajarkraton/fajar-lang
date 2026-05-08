@@ -53,7 +53,7 @@ fn is_ws_ast(c: str) -> bool { c == " " || c == "\n" || c == "\t" || c == "\r" }
 
 // Skip whitespace AND single-line `// ...` and block `/* ... */` comments.
 fn skip_ws(src: str, pos: i64) -> i64 {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = pos
     let mut progress = true
     while progress {
@@ -86,7 +86,7 @@ fn skip_ws(src: str, pos: i64) -> i64 {
 }
 
 fn read_word(src: str, pos: i64) -> i64 {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = pos
     while p < n && is_alnum_ast(src.substring(p, p + 1)) {
         p = p + 1
@@ -95,7 +95,7 @@ fn read_word(src: str, pos: i64) -> i64 {
 }
 
 fn read_int(src: str, pos: i64) -> i64 {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = pos
     while p < n && is_digit_ast(src.substring(p, p + 1)) {
         p = p + 1
@@ -105,7 +105,7 @@ fn read_int(src: str, pos: i64) -> i64 {
 
 fn expect_char(src: str, pos: i64, ch: str) -> i64 {
     let p = skip_ws(src, pos)
-    if p < to_int(len(src)) && src.substring(p, p + 1) == ch {
+    if p < len(src) && src.substring(p, p + 1) == ch {
         p + 1
     } else {
         -1
@@ -114,8 +114,8 @@ fn expect_char(src: str, pos: i64, ch: str) -> i64 {
 
 fn expect_str(src: str, pos: i64, s: str) -> i64 {
     let p = skip_ws(src, pos)
-    let sn = to_int(len(s))
-    let n = to_int(len(src))
+    let sn = len(s)
+    let n = len(src)
     if p + sn <= n && src.substring(p, p + sn) == s {
         // Ensure it's not a prefix of a longer identifier (e.g. "fn" vs "fnX")
         if p + sn == n || !is_alnum_ast(src.substring(p + sn, p + sn + 1)) {
@@ -134,7 +134,7 @@ fn expect_str(src: str, pos: i64, s: str) -> i64 {
 // `.` don't mislead the counter), then peek for `.ident(`. Each found
 // `.ident(` increments depth and the scan continues from that `(`.
 fn count_method_chain_after(src: str, p: i64) -> i64 {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut depth = 1
     let mut q = p
     let mut more = true
@@ -189,7 +189,7 @@ fn count_method_chain_after(src: str, p: i64) -> i64 {
 //     [BEGIN_DEFAULT <body_expr> END_DEFAULT]?
 //   END_MATCH
 pub fn parse_match_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut a = ast.push("BEGIN_MATCH")
     let r_subj = parse_expr_ast(src, pos, a)
     if r_subj.error { return r_subj }
@@ -239,7 +239,7 @@ pub fn parse_match_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 
 pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p = skip_ws(src, pos)
-    let n = to_int(len(src))
+    let n = len(src)
     if p >= n { return pr_err(ast, p, "ERR_EOF") }
 
     let c = src.substring(p, p + 1)
@@ -434,7 +434,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
             // ast length BEFORE BEGIN_CALL push so maybe_wrap_call_index
             // can splice BEGIN_INDEX in at that position when `[`
             // follows the closing `)`. Subject reused inside wrapper.
-            let len_before = to_int(len(ast))
+            let len_before = len(ast)
             let mut a = ast.push("BEGIN_CALL").push(word)
             let mut cur = after + 1
             cur = skip_ws(src, cur)
@@ -531,7 +531,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 cur_after = skip_ws(src, cur_pos)
             }
             // Method call: last segment in chain followed by `(`
-            if to_int(len(field_chain)) > 0 && cur_after < n && src.substring(cur_after, cur_after + 1) == "(" {
+            if len(field_chain) > 0 && cur_after < n && src.substring(cur_after, cur_after + 1) == "(" {
                 // CALL_INDEX P1.2 (Decision D1.A, 2026-05-07): capture
                 // ast length BEFORE any BEGIN_METHOD_CALL pushes so
                 // maybe_wrap_call_index can splice BEGIN_INDEX in at
@@ -540,8 +540,8 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 // Deferred (DG-P1.2): `obj.m()[i].n()` — chain
                 // continuation after index — would need an extra
                 // post-wrap chain-loop iteration. Out of P1 scope.
-                let len_before_method = to_int(len(ast))
-                let nchain = to_int(len(field_chain))
+                let len_before_method = len(ast)
+                let nchain = len(field_chain)
                 let method_name = field_chain[nchain - 1]
                 // Phase 16.5: detect chained method calls `a.f(x).g(y).h(z)`.
                 // Count total chain depth so we emit the right number of
@@ -633,7 +633,7 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 let mut a = ast.push("BEGIN_INDEX").push(word)
                 // Emit FIELD <name> chain (if any) before the index expr.
                 let mut k = 0
-                while k < to_int(len(field_chain)) {
+                while k < len(field_chain) {
                     a = a.push("FIELD").push(field_chain[k])
                     k = k + 1
                 }
@@ -648,10 +648,10 @@ pub fn parse_primary_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 }
                 return pr_err(a, p_rb, "ERR_INDEX_RB")
             }
-            if to_int(len(field_chain)) > 0 {
+            if len(field_chain) > 0 {
                 let mut a = ast.push("IDENT").push(word)
                 let mut i = 0
-                while i < to_int(len(field_chain)) {
+                while i < len(field_chain) {
                     a = a.push("FIELD").push(field_chain[i])
                     i = i + 1
                 }
@@ -684,7 +684,7 @@ fn op_prec(op: str) -> i64 {
 
 // Try to detect a binary operator at `p`. Returns (op, advance) or ("", 0).
 fn try_binop(src: str, p: i64) -> [str] {
-    let n = to_int(len(src))
+    let n = len(src)
     if p >= n { return ["", "0"] }
     let two = if p + 2 <= n { src.substring(p, p + 2) } else { "" }
     let one = src.substring(p, p + 1)
@@ -703,7 +703,7 @@ fn try_binop(src: str, p: i64) -> [str] {
 pub fn parse_expr_prec(src: str, pos: i64, min_prec: i64, ast: [str]) -> ParseResult {
     let mut lhs = parse_primary_ast(src, pos, ast)
     if lhs.error { return lhs }
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = skip_ws(src, lhs.pos)
     while p < n {
         let opi = try_binop(src, p)
@@ -744,12 +744,12 @@ pub fn parse_expr_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 // regression-wise — it only fires when source actually contains
 // `f()[...]`.
 fn maybe_wrap_call_index(src: str, ast: [str], end_pos: i64, len_before_call: i64) -> ParseResult {
-    let n = to_int(len(src))
+    let n = len(src)
     let after = skip_ws(src, end_pos)
     if after >= n || src.substring(after, after + 1) != "[" {
         return pr_ok(ast, end_pos)
     }
-    let total = to_int(len(ast))
+    let total = len(ast)
     let mut out: [str] = []
     let mut i = 0
     while i < len_before_call {
@@ -777,7 +777,7 @@ fn maybe_wrap_call_index(src: str, ast: [str], end_pos: i64, len_before_call: i6
 
 pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let mut p0 = skip_ws(src, pos)
-    let n = to_int(len(src))
+    let n = len(src)
     if p0 >= n { return pr_ok(ast, p0) }
     // Skip leading bare `;` (trailing separators between blocks)
     while p0 < n && src.substring(p0, p0 + 1) == ";" {
@@ -983,7 +983,7 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
                 let mut a = ast.push("BEGIN_ASSIGN").push(name)
                 // Emit FIELD <fname> markers in order
                 let mut k = 0
-                while k < to_int(len(chain)) {
+                while k < len(chain) {
                     a = a.push("FIELD").push(chain[k])
                     k = k + 1
                 }
@@ -1014,7 +1014,7 @@ pub fn parse_stmt_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 // Parse parameter list `(name: type, name: type, ...)` starting at `p_lp` (just past `(`).
 // Returns (ast_with_BEGIN_PARAMS_block, pos_just_past_RP).
 fn parse_params(src: str, p_lp: i64, ast: [str]) -> ParseResult {
-    let n = to_int(len(src))
+    let n = len(src)
     let mut a = ast.push("BEGIN_PARAMS")
     let mut p = skip_ws(src, p_lp)
     // Empty param list
@@ -1070,7 +1070,7 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let name = src.substring(p1, id_end)
     let p_lp = expect_char(src, id_end, "(")
     if p_lp < 0 { return pr_err(ast, id_end, "ERR_FN_LP") }
-    let n = to_int(len(src))
+    let n = len(src)
     // BEGIN_FN <name> emit FIRST so params land between name and ret_type slot
     let mut a = ast.push("BEGIN_FN").push(name)
     let pr = parse_params(src, p_lp, a)
@@ -1084,10 +1084,10 @@ pub fn parse_fn_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
         let p_t = skip_ws(src, after_arrow)
         // Accept either bare ident type (i64, ParseResult) or `[type]` (array).
         let mut t_end: i64 = 0
-        if p_t < to_int(len(src)) && src.substring(p_t, p_t + 1) == "[" {
+        if p_t < len(src) && src.substring(p_t, p_t + 1) == "[" {
             let mut depth = 1
             let mut q = p_t + 1
-            while q < to_int(len(src)) && depth > 0 {
+            while q < len(src) && depth > 0 {
                 let cc = src.substring(q, q + 1)
                 if cc == "[" { depth = depth + 1 }
                 else if cc == "]" { depth = depth - 1 }
@@ -1125,7 +1125,7 @@ pub fn parse_struct_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p_lb = expect_char(src, id_end, "{")
     if p_lb < 0 { return pr_err(ast, id_end, "ERR_STRUCT_LB") }
     let mut a = ast.push("BEGIN_STRUCT").push(name)
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = skip_ws(src, p_lb)
     // Empty body
     if p < n && src.substring(p, p + 1) == "}" {
@@ -1184,7 +1184,7 @@ pub fn parse_enum_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p_lb = expect_char(src, id_end, "{")
     if p_lb < 0 { return pr_err(ast, id_end, "ERR_ENUM_LB") }
     let mut a = ast.push("BEGIN_ENUM").push(name)
-    let n = to_int(len(src))
+    let n = len(src)
     let mut p = skip_ws(src, p_lb)
     if p < n && src.substring(p, p + 1) == "}" {
         return pr_ok(a.push("END_ENUM"), p + 1)
@@ -1222,7 +1222,7 @@ pub fn parse_const_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     let p_colon = expect_char(src, id_end, ":")
     if p_colon < 0 { return pr_err(ast, id_end, "ERR_CONST_COLON") }
     let p_t = skip_ws(src, p_colon)
-    let n = to_int(len(src))
+    let n = len(src)
     let mut t_end: i64 = 0
     if p_t < n && src.substring(p_t, p_t + 1) == "[" {
         let mut depth = 1
@@ -1253,7 +1253,7 @@ pub fn parse_const_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
 pub fn parse_to_ast(src: str) -> [str] {
     let mut a: [str] = []
     let mut p: i64 = 0
-    let n = to_int(len(src))
+    let n = len(src)
     while p < n {
         p = skip_ws(src, p)
         if p >= n { break }

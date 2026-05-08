@@ -122,7 +122,7 @@ fn lookup_keyword(word: str) -> i64 {
 // Tokenize source code into an array of token kind tags.
 // Uses substring(pos, pos+1) for char access (ownership-safe).
 pub fn tokenize(source: str) -> [i64] {
-    let n = to_int(len(source))
+    let n = len(source)
     let mut pos = 0
     let mut tokens: [i64] = []
 
@@ -408,7 +408,7 @@ pub struct SpanResult {
 /// Tokenize source code into parallel arrays of (kind, start, end).
 /// Identical kind-recognition to `tokenize`; adds byte-offset tracking.
 pub fn tokenize_with_spans(source: str) -> SpanResult {
-    let n = to_int(len(source))
+    let n = len(source)
     let mut pos = 0
     let mut tokens: [i64] = []
     let mut starts: [i64] = []
@@ -695,7 +695,7 @@ pub fn token_text(source: str, start: i64, end: i64) -> str {
 pub fn offset_to_line(source: str, offset: i64) -> i64 {
     let mut line = 1
     let mut i = 0
-    while i < offset && i < to_int(len(source)) {
+    while i < offset && i < len(source) {
         if source.substring(i, i + 1) == "\n" {
             line = line + 1
         }
@@ -708,7 +708,7 @@ pub fn offset_to_line(source: str, offset: i64) -> i64 {
 pub fn offset_to_col(source: str, offset: i64) -> i64 {
     let mut col = 1
     let mut i = 0
-    while i < offset && i < to_int(len(source)) {
+    while i < offset && i < len(source) {
         if source.substring(i, i + 1) == "\n" {
             col = 1
         } else {

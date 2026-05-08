@@ -62,7 +62,7 @@ const TK_IDENT: i64 = 133
 
 // Peek at current token kind
 fn peek(tokens: [i64], pos: i64) -> i64 {
-    if pos >= to_int(len(tokens)) { return TK_EOF }
+    if pos >= len(tokens) { return TK_EOF }
     tokens[pos]
 }
 
@@ -534,7 +534,7 @@ fn parse_primary(tokens: [i64], pos: i64) -> i64 {
 
 // Parse a complete program (list of items)
 pub fn parse_program(tokens: [i64]) -> i64 {
-    let total = to_int(len(tokens))
+    let total = len(tokens)
     let mut pos: i64 = 0
     let mut items = 0
     while pos < total {
@@ -573,7 +573,7 @@ struct ParseResult {
 /// Synchronize after error — skip to next statement boundary.
 /// Returns the position after the sync point.
 fn synchronize(tokens: [i64], pos: i64) -> i64 {
-    let total = to_int(len(tokens))
+    let total = len(tokens)
     let mut p = pos
     while p < total {
         let kind = peek(tokens, p)
@@ -595,7 +595,7 @@ fn synchronize(tokens: [i64], pos: i64) -> i64 {
 /// Parse a program with error recovery.
 /// Continues parsing after errors, collecting all of them.
 pub fn parse_program_recovering(tokens: [i64], source: str) -> ParseResult {
-    let total = to_int(len(tokens))
+    let total = len(tokens)
     let mut pos: i64 = 0
     let mut items = 0
     let mut errors: [str] = []
@@ -655,7 +655,7 @@ pub fn display_parse_errors(result: ParseResult) -> void {
     }
     println(f"{result.error_count} parse error(s):")
     let mut i = 0
-    while i < to_int(len(result.errors)) {
+    while i < len(result.errors) {
         println(f"  {result.errors[i]}")
         i = i + 1
     }
