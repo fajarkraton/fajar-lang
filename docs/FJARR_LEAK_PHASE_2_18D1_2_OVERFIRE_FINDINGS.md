@@ -116,9 +116,21 @@ plan didn't itemize.
 
 ## §3 — Headline numbers
 
+> **2026-05-08 update (E1 attempt diagnostic):** The 12,384 number
+> was emission-count across 86 stage1_full tests × ~111 unique
+> source sites in stdlib (each test re-runs the chain on the same
+> source). Re-attempt with diagnostic capture (single test, single
+> chain run) showed **111 unique source sites** in `/tmp/full_p10.fj`
+> (the materialized concatenated stdlib). All 111 are the
+> branch-with-return / branch-merge pattern (E3 issue). **Zero**
+> chain-grow over-fires (E1 already handled).
+
 | Metric | Value |
 |---|---|
-| SE024 occurrences in single stage1_full run | **12,384** |
+| SE024 occurrences in 86-test stage1_full run (raw) | **12,384** |
+| Unique source sites per single-test chain run | **111** |
+| All 111 attributed to E3 branch-merge issue | ✅ |
+| Chain-grow over-fires (E1 issue) | **0** ✅ |
 | Trigger threshold (B0 §1 early-warning) | **>20 = pause** |
 | Magnitude of overshoot | **~620× the threshold** |
 | stage1_full pass rate post-wire | **0/86** (chain entirely broken) |
@@ -132,9 +144,9 @@ original 14h plan" choice), the analyzer needs:
 
 | Enhancement | Estimated effort | Why |
 |---|---|---|
-| **E1** Chain-grow re-assign reset | ~1-2h | `args = args.push(x)` should declare-fresh on LHS rebind. Touch let-stmt path + assign-stmt path in `check.rs`. |
+| ~~**E1** Chain-grow re-assign reset~~ | ✅ **Already implemented** | Discovered post-rollback (E1 attempt 2026-05-08): `check_assign` at `src/analyzer/type_check/check.rs:2106-2117` ALREADY calls `moves.declare()` before AND after RHS evaluation. The `ok_chain_grow_pattern_no_se024` test passes WITH the SE024 wire applied, confirming chain-grow is not the problem. |
 | **E2** Method-receiver consume tracking | ~2-3h | When `arr.method(...)` is checked + `arr_ty: [T]`, mark `arr` moved (or the equivalent if method takes `&self`/`&mut self`). Need to know each method's self-kind for `[T]`. |
-| **E3** Branch-merge analysis | ~3-4h | Per-branch MoveTracker scope; merge at end-of-if. Already partially handled for nested fns; needs scope-savepoint API addition. |
+| **E3** Branch-merge analysis | ~3-4h | **THIS IS THE REAL OVER-FIRE CAUSE.** Per-branch MoveTracker scope; merge at end-of-if. Specifically: when a branch ends with `return` / `break` / `continue` / etc, treat consumes in that branch as branch-local. The 111 over-fire sites in stdlib are all `if cond { return pr_err(a, ...) }` patterns where the if-branch consumes `a` but escapes — naive analyzer marks `a` moved unconditionally, fires SE024 on subsequent uses. |
 | **E4** `.clone()` builtin recognition | ~30min | Already planned. Skip mark_moved on `MethodCall { method: "clone", .. }`. |
 | **E5** `_fj_arr_clone` codegen preamble | ~30-45min | Already planned. Allocator-side runtime support. |
 | **E6** Update 5 pre-Phase-2 internal lib tests | ~30min | Document Phase 2 contract change. |
