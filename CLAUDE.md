@@ -121,7 +121,7 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.2.1** patch | 2026-05-08 | 🐛 TQ12.2 SQLite analyzer-name-table fix: register `db_close` / `db_begin` / `db_commit` / `db_rollback` (were dispatched in interpreter but missing from analyzer → SE001 on `.fj` source). +3 full-pipeline integration tests. → TQ12_2_SQLITE_B0_FINDINGS. |
+| **v35.2.1** patch | 2026-05-08 | 🐛 TQ12.2 SQLite: register `db_close`/`db_begin`/`db_commit`/`db_rollback` in analyzer (were SE001-rejected on `.fj` source). +3 integration tests. → TQ12_2_SQLITE_B0_FINDINGS. |
 | **v35.2.0** "FJARR_LEAK Phase 2 D-LITE" | 2026-05-08 | `[T]` affine via opt-in `--strict-ownership` + SE024 shim. 4 standalone correctness ships (E3/E5/E4/E1.5). Pivoted from 14h Strategy D cascade to ~7h D-LITE. Tests 102→120. → FJARR_LEAK_PHASE_2_FINDINGS. |
 | **v35.1.0** "FJARR_LEAK Phase 1" | 2026-05-08 | `_FjArr` realloc-leak class CLOSED (88 bytes/array → 0). Arena copy-grow. Stage 2 byte-equality preserved. → FJARR_LEAK_PHASE_1_FINDINGS. |
 | **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. Phase 18 CALL_INDEX (silent miscompile `f()[i]` / `obj.m()[i]`) closed 2026-05-07 commit 9c9ff2a8. |
