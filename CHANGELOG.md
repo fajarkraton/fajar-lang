@@ -2,6 +2,145 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.2.0] — 2026-05-08 🎯 FJARR_LEAK Phase 2 — `[T]` affine semantics via opt-in `--strict-ownership` (D-LITE) — minor bump
+
+`[T]` array use-after-move detection ships as opt-in via the existing
+`--strict-ownership` CLI flag. SE024 (`UseAfterMoveArray`) is the
+catalog code for the diagnostic; ME001 (`UseAfterMove`) continues to
+cover String/Struct/other non-Copy types in strict mode. Default mode
+preserves the pre-Phase-2 contract (arrays are Copy).
+
+**This is the D-LITE pivot from the original Strategy D cascade plan.**
+Empirical evidence (`docs/FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS.md`
+§5) showed the original always-on cascade would require ~30-60
+`.clone()` insertions in stdlib (~4-8h focused work). D-LITE achieves
+the SE024 diagnostic via a small dispatch shim, leveraging existing
+infrastructure (CLI flag + `MoveTracker` + `is_copy_type_strict` already
+shipped in prior phases).
+
+### Usage
+
+```bash
+# Default (lenient): arrays are Copy; SE024 never fires
+fj run examples/array.fj
+
+# Strict mode: arrays are Move; use-after-move on [T] → SE024
+fj run --strict-ownership examples/array.fj
+fj check --strict-ownership examples/array.fj
+```
+
+Strict-mode example output (use-after-move on `[T]`):
+
+```
+SE024: use of moved `[T]` array 'v' (moved at byte 42)
+  ...
+  help: `[T]` array `v` was moved at byte offset 42. Per FJARR_LEAK
+        Phase 2 (Strategy D), `[T]` is affine. Insert `v.clone()` at
+        the prior consume site to keep `v` available, or restructure
+        so each array binding is used exactly once
+```
+
+### 5 standalone correctness improvements (ship even without SE024 wire)
+
+1. **E3 — Branch-merge analysis with terminator awareness** (`a6995526`):
+   `MoveSnapshot` + `snapshot()`/`restore()`/`merge_snapshots()` API
+   in `MoveTracker`. `branch_always_terminates(e)` helper recognizes
+   `return`/`break`/`continue` as branch-local terminators. `check_if`
+   rewritten with 4-case post-merge logic (both terminate / only-then /
+   only-else / neither). **Anyone using `--strict-ownership` benefits
+   immediately** — `if cond { return pr_err(s, ...) }` patterns no longer
+   false-fire ME001 on post-if `s` use.
+
+2. **E5 — `_fj_arr_clone` runtime preamble** (`126e4c93`):
+   Deep-copy `[T]` via existing R15 arena. Allocates fresh `_FjArr`
+   struct + buffer, memcpy live entries. Pairs with E4's `.clone()`
+   builtin recognition.
+
+3. **E4 — `.clone()` recognized end-to-end** (`a7a3a101`):
+   - **Interpreter:** `Value::Array` clone branch (Vec deep-clone).
+   - **Self-host codegen:** `map_method("clone")` → `_fj_arr_clone`.
+   - **Analyzer:** generic method-call dispatch already accepts `.clone()`.
+
+4. **E1.5 — `MoveTracker::reset()` API** (`47bbda9e`):
+   Find variable in any scope (innermost-out, like `mark_moved`) and
+   reset state in-place. Fixes chain-grow re-assign across nested scope
+   boundaries. Without this, `args = args.push(x)` inside a loop body
+   created a NEW Owned record in the inner loop scope while leaving the
+   outer-scope binding marked Moved — caused 71% of the over-fire issue
+   that was first attributed to "branch-merge."
+
+5. **D-LITE — SE024 dispatch shim** (`390cae48`):
+   `check_ident` routes use-after-move to SE024 (Array) vs ME001 (other).
+   No consume-site changes; gates remain at `is_copy_type_strict`
+   (strict mode only). 4 `emit_se024_*` tests un-`#[ignore]`'d, all PASS.
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+- ✅ Opt-in `--strict-ownership` mode: SE024 fires correctly on `[T]` use-after-move
+- ✅ Default mode: pre-Phase-2 contract preserved; SE024 never fires
+- ✅ E3 + E1.5 ship as correctness improvements regardless of SE024 wire
+- ⚠️ **Compass §4.4 default-on safety NOT achieved**: D-LITE is opt-in only. Documented openly as accepted trade-off vs ~4-8h cascade work that would've required `.clone()` insertions throughout stdlib/parser_ast.fj + stdlib/codegen_driver.fj.
+- ⚠️ **Method-receiver consume tracking NOT wired**: `arr.method(...)` doesn't mark `arr` as moved. Out of D-LITE scope. Future work if @kernel mode demands it.
+- ⏸️ **D-FULL cascade path** documented in `FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS.md` §5 for v36.x revisit alongside @kernel mode.
+
+### Added
+
+- **`docs/FJARR_LEAK_PHASE_2_FINDINGS.md`** (NEW) — Phase 2 closure
+  findings doc. §0 B0 recap, §1 Decision F/D-LITE, §2 sub-tasks closed
+  (10 commits), §3 test additions (18 new), §4 effort recap (~7h
+  actual vs 18h ceiling, **-61%**), §5 prevention layer, §6 honest scope,
+  §7 cumulative state, §8 decision gate.
+- **`docs/FJARR_LEAK_PHASE_2_B0_FINDINGS.md`** (committed `dd0d3fa5`) — B0 audit (16 probes)
+- **`docs/FJARR_LEAK_PHASE_2_18D1_DISCOVERY.md`** (committed `2769d726`) — analyzer-infra-already-built discovery
+- **`docs/FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS.md`** (committed `72863183` + amended in `47bbda9e`) — over-fire diagnostic + cascade-scope discovery
+- **`tests/analyzer_se024_use_after_move_array.rs`** (NEW, 11 tests) — SE024 dispatch shim regression suite
+- **`tests/analyzer_branch_merge_terminator.rs`** (NEW, 7 tests) — E3 + E4 unit tests
+- **`SemanticError::UseAfterMoveArray { name, span, move_span }`** variant in `src/analyzer/type_check/mod.rs` with SE024 catalog code, `secondary_span()` "array moved here" label, and `hint()` suggesting `.clone()` per FJARR_LEAK Phase 2 origin
+- **`MoveTracker::snapshot()` / `restore()` / `merge_snapshots()`** APIs in `src/analyzer/borrow_lite.rs`
+- **`MoveTracker::reset()`** API in `src/analyzer/borrow_lite.rs` (E1.5 fix)
+- **`branch_always_terminates(e: &Expr) -> bool`** helper in `src/analyzer/type_check/check.rs` (E3)
+- **`_fj_arr_clone` preamble** in `stdlib/codegen.fj` `emit_preamble` — deep-copy via arena
+- **`map_method("clone")` → `"_fj_arr_clone"`** in `stdlib/codegen_driver.fj`
+- **`(Value::Array(a), "clone")`** branch in `src/interpreter/eval/methods.rs`
+- **LSP + miette code dispatch** for `SE024` in `src/lsp/server.rs` + `src/lib.rs`
+
+### Changed
+
+- **`check_if`** in `src/analyzer/type_check/check.rs` rewritten with
+  branch-merge logic: snapshot pre, evaluate then, snapshot then-end,
+  restore pre, evaluate else, snapshot else-end. 4-case post-merge by
+  `(then_terminates, else_terminates)`.
+- **`check_assign`** in `src/analyzer/type_check/check.rs` switched
+  from `moves.declare()` to `moves.reset()` at both pre-RHS and
+  post-assign sites (E1.5 fix). Chain-grow re-assign now correct
+  across nested scope boundaries.
+- **`check_ident`** in `src/analyzer/type_check/check.rs` adds SE024
+  vs ME001 dispatch when `check_use` returns `Some` (D-LITE shim).
+- **`stdlib/codegen.fj`** `emit_preamble` adds `_fj_arr_clone` (12
+  lines after `_fj_arr_len`). Stage 2 byte-equality preserved
+  (text-only deterministic addition).
+- **`stdlib/codegen_driver.fj`** `map_method` adds `clone` mapping
+  (3 lines). Stage 2 byte-equality preserved.
+- **`CLAUDE.md` §7**: stale catalog claim fixed (was `SE001-SE016 + ME001-ME010`; now `SE001-SE024 + ME001-ME013` + adds NE/IPC/EE categories that existed but weren't listed; added `SE024 UseAfterMoveArray (always-on for [T])` to key errors)
+- **`docs/FJARR_LEAK_PLAN.md`** + decision file + Phase 1 findings + Phase 2 B0 findings: SE017 → SE024 mechanical replace (sed across 4 docs in commit `c9830168`)
+
+### Stats
+
+- **Self-host + analyzer tests:** 102 → **120** (+11 SE024 + 7 branch_merge_terminator)
+- **Stage1-full:** 86 (unchanged) | **phase17_self_compile:** 4/4 (unchanged, byte-equality preserved through E5+E4+D-LITE)
+- **Lib tests:** 7,629 (unchanged; D-LITE shim is non-breaking — strict mode only fires SE024 where ME001 would've fired anyway, just relabeled)
+- **Phase 2 cumulative effort:** ~7h actual / 18h ceiling (**-61%**) / 14h likely (**-50%**) across 10 Phase 2 commits
+- **Cumulative effort v33.4.0..v35.2.0:** ~45h Claude time across 26 self-host + Phase 1 + Phase 2 phases
+
+### Source of truth
+
+- `docs/FJARR_LEAK_PHASE_2_FINDINGS.md` — Phase 2 closure (this release)
+- `docs/FJARR_LEAK_PHASE_2_18D1_2_OVERFIRE_FINDINGS.md` §5 — empirical cascade-scope evidence (informs future D-FULL revisit)
+- `docs/FJARR_LEAK_PHASE_2_18D1_DISCOVERY.md` — analyzer-infrastructure-already-built discovery
+- `docs/FJARR_LEAK_PHASE_2_B0_FINDINGS.md` — B0 audit (16 probes; yellow-light gate)
+- `docs/decisions/2026-05-07-fjarr-leak-strategy.md` — Choice F (A-now arena + D-Phase-2 linear types; D-LITE pivot adopted in 2026-05-08 session)
+- `docs/FJARR_LEAK_PLAN.md` — full plan w/ 5 strategy candidates + risk register
+
 ## [v35.1.0] — 2026-05-08 🎯 FJARR_LEAK Phase 1 — `_FjArr` realloc-leak class CLOSED — minor bump
 
 The residual `_FjArr` heap-leak class documented in `docs/FJARR_LEAK_B0_FINDINGS.md`
