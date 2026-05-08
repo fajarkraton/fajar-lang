@@ -203,7 +203,7 @@ What does NOT work yet (legitimate scope-boundary, deferred to Phase 2):
 - ⚠️ **No periodic arena reset / no arena snapshot-restore API**: would partially mitigate the embedded-loop case but adds API surface that Phase 2 (linear types) makes obsolete. Deliberately not added in Phase 1 to avoid one-way-door commitments.
 
 What stays deferred (genuinely separate scope):
-- ⏸️ **Phase 2 (Strategy D / linear-types-lite)** — affine `[T]`, SE017 UseAfterMove, `.clone()` builtin, codegen emits `free(arr->data); free(arr)` at last-use. Roadmap: v36.x. ~14h estimate per FJARR_LEAK_PLAN §5 (strategy D column). One-way-door per decision file §Reverse-cost — once linear types ship, reverting silently re-permits shared mutation and re-introduces the leak class.
+- ⏸️ **Phase 2 (Strategy D / linear-types-lite)** — affine `[T]`, SE024 UseAfterMoveArray, `.clone()` builtin, codegen emits `free(arr->data); free(arr)` at last-use. Roadmap: v36.x. ~14h estimate per FJARR_LEAK_PLAN §5 (strategy D column). One-way-door per decision file §Reverse-cost — once linear types ship, reverting silently re-permits shared mutation and re-introduces the leak class.
 - ⏸️ **Phase 18 CALL_INDEX deferred items** (P1.3 `f()[0][1]` recursive, `f()[i].method()` chained-after-index, D2.B `parse_expr_emit_with_type` typed-result refactor) — closed independently in commit `9c9ff2a8`, separate scope from FJARR_LEAK.
 
 ## §7 — Cumulative state at Phase 1 close (v35.1.0-pre)

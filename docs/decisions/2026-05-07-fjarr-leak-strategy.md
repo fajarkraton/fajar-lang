@@ -34,7 +34,7 @@ exit." Strategy A by itself would compose poorly with a future
 Strategy D alone is the structurally-best answer (zero overhead, real
 @kernel compat, aligned with Compass §6.2 Hylo-style mutable value
 semantics) but requires:
-- Analyzer change to reject `[T]` reuse-after-move (new SE017 code)
+- Analyzer change to reject `[T]` reuse-after-move (new SE024 code)
 - Codegen change to emit `free` at last-use of every affine binding
 - Possible `.clone()` annotations in self-host source itself (audit
   count needed before commit per plan §4 risk register entry)
@@ -101,7 +101,7 @@ exit. This is documented honestly, not hidden.
    - Audit `[T]` reuse sites in self-host source (`grep -E "let.*: \\["
      stdlib/*.fj | wc -l`). Plan §4 R5 risk: if >50 sites, expect
      cascade re-baselining.
-   - Analyzer changes to introduce SE017 UseAfterMove for `[T]`.
+   - Analyzer changes to introduce SE024 UseAfterMoveArray for `[T]`.
    - Codegen emits `free(arr->data); free(arr)` at last-use; arena
      becomes legacy code path that gets feature-flagged off.
    - `.clone()` builtin for explicit deep-copy.
@@ -117,7 +117,7 @@ must remain green throughout.
 **Phase 1: +25% baseline** (Strategy A is text-only preamble change,
 B0 audit confirmed all infrastructure exists, low uncertainty).
 
-**Phase 2 (deferred): +30% high-uncertainty** (Strategy D needs SE017
+**Phase 2 (deferred): +30% high-uncertainty** (Strategy D needs SE024
 analyzer code-path, .clone() builtin, possible self-host re-baseline,
 multiple unknowns).
 

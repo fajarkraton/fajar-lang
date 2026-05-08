@@ -513,22 +513,15 @@ of GPU time to a single interruption is NOT production-ready.
 ```
 Format: [PREFIX][NUMBER]
 
-LE = Lex Error        (LE001-LE008)     --  8 tokenization problems
-PE = Parse Error      (PE001-PE010)     -- 10 syntax problems
-SE = Semantic Error   (SE001-SE016)     -- 16 type/scope problems
-KE = Kernel Error     (KE001-KE004)     --  4 @kernel context violations
-DE = Device Error     (DE001-DE003)     --  3 @device context violations
-TE = Tensor Error     (TE001-TE009)     --  9 shape/type problems
-RE = Runtime Error    (RE001-RE008)     --  8 execution problems
-ME = Memory Error     (ME001-ME010)     -- 10 ownership/borrow problems
-CE = Codegen Error    (CE001-CE010)     -- 10 native compilation problems
+LE001-LE008 · PE001-PE010 · SE001-SE024 (SE024=UseAfterMoveArray, FJARR_LEAK Ph2)
+KE001-KE004 · DE001-DE003 · NE001-NE004 · TE001-TE009 · RE001-RE008
+ME001-ME013 (ME006-ME008 reserved for runtime/OS)
+CE001-CE010 · IPC001-2 · EE001-4
 
-Total: 78 error codes across 9 categories (verified by grep on docs/ERROR_CODES.md)
+Canonical: docs/ERROR_CODES.md. Counts derived 2026-05-08.
 ```
 
-Key errors:
-- **SE004** TypeMismatch | **KE001** HeapAllocInKernel | **KE002** TensorInKernel
-- **DE001** RawPointerInDevice | **ME001** UseAfterMove | **RE003** StackOverflow
+Key: **SE024** UseAfterMoveArray (always-on for `[T]`) | **ME001** UseAfterMove (gated by strict_ownership, non-Copy types) | **SE004** TypeMismatch | **KE001** HeapAllocInKernel | **DE001** RawPointerInDevice | **RE003** StackOverflow
 
 > **Full catalog:** `docs/ERROR_CODES.md`
 

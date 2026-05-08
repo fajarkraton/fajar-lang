@@ -2708,6 +2708,7 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::IpcTypeMismatch { .. } => "IPC002",
         SemanticError::IndexOutOfBounds { .. } => "SE022",
         SemanticError::QuantizedNotDequantized { .. } => "SE023",
+        SemanticError::UseAfterMoveArray { .. } => "SE024",
     };
     Diagnostic {
         range,

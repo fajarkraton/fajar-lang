@@ -362,6 +362,7 @@ impl FjDiagnostic {
             SemanticError::IpcTypeMismatch { .. } => "IPC002",
             SemanticError::IndexOutOfBounds { .. } => "SE022",
             SemanticError::QuantizedNotDequantized { .. } => "SE023",
+            SemanticError::UseAfterMoveArray { .. } => "SE024",
         };
         let severity = if e.is_warning() {
             miette::Severity::Warning

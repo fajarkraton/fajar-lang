@@ -1067,6 +1067,27 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// SE024: Use of `[T]` array after it was moved (consumed by prior use).
+    ///
+    /// Per FJARR_LEAK Phase 2 (Strategy D / linear-types-lite), `[T]`
+    /// values are affine: each binding is consumed exactly once.
+    /// Triggers always-on (independent of `strict_ownership` flag),
+    /// because Phase 1's arena-still-heap caveat (Compass §4.1) means
+    /// arrays specifically need compile-time use-after-move enforcement.
+    /// For non-array non-Copy types, see ME001 (gated by strict mode).
+    #[error(
+        "SE024: use of moved `[T]` array '{name}' (moved at byte {move_start})",
+        move_start = move_span.start
+    )]
+    UseAfterMoveArray {
+        /// Variable name.
+        name: String,
+        /// Where it was used.
+        span: Span,
+        /// Where it was moved.
+        move_span: Span,
+    },
+
     /// ME009: Lifetime conflict — two lifetimes in the same scope are incompatible.
     #[error("ME009: lifetime '{name}' conflicts with another lifetime in scope")]
     LifetimeConflict {
@@ -1217,7 +1238,8 @@ impl SemanticError {
             | SemanticError::DuplicateEffectDecl { span, .. }
             | SemanticError::MessageTooLarge { span, .. }
             | SemanticError::IpcTypeMismatch { span, .. }
-            | SemanticError::QuantizedNotDequantized { span, .. } => *span,
+            | SemanticError::QuantizedNotDequantized { span, .. }
+            | SemanticError::UseAfterMoveArray { span, .. } => *span,
         }
     }
 
@@ -1242,6 +1264,12 @@ impl SemanticError {
                 name, move_span, ..
             } => Some(format!(
                 "help: `{name}` was moved at byte offset {}. Consider cloning: `let copy = {name}.clone()` before the move, or use a reference instead",
+                move_span.start
+            )),
+            SemanticError::UseAfterMoveArray {
+                name, move_span, ..
+            } => Some(format!(
+                "help: `[T]` array `{name}` was moved at byte offset {}. Per FJARR_LEAK Phase 2 (Strategy D), `[T]` is affine. Insert `{name}.clone()` at the prior consume site to keep `{name}` available, or restructure so each array binding is used exactly once",
                 move_span.start
             )),
             SemanticError::MoveWhileBorrowed {
@@ -1287,6 +1315,9 @@ impl SemanticError {
     pub fn secondary_span(&self) -> Option<(Span, &'static str)> {
         match self {
             SemanticError::UseAfterMove { move_span, .. } => Some((*move_span, "value moved here")),
+            SemanticError::UseAfterMoveArray { move_span, .. } => {
+                Some((*move_span, "array moved here"))
+            }
             SemanticError::MoveWhileBorrowed { borrow_span, .. } => {
                 Some((*borrow_span, "borrow created here"))
             }

@@ -3,7 +3,7 @@ phase: FJARR_LEAK Phase 2 (Strategy D / linear-types-lite) — B0 pre-flight aud
 plan: docs/FJARR_LEAK_PLAN.md §0 + §2 row 18.D.* + §4 R5
 status: B0 CLOSED 2026-05-08 (yellow light → proceed to 18.D.1 with original +30% surprise budget)
 artifacts: this doc
-purpose: empirical baseline before §2 row 18.D.1 (analyzer SE017 + .clone() builtin) — answers "is the cascade-risk in self-host source survivable under naive affine semantics?"
+purpose: empirical baseline before §2 row 18.D.1 (analyzer SE024 + .clone() builtin) — answers "is the cascade-risk in self-host source survivable under naive affine semantics?"
 prereq: v35.1.0 (Phase 1 closed); decision file `docs/decisions/2026-05-07-fjarr-leak-strategy.md` Choice F §Migration-path Phase 2
 ---
 
@@ -88,7 +88,7 @@ C-ABI `_fj_arr_*` calls in codegen.fj are emit-time string literals
 (no semantics layer). Codegen.fj itself is "language-aware code" but
 the `_fj_arr_*` strings it writes are codegen output, not consuming use.
 
-**No need to touch codegen.fj** for Phase 2 analyzer SE017; only
+**No need to touch codegen.fj** for Phase 2 analyzer SE024; only
 codegen.fj preamble gets new `_fj_arr_clone` builtin (B0.5 estimate).
 
 ## B0.4 — Only 2 test harnesses depend on `_FjArr` shape
@@ -234,7 +234,7 @@ merge analysis.
 
 Same pattern conjectured for `lexer.fj tokens` (131 uses) — likely
 chain-grow + handoff. To be confirmed in 18.D.1 implementation when
-the analyzer flags any actual SE017 violations.
+the analyzer flags any actual SE024 violations.
 
 ## B0.12 — No obvious affine-hostile pattern surfaced in lexer
 
@@ -291,9 +291,9 @@ No regression from B0 grep audits (which were read-only). Sanity GREEN.
   (B0.13/B0.14/B0.15) — Strategy D's no-shared-mutation invariant is
   already de facto observed
 
-**Recommendation:** Proceed to 18.D.1 (analyzer SE017 + `_fj_arr_clone`
+**Recommendation:** Proceed to 18.D.1 (analyzer SE024 + `_fj_arr_clone`
 builtin) with the original +30% surprise budget unchanged. Add an
-**early-warning trigger**: if SE017 surfaces >20 affine-violation errors
+**early-warning trigger**: if SE024 surfaces >20 affine-violation errors
 when first applied to self-host source, PAUSE and surface for re-decision
 (may need targeted `&[T]` borrow type, expanding scope beyond plan §5
 14h estimate).
@@ -346,9 +346,9 @@ B0 closed → ready for **user decision** on whether to proceed to 18.D.1.
 
 **Three options:**
 1. ✅ **Proceed to 18.D.1** (default per YELLOW-light recommendation):
-   start analyzer SE017 + `_fj_arr_clone` builtin work. ~6h base / +30%
+   start analyzer SE024 + `_fj_arr_clone` builtin work. ~6h base / +30%
    = ~8h cap. One-way-door per decision file §Reverse-cost. Early-
-   warning: pause if >20 SE017 violations surface.
+   warning: pause if >20 SE024 violations surface.
 2. ⏸️ **Pause Phase 2**: defer to a later session pending more design
    work (e.g. spec out `&[T]` borrow type pre-emptively, or revisit
    Strategy B). Phase 1 (arena) keeps holding the leak class closed.
@@ -366,7 +366,7 @@ B0 closed → ready for **user decision** on whether to proceed to 18.D.1.
 audit complete: technical R5 threshold fires (64 > 50) but qualitative
 pattern analysis surfaces affine-friendly dominance (handoff + chain-
 grow). YELLOW light: proceed to 18.D.1 with original +30% surprise
-budget; add early-warning trigger for >20 SE017 violations during
+budget; add early-warning trigger for >20 SE024 violations during
 analyzer rollout. Phase 1 arena leak unaffected (still 0 bytes).
 fajaros-x86 multi-repo state clean (0 `_FjArr` deps). Awaiting user
 decision per §4 before 18.D.1 commits.*
