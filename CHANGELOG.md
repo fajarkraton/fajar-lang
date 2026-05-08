@@ -2,6 +2,83 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.2.1] — 2026-05-08 🐛 TQ12.2 SQLite — analyzer name-table fix for `db_close` / `db_begin` / `db_commit` / `db_rollback` — patch
+
+Bugfix: `.fj` source calling SQLite transaction primitives (`db_close`,
+`db_begin`, `db_commit`, `db_rollback`) was rejected by the analyzer
+with `SE001: undefined variable 'db_close' — did you mean 'ws_close'?`
+even though the interpreter dispatch + 19 lib tests in
+`src/stdlib_v3/database.rs` were fully wired and passing.
+
+### Root cause
+
+`src/analyzer/type_check/register.rs` had only 3 of 7 db builtins
+registered (`db_open`, `db_execute`, `db_query`). The other 4
+(`db_close`, `db_begin`, `db_commit`, `db_rollback`) were dispatched
+in `src/interpreter/eval/builtins.rs:3444-3464` and named in
+`src/interpreter/eval/mod.rs:1810-1816`, but missing from the
+analyzer's name+sig table. User code using transactions or properly
+closing connections hit SE001.
+
+### How it slipped through
+
+The 19 existing tests in `src/stdlib_v3/database.rs` exercise the
+Rust API directly (`DbManager::open` / `execute` / `query` / `close`
+/ `begin` / `commit` / `rollback`), bypassing the analyzer entirely.
+`builtin_db_*` tests simulate the builtin call path via interpreter
+internals (`Value::BuiltinFn`) without going through `analyzer::analyze`.
+No `.fj` example or integration test exercised the full
+`parse → analyze → eval` path for the missing 4 builtins. Discovery
+came from a B0 audit during a planned TQ12.2 closure session
+(`docs/TQ12_2_SQLITE_B0_FINDINGS.md`, 2026-05-08).
+
+### Fix
+
+- **`src/analyzer/type_check/register.rs`** (after L277): add 4
+  entries mirroring existing `tcp_close` pattern:
+  ```rust
+  ("db_close", vec![Type::I64], Type::Void),
+  ("db_begin", vec![Type::I64], Type::Void),
+  ("db_commit", vec![Type::I64], Type::Void),
+  ("db_rollback", vec![Type::I64], Type::Void),
+  ```
+- **`tests/stdlib_v3_database_integration.rs`** (NEW, 3 tests):
+  full-pipeline coverage that the existing lib-test approach missed:
+  - `db_open_execute_query_close_full_pipeline` (covers the smoke
+    pattern that B0 §2 verified broke pre-fix)
+  - `db_transaction_commit_full_pipeline` (`db_begin` + `db_commit`)
+  - `db_transaction_rollback_full_pipeline` (`db_begin` + `db_rollback`)
+
+### Verification
+
+```bash
+cargo test --test stdlib_v3_database_integration  # 3/3 PASS
+cargo test --lib stdlib_v3                        # 209 PASS (no regression)
+cargo run -- run /tmp/db_smoke.fj                 # → "1" (row count, no SE001)
+```
+
+### Risks (per CLAUDE.md §6.8)
+
+NONE for any self-host gate:
+- No `stdlib/*.fj` source touched → Stage 2 byte-equality unaffected
+- No codegen touched → phase17 + stage1_full unaffected (re-verified
+  GREEN locally before push)
+- 4 register.rs additions follow existing pattern → low blast radius
+
+### Memory hygiene
+
+`memory/pending_tq12_2_sqlite.md` was 6 weeks stale (claimed file
+hadn't been created; reality: 18,492 bytes with 19 passing tests
+landed 2026-05-02..03). Memory updated to "CLOSED 2026-05-08" with
+final-state inventory + smoke evidence + source-of-truth pointer.
+
+### Source of truth
+
+- `docs/TQ12_2_SQLITE_B0_FINDINGS.md` — B0 audit + closure rationale
+- `src/stdlib_v3/database.rs` — DbManager + 7 fns + 19 lib tests
+- `tests/stdlib_v3_database_integration.rs` — 3 full-pipeline tests
+- `src/analyzer/type_check/register.rs` L275-285 — all 7 builtins now registered
+
 ## [v35.2.0] — 2026-05-08 🎯 FJARR_LEAK Phase 2 — `[T]` affine semantics via opt-in `--strict-ownership` (D-LITE) — minor bump
 
 `[T]` array use-after-move detection ships as opt-in via the existing
