@@ -2,6 +2,65 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.2.2] — 2026-05-08 🧹 stdlib cleanup: 109 redundant `to_int(len(...))` wrappers removed — patch
+
+Internal cleanup. `len()` already returned `i64` at all 9 interpreter
+sites (`src/interpreter/eval/builtins.rs:62-65` + `methods.rs`
+L209/465/469/779/904/1879); the `to_int(len(...))` wrappers in stdlib
+were no-ops left over from an older era when `len()` returned `usize`.
+Discovery via B0 audit: `docs/LEN_RETURNS_I64_B0_FINDINGS.md`.
+
+### What changed
+
+109 sites in `stdlib/*.fj` simplified from `to_int(len(X))` →
+`len(X)`. Distribution:
+
+| File | Sites |
+|---|---|
+| `stdlib/codegen_driver.fj` | 51 (47%) |
+| `stdlib/parser_ast.fj` | 30 (28%) |
+| `stdlib/analyzer.fj` | 6 |
+| `stdlib/codegen.fj` | 6 |
+| `stdlib/parser.fj` | 5 |
+| `stdlib/lexer.fj` | 4 |
+| `stdlib/ast.fj` | 4 |
+| `stdlib/compiler.fj` | 3 (incl. 1 nested-paren site handled manually before sed) |
+
+### User-visible impact
+
+None for default-mode compilation — emitted C output is functionally
+identical (the `_fj_to_int(...)` wrapper around `_fj_arr_len(...)`
+was a no-op cast). Self-host source is now ~10% less verbose in the
+hot files.
+
+### Stage 2 byte-equality story
+
+- Pre-cleanup: emitted C had `_fj_to_int(_fj_arr_len(x))` wrappers
+- Post-cleanup: emitted C has `_fj_arr_len(x)` directly
+- **Both stages emit the SAME post-cleanup C** → `stage1==stage2`
+  invariant holds (verified by `phase17_stage2_native_triple_test`
+  4/4 PASS @ 100.77s)
+- The md5 from prior phase17 runs WILL differ from current (this is
+  expected; the test asserts `stage1==stage2`, not a hardcoded md5)
+
+### Verification
+
+```bash
+cargo test --release --test selfhost_stage1_full     # 86/86 PASS
+cargo test --lib                                      # 7,629 PASS
+cargo test --release --test selfhost_phase17_self_compile  # 4/4 PASS @ ~101s
+```
+
+### Memory hygiene
+
+`memory/pending_language_fixes.md` §2 was 43 days stale (claimed
+`len()` returns usize). Updated to "CLOSED 2026-05-08" with empirical
+evidence + source-of-truth pointer.
+
+### Source of truth
+
+- `docs/LEN_RETURNS_I64_B0_FINDINGS.md` — B0 audit + cleanup plan + risk register
+
 ## [v35.2.1] — 2026-05-08 🐛 TQ12.2 SQLite — analyzer name-table fix for `db_close` / `db_begin` / `db_commit` / `db_rollback` — patch
 
 Bugfix: `.fj` source calling SQLite transaction primitives (`db_close`,
