@@ -121,7 +121,8 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.3.0** "FULL CRYPTO" | 2026-05-09 | 🎯 All 31 `crypto.rs` fns reachable from `.fj` (4 batches; +24 over v35.2.3). 19 integ tests. Stage 2 unchanged. → V35_3_0_FULL_CRYPTO_FINDINGS. |
+| **v35.3.1** patch | 2026-05-09 | 🚨 X25519 correctness fix — v35.3.0 `x25519_generate` was Ed25519-proxy (NOT real X25519). v35.3.1 rewrites via x25519-dalek + adds `x25519_dh`. **BREAKING for v35.3.0 keys.** → V35_3_1_X25519_DH_B0_FINDINGS. |
+| **v35.3.0** "FULL CRYPTO" | 2026-05-09 | 🎯 All 31 `crypto.rs` fns reachable from `.fj` (4 batches; +24 over v35.2.3). 19 integ tests. → V35_3_0_FULL_CRYPTO_FINDINGS. |
 | **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins (CQ1.4 + ed25519 + sha256). → CQ1_4_RSA_B0_FINDINGS. |
 | **v35.2.2** patch | 2026-05-08 | 🧹 stdlib cleanup: 109 redundant `to_int(len(...))` wrappers removed. Stage 2 byte-equality preserved. → LEN_RETURNS_I64_B0_FINDINGS. |
 | **v35.2.1** patch | 2026-05-08 | 🐛 TQ12.2 SQLite: register `db_close`/`db_begin`/`db_commit`/`db_rollback` in analyzer (were SE001-rejected). → TQ12_2_SQLITE_B0_FINDINGS. |
