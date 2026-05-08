@@ -311,6 +311,18 @@ impl TypeChecker {
                 Type::Bool,
             ),
             ("sha256", vec![Type::Str], Type::Str),
+            // v35.3.0 Batch 1 (2026-05-09): trivial wrappers per
+            // docs/V35_3_0_FULL_CRYPTO_B0_FINDINGS.md §2.
+            ("sha384", vec![Type::Str], Type::Str),
+            ("sha512", vec![Type::Str], Type::Str),
+            ("hex_encode_str", vec![Type::Str], Type::Str),
+            ("hex_decode_str", vec![Type::Str], Type::Str),
+            ("base64_encode_str", vec![Type::Str], Type::Str),
+            ("base64_decode_str", vec![Type::Str], Type::Str),
+            ("constant_time_eq", vec![Type::Str, Type::Str], Type::Bool),
+            ("random_u64_range", vec![Type::I64, Type::I64], Type::I64),
+            ("argon2_hash", vec![Type::Str], Type::Str),
+            ("argon2_verify", vec![Type::Str, Type::Str], Type::Bool),
             ("x86_serial_init", vec![Type::I64, Type::I64], Type::I64),
             ("set_uart_mode_x86", vec![Type::I64], Type::Void),
             // x86_64 CPUID + SSE builtins

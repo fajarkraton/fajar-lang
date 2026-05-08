@@ -91,3 +91,114 @@ fn main() {
 "#)
     .expect("rsa full-pipeline round-trip should evaluate cleanly");
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// v35.3.0 Batch 1 — trivial crypto wrappers (sha384/512 + encoding +
+// constant_time_eq + random_u64_range + argon2)
+// ════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn v35_3_0_b1_sha384_known_vector() {
+    // SHA-384("") = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b
+    run(r#"
+fn main() {
+    let empty = sha384("")
+    if empty != "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b" {
+        println("SHA384 EMPTY MISMATCH")
+    }
+    println("sha384: OK")
+}
+"#)
+    .expect("sha384 known-vector test");
+}
+
+#[test]
+fn v35_3_0_b1_sha512_known_vector() {
+    // SHA-512("") = cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+    run(r#"
+fn main() {
+    let empty = sha512("")
+    if empty != "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e" {
+        println("SHA512 EMPTY MISMATCH")
+    }
+    println("sha512: OK")
+}
+"#)
+    .expect("sha512 known-vector test");
+}
+
+#[test]
+fn v35_3_0_b1_hex_encode_decode_roundtrip() {
+    run(r#"
+fn main() {
+    let enc = hex_encode_str("Hello")
+    if enc != "48656c6c6f" { println("HEX ENCODE MISMATCH") }
+    let dec = hex_decode_str(enc)
+    if dec != "Hello" { println("HEX DECODE MISMATCH") }
+    let invalid = hex_decode_str("not-hex")
+    if invalid != "" { println("HEX DECODE: invalid input should produce empty str") }
+    println("hex: OK")
+}
+"#)
+    .expect("hex encode/decode round-trip");
+}
+
+#[test]
+fn v35_3_0_b1_base64_encode_decode_roundtrip() {
+    run(r#"
+fn main() {
+    let enc = base64_encode_str("Hello")
+    if enc != "SGVsbG8=" { println("BASE64 ENCODE MISMATCH") }
+    let dec = base64_decode_str(enc)
+    if dec != "Hello" { println("BASE64 DECODE MISMATCH") }
+    println("base64: OK")
+}
+"#)
+    .expect("base64 encode/decode round-trip");
+}
+
+#[test]
+fn v35_3_0_b1_constant_time_eq_basic() {
+    run(r#"
+fn main() {
+    let eq = constant_time_eq("48656c6c6f", "48656c6c6f")
+    if !eq { println("CT_EQ: same hex should be equal") }
+    let neq = constant_time_eq("48656c6c6f", "deadbeef00")
+    if neq { println("CT_EQ: different hex should be NEQ") }
+    let invalid = constant_time_eq("not-hex", "48656c6c6f")
+    if invalid { println("CT_EQ: invalid hex should return false") }
+    println("ct_eq: OK")
+}
+"#)
+    .expect("constant_time_eq basic");
+}
+
+#[test]
+fn v35_3_0_b1_random_u64_range_in_bounds() {
+    run(r#"
+fn main() {
+    let r = random_u64_range(10, 100)
+    if r < 10 || r >= 100 {
+        println("RNG OUT OF BOUNDS")
+    }
+    println("rng: OK")
+}
+"#)
+    .expect("random_u64_range bounds");
+}
+
+#[test]
+fn v35_3_0_b1_argon2_hash_verify_roundtrip() {
+    // argon2_hash with default params is intentionally slow (~10-100ms)
+    run(r#"
+fn main() {
+    let h = argon2_hash("correct horse battery staple")
+    let v = argon2_verify("correct horse battery staple", h)
+    if !v { println("ARGON2 VERIFY FAILED for matching password") }
+    let bad = argon2_verify("wrong password", h)
+    if bad { println("ARGON2 VERIFY ACCEPTED wrong password") }
+    println("argon2: OK")
+}
+"#)
+    .expect("argon2 round-trip");
+}

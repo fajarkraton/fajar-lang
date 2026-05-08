@@ -1822,6 +1822,17 @@ impl Interpreter {
             "ed25519_sign",
             "ed25519_verify",
             "sha256",
+            // v35.3.0 Batch 1 (2026-05-09): trivial crypto wrappers
+            "sha384",
+            "sha512",
+            "hex_encode_str",
+            "hex_decode_str",
+            "base64_encode_str",
+            "base64_decode_str",
+            "constant_time_eq",
+            "random_u64_range",
+            "argon2_hash",
+            "argon2_verify",
             // WebSocket builtins
             "ws_connect",
             "ws_send",

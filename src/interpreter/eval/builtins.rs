@@ -3485,6 +3485,37 @@ impl Interpreter {
                 if name == "sha256" {
                     return self.builtin_sha256(args);
                 }
+                // v35.3.0 Batch 1 (2026-05-09): trivial crypto wrappers.
+                if name == "sha384" {
+                    return self.builtin_sha384(args);
+                }
+                if name == "sha512" {
+                    return self.builtin_sha512(args);
+                }
+                if name == "hex_encode_str" {
+                    return self.builtin_hex_encode_str(args);
+                }
+                if name == "hex_decode_str" {
+                    return self.builtin_hex_decode_str(args);
+                }
+                if name == "base64_encode_str" {
+                    return self.builtin_base64_encode_str(args);
+                }
+                if name == "base64_decode_str" {
+                    return self.builtin_base64_decode_str(args);
+                }
+                if name == "constant_time_eq" {
+                    return self.builtin_constant_time_eq(args);
+                }
+                if name == "random_u64_range" {
+                    return self.builtin_random_u64_range(args);
+                }
+                if name == "argon2_hash" {
+                    return self.builtin_argon2_hash(args);
+                }
+                if name == "argon2_verify" {
+                    return self.builtin_argon2_verify(args);
+                }
 
                 // WebSocket builtins
                 if name == "ws_connect" {
@@ -4407,6 +4438,279 @@ impl Interpreter {
         let digest = crate::stdlib_v3::crypto::sha256(data.as_bytes());
         Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(
             &digest.bytes,
+        )))
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // v35.3.0 Batch 1 (2026-05-09): trivial crypto wrappers
+    // ════════════════════════════════════════════════════════════════════
+
+    /// `sha384(data: str) -> str` (hex digest, 96 chars).
+    fn builtin_sha384(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let data = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => return Err(RuntimeError::TypeError("sha384: data must be str".into()).into()),
+        };
+        let digest = crate::stdlib_v3::crypto::sha384(data.as_bytes());
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(
+            &digest.bytes,
+        )))
+    }
+
+    /// `sha512(data: str) -> str` (hex digest, 128 chars).
+    fn builtin_sha512(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let data = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => return Err(RuntimeError::TypeError("sha512: data must be str".into()).into()),
+        };
+        let digest = crate::stdlib_v3::crypto::sha512(data.as_bytes());
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(
+            &digest.bytes,
+        )))
+    }
+
+    /// `hex_encode_str(data: str) -> str` — UTF-8 bytes of `data` → hex.
+    fn builtin_hex_encode_str(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let data = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hex_encode_str: data must be str".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Str(crate::stdlib_v3::crypto::hex_encode(
+            data.as_bytes(),
+        )))
+    }
+
+    /// `hex_decode_str(hex: str) -> str` — hex → UTF-8 string. Returns
+    /// empty string on invalid hex (per Batch 1 design pattern).
+    fn builtin_hex_decode_str(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let hex_str = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("hex_decode_str: hex must be str".into()).into(),
+                );
+            }
+        };
+        let bytes = match crate::stdlib_v3::crypto::hex_decode(&hex_str) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Str(String::new())),
+        };
+        let s = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => return Ok(Value::Str(String::new())),
+        };
+        Ok(Value::Str(s))
+    }
+
+    /// `base64_encode_str(data: str) -> str` — UTF-8 bytes → base64.
+    fn builtin_base64_encode_str(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let data = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("base64_encode_str: data must be str".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Str(crate::stdlib_v3::crypto::base64_encode(
+            data.as_bytes(),
+        )))
+    }
+
+    /// `base64_decode_str(encoded: str) -> str` — base64 → UTF-8 string.
+    /// Returns empty string on decode/UTF-8 failure.
+    fn builtin_base64_decode_str(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let encoded = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(RuntimeError::TypeError(
+                    "base64_decode_str: encoded must be str".into(),
+                )
+                .into());
+            }
+        };
+        let bytes = match crate::stdlib_v3::crypto::base64_decode(&encoded) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Str(String::new())),
+        };
+        let s = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => return Ok(Value::Str(String::new())),
+        };
+        Ok(Value::Str(s))
+    }
+
+    /// `constant_time_eq(a_hex: str, b_hex: str) -> bool` — constant-time
+    /// hex byte comparison. Returns false on any decode error.
+    fn builtin_constant_time_eq(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let a_hex = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("constant_time_eq: a_hex must be str".into()).into(),
+                );
+            }
+        };
+        let b_hex = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("constant_time_eq: b_hex must be str".into()).into(),
+                );
+            }
+        };
+        let a = match crate::stdlib_v3::crypto::hex_decode(&a_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        let b = match crate::stdlib_v3::crypto::hex_decode(&b_hex) {
+            Ok(b) => b,
+            Err(_) => return Ok(Value::Bool(false)),
+        };
+        Ok(Value::Bool(crate::stdlib_v3::crypto::constant_time_eq(
+            &a, &b,
+        )))
+    }
+
+    /// `random_u64_range(min: i64, max: i64) -> i64` — OS RNG bounded.
+    fn builtin_random_u64_range(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let min = match &args[0] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("random_u64_range: min must be i64".into()).into(),
+                );
+            }
+        };
+        let max = match &args[1] {
+            Value::Int(n) => *n,
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("random_u64_range: max must be i64".into()).into(),
+                );
+            }
+        };
+        if min < 0 || max < 0 || min >= max {
+            return Err(RuntimeError::TypeError(format!(
+                "random_u64_range: invalid range [{min}, {max}); require 0 <= min < max"
+            ))
+            .into());
+        }
+        let result = crate::stdlib_v3::crypto::random_u64_range(min as u64, max as u64) as i64;
+        Ok(Value::Int(result))
+    }
+
+    /// `argon2_hash(password: str) -> str` — argon2id hash w/ default
+    /// params. Returns hash string suitable for storage + verification.
+    fn builtin_argon2_hash(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 1 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 1,
+                got: args.len(),
+            }
+            .into());
+        }
+        let password = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("argon2_hash: password must be str".into()).into(),
+                );
+            }
+        };
+        crate::stdlib_v3::crypto::argon2_hash(password.as_bytes())
+            .map(Value::Str)
+            .map_err(|e| RuntimeError::TypeError(format!("argon2_hash: {e}")).into())
+    }
+
+    /// `argon2_verify(password: str, hash_str: str) -> bool`.
+    fn builtin_argon2_verify(&mut self, args: Vec<Value>) -> EvalResult {
+        if args.len() != 2 {
+            return Err(RuntimeError::ArityMismatch {
+                expected: 2,
+                got: args.len(),
+            }
+            .into());
+        }
+        let password = match &args[0] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("argon2_verify: password must be str".into()).into(),
+                );
+            }
+        };
+        let hash_str = match &args[1] {
+            Value::Str(s) => s.to_string(),
+            _ => {
+                return Err(
+                    RuntimeError::TypeError("argon2_verify: hash_str must be str".into()).into(),
+                );
+            }
+        };
+        Ok(Value::Bool(crate::stdlib_v3::crypto::argon2_verify(
+            password.as_bytes(),
+            &hash_str,
         )))
     }
 
