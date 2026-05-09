@@ -257,10 +257,12 @@ fn main() {
     let required = [
         "pr_ok",
         "pr_err",
-        "is_digit_ast",
-        "is_alpha_ast",
-        "is_alnum_ast",
-        "is_ws_ast",
+        // v35.4.1 Phase B: renamed from is_*_ast (str-arg) to is_*_byte (i64-arg)
+        // — eliminates per-byte substring allocation in tokenize hot path.
+        "is_digit_byte",
+        "is_alpha_byte",
+        "is_alnum_byte",
+        "is_ws_byte",
         "skip_ws",
         "read_word",
         "read_int",
