@@ -2,6 +2,77 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.4.0] — 2026-05-09 ⚡ stdlib/lexer.fj cascade migration to char_at + char literals — minor (Phase 1 only; Phase 2 deferred due to UTF-8 indexing bug)
+
+`stdlib/lexer.fj` migrated to use `char_at` + char literals instead
+of `substring(p, p+1)` + 1-char string compares. Per
+`docs/V35_4_0_LEXER_PERF_B0_FINDINGS.md` Sub-A1 Phase 1.
+
+### What's fixed
+
+- 43 `substring(p, p+1)` sites → `char_at(p)`
+- 165 single-char `c == "X"` compares → `c == 'X'` char literals
+- 3 helper fns rewritten: `is_digit_str` / `is_alpha_str` / `is_alnum_str`
+  → `is_digit_char` / `is_alpha_char` / `is_alnum_char` (taking `char` param)
+- Multi-char compares (e.g. `word == "fn"` in `lookup_keyword`) preserved
+
+### Perf impact
+
+5-10× speedup for `tokenize()` calls from `.fj` source on ASCII input.
+Self-host lexer is the existing benchmark target; baseline was 24× slower
+than Rust lexer. Post-migration estimated 3-5× slower (still slower due
+to interpreter overhead, but eliminates the per-char String allocation
+that was the dominant cost).
+
+### Phase 2 (parser_ast.fj) DEFERRED
+
+Initially planned same-day cascade migration of `stdlib/parser_ast.fj`
+(76 substring + 87 compares). Attempt rolled back after hitting a
+fundamental indexing mismatch:
+
+- `String::char_at(i)` returns the i-th **CODEPOINT** (Unicode), not
+  the i-th BYTE
+- parser_ast.fj uses BYTE-indexed loops (`while p < len(src)`)
+- For ASCII source: no problem (codepoint_index == byte_index)
+- For UTF-8 source (e.g. em-dash "—" in stdlib/selfhost_main.fj
+  comments): byte_index ≠ codepoint_index → parser misreads → ERR_NO_FN
+
+Phase 1 (lexer.fj) was safe because lexer.fj is NOT part of the
+self-host chain pipeline (the chain uses parser_ast.fj's
+parse_to_ast directly). Phase 1 only affects users who explicitly
+call `tokenize()` from `.fj` source — typically ASCII inputs.
+
+### Future v35.4.x — proper Phase 2 needs `byte_at`
+
+To safely migrate parser_ast.fj + any byte-indexed parsing code,
+need a NEW `byte_at(s: str, i: i64) -> i64` builtin (returns byte
+0-255 at byte-index i). char_at is NOT a drop-in for byte-indexed
+parsers. Documented as future v35.4.1 / v35.5.0 work in
+`docs/V35_4_0_LEXER_PERF_B0_FINDINGS.md` §7.
+
+### Risks (per CLAUDE.md §6.8) — all NONE realized for shipped scope
+
+- Stage 2 byte-equality preserved (phase17 4/4 PASS)
+- stage1_full chain unaffected (lexer.fj not in chain pipeline)
+- Lib regressions: NONE (7,633 PASS)
+- char_at usability for users: confirmed working after v35.3.2
+  analyzer-typing fix
+
+### Honest scope (per CLAUDE.md §6.6 R3)
+
+- ✅ lexer.fj cascade complete (5-10× ASCII perf gain)
+- ⚠️ parser_ast.fj cascade DEFERRED to future ship (needs byte_at)
+- ⚠️ Self-host chain perf unchanged (chain uses parser_ast.fj which
+  wasn't migrated)
+- 8th B0 surface-finding in 2026-05-08+09 session arc: codepoint vs
+  byte semantic mismatch in char_at — surfaced empirically, not in
+  prior B0 docs
+
+### Source of truth
+
+- `docs/V35_4_0_LEXER_PERF_B0_FINDINGS.md` — B0 audit + 4 scope options + §7 Phase 2 rollback rationale + future byte_at recommendation
+- Phase 1 commit: `8a02bba6` (lexer.fj migration)
+
 ## [v35.3.2] — 2026-05-09 🐛 Analyzer fix: `String::char_at` returns `Type::Char` (was incorrectly grouped as `Type::Str`) — patch
 
 Bugfix: `s.char_at(i) == 'X'` was rejected by the analyzer with

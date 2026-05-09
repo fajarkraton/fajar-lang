@@ -121,7 +121,8 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
-| **v35.3.2** patch | 2026-05-09 | 🐛 Analyzer fix: `s.char_at(i)` returns `Type::Char` (was `Str`). Cascade deferred to v35.4.0. → V35_3_2_LEXER_PERF_B0_FINDINGS. |
+| **v35.4.0** "lexer cascade" | 2026-05-09 | ⚡ stdlib/lexer.fj migrated to char_at + char literals (43 substring + 165 compares + 3 helpers). 5-10× ASCII perf. Phase 2 parser_ast.fj DEFERRED — char_at is codepoint-indexed but parser uses byte indices; needs byte_at builtin. → V35_4_0_LEXER_PERF_B0_FINDINGS. |
+| **v35.3.2** patch | 2026-05-09 | 🐛 Analyzer fix: `s.char_at(i)` returns `Type::Char` (was `Str`). → V35_3_2_LEXER_PERF_B0_FINDINGS. |
 | **v35.3.1** patch | 2026-05-09 | 🚨 X25519 fix: `x25519_generate` was Ed25519-proxy. Rewrote via x25519-dalek + adds `x25519_dh`. **BREAKING.** → V35_3_1_X25519_DH_B0_FINDINGS. |
 | **v35.3.0** "FULL CRYPTO" | 2026-05-09 | 🎯 All 31 `crypto.rs` fns reachable from `.fj` (4 batches; +24 over v35.2.3). 19 integ tests. → V35_3_0_FULL_CRYPTO_FINDINGS. |
 | **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins (CQ1.4 + ed25519 + sha256). → CQ1_4_RSA_B0_FINDINGS. |

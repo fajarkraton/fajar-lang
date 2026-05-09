@@ -132,6 +132,76 @@ After v35.4.0 ship (whichever sub-option):
 - verified-actionable open list reduces to: TQ12.3 op + TQ12.6 hw +
   D-FULL deferred + @kernel deferred
 
+## §7 — 2026-05-09 update: Phase 2 rolled back due to UTF-8 indexing mismatch
+
+**Phase 1 (lexer.fj) shipped clean** (commit `8a02bba6`); Phase 2
+(parser_ast.fj) cascade was attempted then ROLLED BACK after hitting
+a fundamental indexing mismatch.
+
+### Root cause
+
+`String::char_at(i)` in the interpreter returns the i-th **CODEPOINT**
+(Unicode char), not the i-th BYTE:
+```rust
+match s.chars().nth(idx) {
+    Some(c) => Ok(Value::Char(c)),
+    ...
+}
+```
+
+But parser_ast.fj uses byte-indexed loops:
+```fj
+let n = len(src)            // byte length
+let mut p = 0                // byte position
+while p < n {
+    let c = src.char_at(p)   // ← codepoint index, NOT byte index
+    p = p + 1
+    ...
+}
+```
+
+For ASCII-only source: codepoint_index == byte_index (no problem).
+For UTF-8 source (e.g. selfhost_main.fj contains em-dash "—" =
+3 bytes / 1 codepoint): codepoint_index ≠ byte_index → parser
+silently misreads characters → ERR_NO_FN.
+
+### Why Phase 1 was safe
+
+`stdlib/lexer.fj` is NOT part of the self-host chain pipeline (the
+chain uses `parser_ast.fj`'s `parse_to_ast` directly). Phase 1's
+char_at migration only affects users who explicitly call `tokenize()`
+from `.fj` source — and those users typically pass ASCII source
+where the bug doesn't manifest.
+
+### Rollback decision
+
+Phase 2 parser_ast.fj cascade rolled back in same session. Phase 1
+lexer.fj retained for v35.4.0 ship (5-10× perf gain for the lexer
+that user code can call directly).
+
+### Future v35.4.x / v35.5.0 — proper fix requires `byte_at`
+
+To safely migrate parser_ast.fj (and any byte-indexed parser),
+need a NEW builtin `byte_at(s: str, i: i64) -> i64` that returns
+the byte at byte-index i (range 0-255 or -1 for out-of-range).
+This was Option B from the earlier B0 — now retroactively
+recommended as the correct migration target for any byte-indexed
+parsing code.
+
+The v35.4.0 ship target reduces to: just lexer.fj migration (Phase 1
+already committed). Phase 2 parser_ast.fj migration requires
+byte_at + a careful audit to identify all byte-indexed loops.
+
+### Lesson for future B0 audits
+
+Always verify char_at semantics (codepoint vs byte) before assuming
+drop-in replacement of substring(p, p+1) → char_at(p). For
+byte-indexed parsing code, char_at is NOT a drop-in — it's
+semantically different. byte_at is the correct primitive.
+
+This is the **8th surface-finding via B0 audit pattern** in the
+2026-05-08+09 session arc.
+
 ---
 
 *V35_4_0_LEXER_PERF_B0_FINDINGS — written 2026-05-09. Surfaces
