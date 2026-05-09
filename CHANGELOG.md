@@ -2,6 +2,79 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.4.1] — 2026-05-09 ⚡ stdlib/parser_ast.fj cascade — closes v35.4.0 Phase 2 deferral — minor
+
+Wires `str_byte_at` into the self-host chain codegen (Phase A) and migrates
+`stdlib/parser_ast.fj`'s 94 substring + 110 compares to use byte_at + ASCII
+numeric compares (Phase B). Closes `pending_language_fixes.md §4` fully.
+
+### B0 surface-finding #9: byte_at builtin already existed
+
+The v35.4.0 deferral memo claimed a NEW `byte_at` builtin was needed.
+B0 audit (`docs/V35_4_1_BYTE_AT_B0_FINDINGS.md`) revealed:
+
+- `str_byte_at(s, i: i64) -> i64` already implemented in interpreter
+  (`src/interpreter/eval/builtins.rs:2869`), analyzer
+  (`src/analyzer/type_check/register.rs:422`), and LLVM codegen
+  (`src/codegen/llvm/mod.rs:838,2149,7729` + runtime `fj_rt_bare_str_byte_at`).
+- `len(s)` returns BYTE length (em-dash "—" → 3), so byte-indexed
+  loops in parser_ast.fj are already correct primitives.
+- The ONLY gap was self-host chain codegen (`stdlib/codegen.fj`)
+  didn't know how to emit `str_byte_at` calls.
+
+### Phase A — chain codegen wiring (commit `dc7956af`)
+
+- `stdlib/codegen.fj`: add `_fj_str_byte_at(const char* s, int64_t i)`
+  C helper to runtime preamble. Returns byte 0..255 at byte-index i,
+  or 0 if out of range. Mirrors prod LLVM `fj_rt_bare_str_byte_at`.
+- `stdlib/codegen_driver.fj`: add `str_byte_at` → `_fj_str_byte_at`
+  fj→C name mapping in BEGIN_CALL handler.
+
+### Phase B — parser_ast.fj cascade (commit `40abc1f2`)
+
+- 4 helper fns renamed: `is_{digit,alpha,alnum,ws}_ast(c: str)` →
+  `is_{digit,alpha,alnum,ws}_byte(b: i64)` + numeric ASCII range compares.
+- 94 `substring(p, p+1)` sites → `str_byte_at(s, p)`.
+- 110 single-char compares migrated: `c == "X"` → `c == ASCII_VALUE`.
+- 4 surgical reverts where byte/str semantics required keeping str:
+  - `expect_char` body keeps substring (`ch` is str param).
+  - `try_binop` keeps substring (returned as str element of `[str]`).
+  - `op_prec` compares restored to str (op param is multi-char str).
+  - `BEGIN_UNARY` operator pushed as str literal not byte.
+
+### Bugs surfaced + fixed during migration
+
+Each via SE004 from analyzer running on bundled chain — surfaced
+classic mechanical-migration over-conversion patterns:
+
+1. Range compare on byte: `first >= "A" && first <= "Z"` → numeric.
+2. Multi-char STR var compares accidentally migrated to numeric.
+3. byte (i64) pushed to AST `[str]` array → lookup-table fix.
+4. STR var compared to NUM by accident — reverted.
+
+### Gates
+
+- `phase17_stage2_native_triple_test` 4/4 PASS @ 53.97s — Stage 2
+  byte-equality preserved (chain self-compiles itself byte-identical;
+  both stages process the migrated parser_ast.fj identically).
+- `selfhost_stage1_full` 86/86 PASS @ 1.18s.
+- clippy + fmt clean.
+
+### Perf
+
+10-20× speedup expected for the chain-bootstrap parser hot path
+(allocation-free per-byte vs prior 1-char String allocation per byte).
+On top of v35.4.0 Phase 1 lexer migration (5-10×), the chain compile
+loop now has both lex AND parse on byte-indexed primitives.
+
+### Lesson — 9th surface-finding via B0 audit
+
+When a builtin is needed for stdlib code, check THREE places: analyzer,
+interpreter, AND chain-codegen (`stdlib/codegen.fj`). Production LLVM
+coverage is necessary but not sufficient. The "future v35.4.x needs
+NEW byte_at builtin" assumption from yesterday was wrong on the
+builtin part (it existed) but right on the spirit (chain wiring missing).
+
 ## [v35.4.0] — 2026-05-09 ⚡ stdlib/lexer.fj cascade migration to char_at + char literals — minor (Phase 1 only; Phase 2 deferred due to UTF-8 indexing bug)
 
 `stdlib/lexer.fj` migrated to use `char_at` + char literals instead

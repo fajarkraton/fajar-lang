@@ -110,6 +110,7 @@ Tags:      v32.1.0 → v33.{0,1,2}.0 → v33.4.0..v33.8.0 → v34.{0..5.13} → 
            v35.0.0: 🎯 Stage 2 self-host triple-test (fjc 140KB ELF, ~57× speedup)
            v35.1.0: 🎯 FJARR_LEAK Phase 1 (88 bytes/array → 0; arena copy-grow)
            v35.2.0: 🎯 FJARR_LEAK Phase 2 D-LITE (SE024 opt-in `--strict-ownership`)
+           v35.4.1: ⚡ parser_ast.fj byte_at cascade (10-20× chain-bootstrap parse perf)
 
 Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_FINDINGS.md + docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md + docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md
@@ -121,19 +122,12 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
+| **v35.4.1** "parser_ast cascade" | 2026-05-09 | ⚡ Closes v35.4.0 Phase 2 deferral. B0 #9: str_byte_at already existed in interpreter+analyzer+LLVM; only chain codegen wiring missing. Phase A wires _fj_str_byte_at into stdlib/codegen.fj; Phase B migrates 94 substring + 110 ASCII compares + 4 helpers in parser_ast.fj. 10-20× chain-bootstrap parse perf. → V35_4_1_BYTE_AT_B0_FINDINGS. |
 | **v35.4.0** "lexer cascade" | 2026-05-09 | ⚡ stdlib/lexer.fj → char_at + char literals (43 substring + 165 compares + 3 helpers; 5-10× ASCII perf). Phase 2 parser_ast.fj DEFERRED (char_at is codepoint-idx; parser uses byte-idx; needs byte_at). → V35_4_0_LEXER_PERF_B0_FINDINGS. |
-| **v35.3.2** patch | 2026-05-09 | 🐛 Analyzer fix: `s.char_at(i)` returns `Type::Char` (was `Str`). → V35_3_2_LEXER_PERF_B0_FINDINGS. |
-| **v35.3.0..v35.3.2** | 2026-05-09 | FULL CRYPTO + X25519 fix + char_at analyzer fix. → V35_3_*_FINDINGS. |
-| **v35.2.3** patch | 2026-05-09 | 🔐 7 crypto signing builtins (CQ1.4 + ed25519 + sha256). → CQ1_4_RSA_B0_FINDINGS. |
-| **v35.2.0..v35.2.2** | 2026-05-08 | FJARR_LEAK Phase 2 D-LITE + TQ12.2 SQLite analyzer fix + stdlib `to_int(len(...))` cleanup. → respective B0_FINDINGS docs. |
-| **v35.2.0** "FJARR_LEAK Phase 2 D-LITE" | 2026-05-08 | `[T]` affine via opt-in `--strict-ownership` + SE024 shim. 4 standalone correctness ships (E3/E5/E4/E1.5). Pivoted from 14h Strategy D cascade to ~7h D-LITE. Tests 102→120. → FJARR_LEAK_PHASE_2_FINDINGS. |
-| **v35.1.0** "FJARR_LEAK Phase 1" | 2026-05-08 | `_FjArr` realloc-leak class CLOSED (88 bytes/array → 0). Arena copy-grow. Stage 2 byte-equality preserved. → FJARR_LEAK_PHASE_1_FINDINGS. |
+| **v35.2.3..v35.3.2** | 2026-05-09 | 🔐 Full crypto exposure (31 fns + RSA + Ed25519) + X25519-dalek fix + char_at analyzer Type::Char fix + TQ12.2 SQLite + lib cleanup. → V35_3_* + CQ1_4_RSA_B0_FINDINGS. |
+| **v35.1.0..v35.2.0** "FJARR_LEAK" | 2026-05-08 | `_FjArr` realloc-leak CLOSED (88B/array→0; arena copy-grow). `[T]` affine via opt-in `--strict-ownership` + SE024. → FJARR_LEAK_PHASE_{1,2}_FINDINGS. |
 | **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. Phase 18 CALL_INDEX (silent miscompile `f()[i]` / `obj.m()[i]`) closed 2026-05-07 commit 9c9ff2a8. |
-| **v34.5.0..v34.5.13** | 2026-05-05..06 | Phase 16+17 build-up: Pratt precedence, struct sigs, [T] fields, chained methods, parser_ast.fj+codegen.fj self-compile. |
-| **v34.0.0..v34.4.0** | 2026-05-05 | R14: string + dyn arrays + concat! + match expression. |
-| **v33.4.0..v33.8.0** | 2026-05-05 | Self-host phases 9–11: Stage-1-Full closure, struct lit/field, match. |
-| **v33.2.0** "FAJAROS_100PCT TERMINAL" | 2026-05-05 | 9/9 LLVM gaps closed; vecmat_v8.c DELETED; ZERO non-fj LOC in kernel. |
-| **v33.0.0..v33.1.1** | 2026-05-03..05 | Perfection Complete (P0-P9, 22/25 PASS); 8/9 compiler gaps; @naked fn; `$→$$` asm escape. |
+| **v34.x..v33.x** | 2026-05-03..06 | R14 dyn arrays/concat/match; Self-host phases 9–17 build-up; FAJAROS_100PCT TERMINAL (9/9 LLVM gaps); Perfection P0-P9 (22/25); @naked fn; asm `$$`. |
 | **v32.1.0 / V32** | 2026-05-02..03 | HONEST_AUDIT_V32: 0 demotions; 5 gaps (G1 deferred; G2-G5 closed). |
 | **V30.TRACK4 / V30.GEMMA3** | 2026-04-20 | FajarOS Nova ext2/FAT32 + Gemma 3 1B 12 phases. Surfaces §6.10. |
 | **V29 / V27 / V26** | 2026-04-11..16 | NX triple closure; @noinline/@inline/@cold; AI scheduler + @interrupt + Cap<T>; V26 "Final" (§6.7 rule). |
