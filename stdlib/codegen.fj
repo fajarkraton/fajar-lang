@@ -367,6 +367,17 @@ pub fn emit_preamble(state: CodegenState) -> CodegenState {
     s = emit_line(s, "    return out;")
     s = emit_line(s, "}")
     s = emit_line(s, "static int _fj_streq(const char* a, const char* b) { return strcmp(a, b) == 0; }")
+    // v35.4.1 byte_at: byte-indexed accessor for str. Mirrors prod LLVM
+    // `fj_rt_bare_str_byte_at` semantics — returns byte 0-255 at byte-index i,
+    // or 0 if out of range. Required for byte-correct parsing of UTF-8 source
+    // (char_at returns codepoint index, NOT byte index — see V35_4_0_LEXER_PERF
+    // §7 rollback rationale and V35_4_1_BYTE_AT_B0 rationale).
+    s = emit_line(s, "static int64_t _fj_str_byte_at(const char* s, int64_t i) {")
+    s = emit_line(s, "    if (i < 0) return 0;")
+    s = emit_line(s, "    int64_t n = (int64_t)strlen(s);")
+    s = emit_line(s, "    if (i >= n) return 0;")
+    s = emit_line(s, "    return (int64_t)(unsigned char)s[i];")
+    s = emit_line(s, "}")
     s = emit_line(s, "static const char* _fj_concat2(const char* a, const char* b) {")
     s = emit_line(s, "    int64_t la = (int64_t)strlen(a), lb = (int64_t)strlen(b);")
     s = emit_line(s, "    char* out = (char*)_fj_arena_alloc((size_t)(la + lb + 1));")

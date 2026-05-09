@@ -427,6 +427,11 @@ fn parse_atom(ast: [str], vars: [str], pos: i64, cg: CodegenState) -> ExprResult
             }
         }
         if raw_name == "to_string" { name = "_fj_to_string" }
+        // v35.4.1: byte_at builtin — byte-indexed str accessor (returns 0..255).
+        // Required for byte-correct parsing of UTF-8 source. char_at returns
+        // codepoint, NOT byte (see V35_4_0_LEXER_PERF §7 rollback). Pairs with
+        // _fj_str_byte_at C helper added in stdlib/codegen.fj preamble.
+        if raw_name == "str_byte_at" { name = "_fj_str_byte_at" }
         // Phase 17.8: native binary I/O — argv access + read_file/write_file.
         if raw_name == "argv" { name = "_fj_argv_get" }
         if raw_name == "read_file" { name = "_fj_read_file" }
