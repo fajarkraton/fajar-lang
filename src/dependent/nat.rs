@@ -1493,7 +1493,7 @@ mod tests {
     fn v27_5_p4_2_cap_new_and_unwrap() {
         // V27.5 P4.2: capability lifecycle — create, unwrap, access consumed
         let source = r#"
-            fn main() -> i64 {
+            @kernel fn main() -> i64 {
                 let c = cap_new(42)
                 let valid = cap_is_valid(c)
                 let v = cap_unwrap(c)
@@ -1513,7 +1513,7 @@ mod tests {
     fn v27_5_p4_2_cap_double_unwrap_fails() {
         // V27.5 P4.2: double-unwrap must error (linear type violation)
         let source = r#"
-            fn main() -> i64 {
+            @kernel fn main() -> i64 {
                 let c = cap_new(99)
                 let v1 = cap_unwrap(c)
                 let v2 = cap_unwrap(c)

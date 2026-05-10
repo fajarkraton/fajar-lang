@@ -25,22 +25,24 @@ fn eval_call_main(code: &str) -> Result<fajar_lang::interpreter::Value, String> 
 #[test]
 fn p1_2_tensor_workload_hint_computes_flop_cost() {
     // 4x4 matmul → 4*4*4 = 64 FLOPs
-    let result = eval_call_main(r#"fn main() -> i64 { tensor_workload_hint(4, 4) }"#);
+    let result = eval_call_main(r#"@kernel fn main() -> i64 { tensor_workload_hint(4, 4) }"#);
     assert_eq!(format!("{:?}", result.unwrap()), "Int(64)");
 }
 
 #[test]
 fn p1_2_tensor_workload_hint_larger() {
     // 128x128 matmul (Gemma 3 head)
-    let result = eval_call_main(r#"fn main() -> i64 { tensor_workload_hint(128, 128) }"#);
+    let result = eval_call_main(r#"@kernel fn main() -> i64 { tensor_workload_hint(128, 128) }"#);
     assert_eq!(format!("{:?}", result.unwrap()), "Int(2097152)");
 }
 
 #[test]
 fn p1_2_schedule_ai_task_priority_ordering() {
     // Higher priority → lower slot number (scheduled sooner)
-    let high = eval_call_main(r#"fn main() -> i64 { schedule_ai_task(1, 9, 100) }"#).unwrap();
-    let low = eval_call_main(r#"fn main() -> i64 { schedule_ai_task(1, 1, 100) }"#).unwrap();
+    let high =
+        eval_call_main(r#"@kernel fn main() -> i64 { schedule_ai_task(1, 9, 100) }"#).unwrap();
+    let low =
+        eval_call_main(r#"@kernel fn main() -> i64 { schedule_ai_task(1, 1, 100) }"#).unwrap();
     let high_s = format!("{high:?}");
     let low_s = format!("{low:?}");
     // Parse the Int(N) value — high priority must come before low
@@ -159,7 +161,7 @@ fn p4_1_refinement_let_still_works() {
 #[test]
 fn p4_2_cap_lifecycle_create_use_consume() {
     let result = eval_call_main(
-        r#"fn main() -> i64 {
+        r#"@kernel fn main() -> i64 {
               let c = cap_new(42)
               cap_unwrap(c)
            }"#,
@@ -171,7 +173,7 @@ fn p4_2_cap_lifecycle_create_use_consume() {
 fn p4_2_cap_is_valid_transitions() {
     // valid before unwrap, invalid after
     let before = eval_call_main(
-        r#"fn main() -> i64 {
+        r#"@kernel fn main() -> i64 {
               let c = cap_new(99)
               cap_is_valid(c)
            }"#,
@@ -180,7 +182,7 @@ fn p4_2_cap_is_valid_transitions() {
     assert_eq!(format!("{before:?}"), "Int(1)");
 
     let after = eval_call_main(
-        r#"fn main() -> i64 {
+        r#"@kernel fn main() -> i64 {
               let c = cap_new(99)
               let v = cap_unwrap(c)
               cap_is_valid(c)
@@ -193,7 +195,7 @@ fn p4_2_cap_is_valid_transitions() {
 #[test]
 fn p4_2_cap_double_unwrap_errors() {
     let result = eval_call_main(
-        r#"fn main() -> i64 {
+        r#"@kernel fn main() -> i64 {
               let c = cap_new(99)
               let v1 = cap_unwrap(c)
               let v2 = cap_unwrap(c)
@@ -210,9 +212,13 @@ fn p4_2_cap_double_unwrap_errors() {
 
 #[test]
 fn p_all_features_coexist_in_one_program() {
-    // Combine: @app, refinement type, Cap<T>, AI scheduler, framebuffer
+    // Combine: @kernel, refinement type, Cap<T>, AI scheduler, framebuffer.
+    // Originally @app — D-α / Phase A.3 cascade requires hw-domain main to
+    // be @kernel (or @unsafe). @app's "userspace runtime entry" semantics
+    // are independently exercised by p3_1_at_app_compiles +
+    // p3_1_at_app_runs_like_regular_main.
     let result = eval_call_main(
-        r#"@app fn main() -> i64 {
+        r#"@kernel fn main() -> i64 {
               // AI scheduler
               let cost = tensor_workload_hint(8, 8)
               // Framebuffer
