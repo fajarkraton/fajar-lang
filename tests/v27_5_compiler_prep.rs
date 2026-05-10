@@ -66,13 +66,13 @@ fn p1_2_schedule_ai_task_priority_ordering() {
 
 #[test]
 fn p1_4_fb_set_base_accepted() {
-    let result = eval_call_main(r#"fn main() -> i64 { fb_set_base(0xE0000000) }"#);
+    let result = eval_call_main(r#"@kernel fn main() -> i64 { fb_set_base(0xE0000000) }"#);
     assert!(result.is_ok());
 }
 
 #[test]
 fn p1_4_fb_scroll_accepted() {
-    let result = eval_call_main(r#"fn main() -> i64 { fb_init(800, 600); fb_scroll(20) }"#);
+    let result = eval_call_main(r#"@kernel fn main() -> i64 { fb_init(800, 600); fb_scroll(20) }"#);
     assert!(result.is_ok());
 }
 
@@ -80,7 +80,7 @@ fn p1_4_fb_scroll_accepted() {
 fn p1_4_fb_full_pipeline() {
     // init → set base → pixel → rect → scroll → all succeed
     let result = eval(
-        r#"fn main() {
+        r#"@kernel fn main() {
             fb_init(1920, 1080)
             fb_set_base(0xE0000000)
             fb_write_pixel(100, 100, 0xFF0000)
