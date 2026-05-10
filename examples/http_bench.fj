@@ -1,0 +1,7 @@
+// TQ12.3 HTTP web benchmark target.
+// Binds 127.0.0.1:8080, serves up to 1M requests, prints served count on exit.
+// Driver runs wrk against this; server is single-threaded sync + Connection: close.
+
+let count = http_listen(8080, 1000000)
+println("served:")
+println(count)
