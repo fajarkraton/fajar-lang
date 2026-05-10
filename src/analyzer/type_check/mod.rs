@@ -1655,8 +1655,14 @@ impl TypeChecker {
         .collect();
 
         // @safe blocked builtins = os_builtins + volatile + CR3/CR2 + buffer LE/BE
-        // Basically: everything that accesses hardware directly
+        // — MINUS pure-function byte-level string ops which have zero hardware
+        // access (they read from a Rust-managed `str`). Per Phase A.4 / D-α:
+        // `str_byte_at` and `str_len` are needed by self-host stdlib parsers
+        // running in default-@safe context; categorizing them as hw access
+        // mis-rejects pure-functional code.
         let mut safe_blocked_builtins = os_builtins.clone();
+        safe_blocked_builtins.remove("str_byte_at");
+        safe_blocked_builtins.remove("str_len");
         for extra in [
             "volatile_read",
             "volatile_write",

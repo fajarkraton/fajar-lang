@@ -157,7 +157,13 @@ impl TypeChecker {
             Some(ann) if ann.name == "unsafe" => crate::analyzer::scope::ScopeKind::Unsafe,
             Some(ann) if ann.name == "safe" => crate::analyzer::scope::ScopeKind::Safe,
             _ if fndef.is_async => crate::analyzer::scope::ScopeKind::AsyncFn,
-            _ => crate::analyzer::scope::ScopeKind::Function,
+            // Compass §4.4 "@safe sebagai default" — closure of the context
+            // dimension (the type-system dimension was closed by v35.5.0
+            // D-FULL affine semantics). Unannotated fns are now @safe by
+            // default; explicit `@kernel`/`@device`/`@unsafe` is opt-in.
+            // See docs/decisions/2026-05-10-default-safe-bridge.md (D-α)
+            // and docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md.
+            _ => crate::analyzer::scope::ScopeKind::Safe,
         };
         self.symbols.push_scope_kind(scope_kind);
 
