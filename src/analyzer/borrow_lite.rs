@@ -577,18 +577,19 @@ impl Default for MoveTracker {
 ///
 /// # Future: native codegen mode
 ///
-/// When Cranelift/LLVM native codegen becomes the primary execution path,
-/// move semantics will matter for performance (avoiding unnecessary copies).
-/// At that point, this function should be updated to:
-///   - Primitives (i8-i128, f32/f64, bool, char): Copy
-///   - Str, Array, Struct, Tuple: Move (require explicit .clone())
-///   - Ref: Copy, RefMut: Move
+/// FJARR_LEAK Phase 2 D-FULL (v35.5.0, 2026-05-10): full-strict default.
+/// All non-primitive types are Move; non-trivial usage requires `.clone()`.
+/// This delegates to `is_copy_type_strict` which is the canonical rule:
+///   - Primitives (i8-i128, f32/f64, bool, char, void, never): Copy
+///   - Immutable references (`&T`): Copy
+///   - Str, Array, Struct, Enum, Tuple-with-move-fields, Tensor, Quantized,
+///     Function, RefMut, Future, DynTrait: Move
 ///
-/// This change will be gated behind a compiler flag: `--strict-ownership`
-pub fn is_copy_type(_ty: &Type) -> bool {
-    // In interpreter mode, all types are Copy (clone on assignment).
-    // This matches the runtime semantics of Value::clone().
-    true
+/// Closes Compass §4.4 "@safe sebagai default" for affine semantics. The
+/// `--strict-ownership` flag remains accepted (no-op now; reserved for
+/// future "even stricter" modes if needed).
+pub fn is_copy_type(ty: &Type) -> bool {
+    is_copy_type_strict(ty)
 }
 
 /// Returns true if a type is Copy under strict ownership rules.
@@ -665,17 +666,18 @@ mod tests {
     }
 
     #[test]
-    fn all_types_are_copy_in_interpreter_mode() {
-        // In interpreter mode, all types are Copy (Value::clone on assignment).
-        // This matches the runtime semantics.
-        assert!(is_copy_type(&Type::Str));
-        assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
-        assert!(is_copy_type(&Type::Tuple(vec![Type::Str])));
-        assert!(is_copy_type(&Type::RefMut(Box::new(Type::I32), None)));
-        assert!(is_copy_type(&Type::Struct {
+    fn full_strict_default_non_copy_types() {
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): default mode is now full-strict.
+        // Non-primitive types are Move (require explicit .clone() to duplicate).
+        assert!(!is_copy_type(&Type::Str));
+        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
+        assert!(!is_copy_type(&Type::Tuple(vec![Type::Str])));
+        assert!(!is_copy_type(&Type::RefMut(Box::new(Type::I32), None)));
+        assert!(!is_copy_type(&Type::Struct {
             name: "Point".into(),
             fields: std::collections::HashMap::new()
         }));
+        // &T (immutable ref) remains Copy
         assert!(is_copy_type(&Type::Ref(Box::new(Type::Str), None)));
     }
 
@@ -974,18 +976,18 @@ mod tests {
         assert!(is_copy_type(&Type::F64));
         assert!(is_copy_type(&Type::Bool));
         assert!(is_copy_type(&Type::Char));
-        // Str is Copy (Rc<String> in interpreter)
-        assert!(is_copy_type(&Type::Str));
-        // References are Copy
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): str is Move (affine).
+        assert!(!is_copy_type(&Type::Str));
+        // Immutable references remain Copy.
         assert!(is_copy_type(&Type::Ref(Box::new(Type::I64), None)));
-        // Struct: Copy (interpreter uses Rc-based value semantics)
-        assert!(is_copy_type(&Type::Struct {
+        // Struct: Move (affine under D-FULL).
+        assert!(!is_copy_type(&Type::Struct {
             name: "Point".into(),
             fields: std::collections::HashMap::new()
         }));
-        // Array/Tuple: Copy (interpreter uses Rc-based value semantics)
-        assert!(is_copy_type(&Type::Array(Box::new(Type::I32))));
-        assert!(is_copy_type(&Type::Tuple(vec![Type::I32, Type::Str])));
+        // Array/Tuple-with-move-fields: Move (affine).
+        assert!(!is_copy_type(&Type::Array(Box::new(Type::I32))));
+        assert!(!is_copy_type(&Type::Tuple(vec![Type::I32, Type::Str])));
     }
 
     #[test]

@@ -33,7 +33,7 @@ println("Backend:        GPU (Adreno 643)")
 println("")
 
 let logpath = "/tmp/q6a_batch_scheduler.log"
-let _logged = log_to_file(logpath, "SCHEDULER_START")
+let _logged = log_to_file(logpath.clone(), "SCHEDULER_START")
 
 // System status
 let temp = cpu_temp()
@@ -101,7 +101,7 @@ while batch_id < num_batches {
     println(f"    -> processed {batch_size} requests, latency={batch_time}s, pred={pred}")
     println(f"    -> remaining in queue: {queue_depth}")
 
-    let _logged = log_to_file(logpath, f"BATCH id={batch_id} size={batch_size} latency={batch_time}")
+    let _logged = log_to_file(logpath.clone(), f"BATCH id={batch_id} size={batch_size} latency={batch_time}")
 
     batch_id = batch_id + 1
 }

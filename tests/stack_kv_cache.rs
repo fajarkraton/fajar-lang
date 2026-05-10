@@ -94,13 +94,14 @@ fn size_bytes_grows() {
 
 #[test]
 fn overflow_detection() {
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): Quantized is affine; clone for reuse.
     run_err(
         r#"
         let mut cache = kv_cache_create(2, 1, 4)
         let k = quantize(from_data([1.0, 2.0], [1, 2]), 4)
         let v = quantize(from_data([3.0, 4.0], [1, 2]), 4)
-        cache = kv_cache_update(cache, 0, k, v)
-        cache = kv_cache_update(cache, 0, k, v)
+        cache = kv_cache_update(cache, 0, k.clone(), v.clone())
+        cache = kv_cache_update(cache, 0, k.clone(), v.clone())
         cache = kv_cache_update(cache, 0, k, v)
     "#,
         "overflow",

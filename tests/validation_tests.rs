@@ -353,7 +353,7 @@ fn v14_w3_5_backward_pass() {
     let r = interp.eval_source(
         r#"
         let x = randn(1, 4)
-        set_requires_grad(x, true)
+        set_requires_grad(x.clone(), true)
         let l = Dense(4, 2)
         let out = l.forward(x)
         let target = ones(1, 2)

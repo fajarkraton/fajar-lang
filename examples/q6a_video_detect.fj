@@ -78,7 +78,7 @@ while frame < total_frames {
     let label = class_label(class_id)
 
     if class_id < 4 {
-        let _drawn = draw_bbox(label, frame)
+        let _drawn = draw_bbox(label.clone(), frame)
         detections = detections + 1
         log_to_file("/tmp/q6a_video.log", f"DETECT frame={frame} class={label}")
     } else {

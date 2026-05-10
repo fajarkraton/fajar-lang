@@ -51,11 +51,11 @@ while plant < num_plants {
     let _s = read_sensors()
     let status = classify_health(plant)
 
-    display_status(plant, status)
+    display_status(plant, status.clone())
 
     if status == "critical" {
         alerts = alerts + 1
-        log_to_file("/tmp/q6a_plant.log", f"ALERT plant={plant} status=critical")
+        log_to_file("/tmp/q6a_plant.log", f"ALERT plant={plant} status.clone()=critical")
     } else if status == "needs_water" {
         alerts = alerts + 1
         log_to_file("/tmp/q6a_plant.log", f"ALERT plant={plant} status=needs_water")

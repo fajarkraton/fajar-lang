@@ -470,31 +470,32 @@ fn safety_modulo_by_zero() {
 
 #[test]
 fn safety_move_string_use_after_move() {
-    // Strings are now Copy (runtime uses clone-on-assign like Rc<String>),
-    // so `let t = s` copies the string and both remain valid.
-    // Verify no error occurs:
-    let result = eval(
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): str is affine. `let t = s` consumes;
+    // `println(s)` fires ME001 (semantic error, not runtime).
+    let err = eval_any_error(
         r#"
         let s: str = "hello"
         let t: str = s
         println(s)
         "#,
     );
-    assert!(result.is_ok());
+    let msg = format!("{err}");
+    assert!(msg.contains("ME001"), "expected ME001, got: {msg}");
 }
 
 #[test]
 fn safety_move_array_use_after_move() {
-    // Arrays are clone-on-assign (like strings), so both remain valid.
-    // Verify no error occurs:
-    let result = eval(
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): arrays are affine. `let b = a` consumes;
+    // `len(a)` fires SE024 (semantic error, not runtime).
+    let err = eval_any_error(
         r#"
         let a: [i64] = [1, 2, 3]
         let b: [i64] = a
         len(a)
         "#,
     );
-    assert!(result.is_ok());
+    let msg = format!("{err}");
+    assert!(msg.contains("SE024"), "expected SE024, got: {msg}");
 }
 
 #[test]
@@ -905,13 +906,15 @@ fn strict_me001_string_use_after_move() {
 
 #[test]
 fn strict_me001_array_use_after_move() {
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): array use-after-move now fires SE024
+    // (UseAfterMoveArray) — distinct catalog code from ME001 generic UseAfterMove.
     expect_strict_error(
         r#"
         let a = [1, 2, 3]
         let b = a
         len(a)
         "#,
-        "ME001",
+        "SE024",
     );
 }
 

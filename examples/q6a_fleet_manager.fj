@@ -55,7 +55,7 @@ println("Failover:  auto-redistribute on node failure")
 println("")
 
 let logpath = "/tmp/q6a_fleet.log"
-let _logged = log_to_file(logpath, "FLEET_START")
+let _logged = log_to_file(logpath.clone(), "FLEET_START")
 
 // Read local hardware status
 let local_temp = cpu_temp()
@@ -118,7 +118,7 @@ while round < max_rounds {
     if n3_failed {
         failed_nodes = failed_nodes + 1
         println(f"  ALERT: Node 3 FAILED (score={s3})")
-        let _logged = log_to_file(logpath, f"FAIL round={round} node=3 score={s3}")
+        let _logged = log_to_file(logpath.clone(), f"FAIL round={round} node=3 score={s3}")
     } else {
         println(f"  All nodes operational")
     }
@@ -127,7 +127,7 @@ while round < max_rounds {
     let target = pick_best_node(s0, s1, s2, s3, s4)
     total_tasks = total_tasks + 1
     println(f"  Assigned task #{total_tasks} -> Node {target}")
-    let _logged = log_to_file(logpath, f"ASSIGN round={round} task={total_tasks} node={target}")
+    let _logged = log_to_file(logpath.clone(), f"ASSIGN round={round} task={total_tasks} node={target}")
 
     // Run a quick inference on the "assigned" node to simulate work
     let input = tensor_randn(1, 16)

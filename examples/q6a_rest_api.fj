@@ -75,14 +75,14 @@ while req_id < total_requests {
 
             // Check cache first
             let cache_key = f"infer_{req_id % 3}"
-            let cached = cache_get(cache_key)
+            let cached = cache_get(cache_key.clone())
             if len(cached) > 0 {
                 println(f"  [{req_id}] POST /api/v1/infer → CACHED: {cached}")
             } else {
                 let class_id = run_inference("mobilenet_v2")
                 let t1 = sys_uptime()
                 let response = format_json_response(req_id, class_id, t1 - t0)
-                cache_set(cache_key, response)
+                cache_set(cache_key, response.clone())
                 println(f"  [{req_id}] POST /api/v1/infer → {response}")
             }
         } else {

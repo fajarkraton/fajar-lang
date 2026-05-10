@@ -283,9 +283,9 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
     while i < n {
         // fn name(
         if tokens[i] == 15 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, starts, ends, i + 1)
-            if scope_contains(state.fn_names, name) {
-                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            let name = extract_ident(source.clone(), starts.clone(), ends.clone(),i + 1)
+            if scope_contains(state.fn_names, name.clone()) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
             }
             state = define_fn(state, name, 0)
             i = i + 2
@@ -293,9 +293,9 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
         }
         // pub fn name(
         if tokens[i] == 25 && i + 1 < n && tokens[i + 1] == 15 && i + 2 < n && tokens[i + 2] == 133 {
-            let name = extract_ident(source, starts, ends, i + 2)
-            if scope_contains(state.fn_names, name) {
-                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            let name = extract_ident(source.clone(), starts.clone(), ends.clone(),i + 2)
+            if scope_contains(state.fn_names, name.clone()) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
             }
             state = define_fn(state, name, 0)
             i = i + 3
@@ -303,9 +303,9 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
         }
         // struct Name
         if tokens[i] == 16 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, starts, ends, i + 1)
-            if scope_contains(state.var_names, name) {
-                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            let name = extract_ident(source.clone(), starts.clone(), ends.clone(),i + 1)
+            if scope_contains(state.var_names, name.clone()) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
             }
             state = define_var(state, name, TY_UNKNOWN) // register as type name
             i = i + 2
@@ -313,9 +313,9 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
         }
         // enum Name
         if tokens[i] == 17 && i + 1 < n && tokens[i + 1] == 133 {
-            let name = extract_ident(source, starts, ends, i + 1)
-            if scope_contains(state.var_names, name) {
-                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            let name = extract_ident(source.clone(), starts.clone(), ends.clone(),i + 1)
+            if scope_contains(state.var_names, name.clone()) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
             }
             state = define_var(state, name, TY_UNKNOWN)
             i = i + 2
@@ -343,10 +343,10 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
             let mut is_mut = false
             if tokens[next] == 14 { is_mut = true; next = next + 1 } // mut
             if next < n && tokens[next] == 133 {
-                let name = extract_ident(source, starts, ends, next)
+                let name = extract_ident(source.clone(), starts.clone(), ends.clone(),next)
                 // Check for duplicate
-                if scope_contains(state.var_names, name) {
-                    state = add_error(state, ERR_DUPLICATE_DEF, name)
+                if scope_contains(state.var_names, name.clone()) {
+                    state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
                 }
                 // Infer type from value
                 let ty = if next + 2 < n && tokens[next + 1] == 91 { // = sign
@@ -358,9 +358,9 @@ pub fn analyze_tokens_with_spans(spans: SpanResult, source: str) -> AnalyzerStat
 
         // Const definition
         if tk == 22 && j + 1 < n && tokens[j + 1] == 133 {
-            let name = extract_ident(source, starts, ends, j + 1)
-            if scope_contains(state.var_names, name) {
-                state = add_error(state, ERR_DUPLICATE_DEF, name)
+            let name = extract_ident(source.clone(), starts.clone(), ends.clone(),j + 1)
+            if scope_contains(state.var_names, name.clone()) {
+                state = add_error(state, ERR_DUPLICATE_DEF, name.clone())
             }
             state = define_var(state, name, TY_UNKNOWN)
         }

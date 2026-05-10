@@ -728,7 +728,9 @@ pub fn parse_expr_prec(src: str, pos: i64, min_prec: i64, ast: [str]) -> ParseRe
         let op = opi[0]
         let adv = to_int(opi[1])
         if op == "" { break }
-        let prec = op_prec(op)
+        // FJARR_LEAK Phase 2 D-FULL: pass opi[0] (re-read) so `op` survives
+        // the fn-arg consume for the later `.push(op)` AST emit.
+        let prec = op_prec(opi[0])
         if prec < min_prec { break }
         // Left-associative: parse RHS at higher precedence
         let rhs_pos = p + adv

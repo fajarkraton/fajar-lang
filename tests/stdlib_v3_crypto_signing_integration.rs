@@ -57,8 +57,8 @@ fn main() {
     let pubkey = kp.0
     let secret = kp.1
     let msg = "hello fajar lang"
-    let sig = ed25519_sign(secret, msg)
-    let ok = ed25519_verify(pubkey, msg, sig)
+    let sig = ed25519_sign(secret, msg.clone())
+    let ok = ed25519_verify(pubkey.clone(), msg, sig.clone())
     if !ok { println("ED25519 VERIFY FAILED") }
     let tampered = ed25519_verify(pubkey, "different", sig)
     if tampered { println("ED25519 TAMPER NOT REJECTED") }
@@ -81,8 +81,8 @@ fn main() {
     let pubkey = kp.0
     let privkey = kp.1
     let msg = "hello rsa"
-    let sig = rsa_sign(privkey, msg)
-    let ok = rsa_verify(pubkey, msg, sig)
+    let sig = rsa_sign(privkey, msg.clone())
+    let ok = rsa_verify(pubkey.clone(), msg, sig.clone())
     if !ok { println("RSA VERIFY FAILED") }
     let tampered = rsa_verify(pubkey, "different", sig)
     if tampered { println("RSA TAMPER NOT REJECTED") }
@@ -193,7 +193,7 @@ fn v35_3_0_b1_argon2_hash_verify_roundtrip() {
     run(r#"
 fn main() {
     let h = argon2_hash("correct horse battery staple")
-    let v = argon2_verify("correct horse battery staple", h)
+    let v = argon2_verify("correct horse battery staple", h.clone())
     if !v { println("ARGON2 VERIFY FAILED for matching password") }
     let bad = argon2_verify("wrong password", h)
     if bad { println("ARGON2 VERIFY ACCEPTED wrong password") }
@@ -212,9 +212,9 @@ fn v35_3_0_b2_hmac_sha256_roundtrip() {
     run(r#"
 fn main() {
     let key = "0102030405060708090a0b0c0d0e0f10"
-    let tag = hmac_sha256(key, "hello")
-    if len(tag) != 64 { println("HMAC TAG WRONG LEN") }
-    let ok = hmac_sha256_verify(key, "hello", tag)
+    let tag = hmac_sha256(key.clone(), "hello")
+    if len(tag.clone()) != 64 { println("HMAC TAG WRONG LEN") }
+    let ok = hmac_sha256_verify(key.clone(), "hello", tag.clone())
     if !ok { println("HMAC VERIFY FAILED") }
     let bad = hmac_sha256_verify(key, "tampered", tag)
     if bad { println("HMAC TAMPER NOT REJECTED") }
@@ -279,8 +279,8 @@ fn main() {
     let nonce = "010203040506070809101112"
     let pt = hex_encode_str("hello aes-128-gcm")
     let aad = hex_encode_str("aad")
-    let pair = aes128_gcm_encrypt(key, nonce, pt, aad)
-    let dec = aes128_gcm_decrypt(key, nonce, pair.0, pair.1, aad)
+    let pair = aes128_gcm_encrypt(key.clone(), nonce.clone(), pt, aad.clone())
+    let dec = aes128_gcm_decrypt(key.clone(), nonce.clone(), pair.0.clone(), pair.1.clone(), aad)
     if hex_decode_str(dec) != "hello aes-128-gcm" {
         println("AES128_GCM ROUNDTRIP FAILED")
     }
@@ -302,8 +302,8 @@ fn main() {
     let nonce = "010203040506070809101112"
     let pt = hex_encode_str("hello aes-256-gcm")
     let aad = hex_encode_str("auth")
-    let pair = aes256_gcm_encrypt(key, nonce, pt, aad)
-    let dec = aes256_gcm_decrypt(key, nonce, pair.0, pair.1, aad)
+    let pair = aes256_gcm_encrypt(key.clone(), nonce.clone(), pt, aad.clone())
+    let dec = aes256_gcm_decrypt(key.clone(), nonce.clone(), pair.0.clone(), pair.1.clone(), aad)
     if hex_decode_str(dec) != "hello aes-256-gcm" {
         println("AES256_GCM ROUNDTRIP FAILED")
     }
@@ -324,7 +324,7 @@ fn main() {
     let key = "0102030405060708090a0b0c0d0e0f10"
     let iv = "00112233445566778899aabbccddeeff"
     let pt = hex_encode_str("hello cbc-128")
-    let ct = aes128_cbc_encrypt(key, iv, pt)
+    let ct = aes128_cbc_encrypt(key.clone(), iv.clone(), pt)
     let dec = aes128_cbc_decrypt(key, iv, ct)
     if hex_decode_str(dec) != "hello cbc-128" {
         println("AES128_CBC ROUNDTRIP FAILED")
@@ -342,7 +342,7 @@ fn main() {
     let key = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     let iv = "00112233445566778899aabbccddeeff"
     let pt = hex_encode_str("hello cbc-256")
-    let ct = aes256_cbc_encrypt(key, iv, pt)
+    let ct = aes256_cbc_encrypt(key.clone(), iv.clone(), pt)
     let dec = aes256_cbc_decrypt(key, iv, ct)
     if hex_decode_str(dec) != "hello cbc-256" {
         println("AES256_CBC ROUNDTRIP FAILED")

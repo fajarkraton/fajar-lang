@@ -5586,7 +5586,7 @@ mod tests {
             let result = handle {
                 handle {
                     let n = Ask::name()
-                    Logger::log(n)
+                    Logger::log(n.clone())
                     n
                 } with {
                     Ask::name() => { resume("Fajar") }
@@ -9484,8 +9484,11 @@ r"#,
 
     #[test]
     fn w7_1_interpreter_array_push() {
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): arrays are affine. Use chain-grow
+        // re-assignment (E1.5) so each push consumes + re-binds in the same name.
         let mut interp = Interpreter::new();
-        let result = interp.eval_source("let arr = []\npush(arr, 1)\npush(arr, 2)\nlen(arr)");
+        let result = interp
+            .eval_source("let mut arr = []\narr = push(arr, 1)\narr = push(arr, 2)\nlen(arr)");
         assert!(result.is_ok());
     }
 

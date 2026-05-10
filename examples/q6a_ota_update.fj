@@ -48,7 +48,7 @@ if healthy {
 }
 
 // Check for updates
-let update_available = check_for_update(version)
+let update_available = check_for_update(version.clone())
 if update_available {
     println("Update available! Download and install...")
 } else {

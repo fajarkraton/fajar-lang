@@ -30,11 +30,11 @@ fn main() {
     let gpgga = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,47.0,M,,*47"
 
     // Write simulated NMEA data to UART
-    uart_write_str(port, gprmc)
+    uart_write_str(port, gprmc.clone())
 
     // Parse GPRMC: split on commas and extract fields by index
     println("=== GPRMC (Recommended Minimum) ===")
-    println("  Raw: " + gprmc)
+    println("  Raw: " + gprmc.clone())
 
     let rmc = gprmc.split(",")
     println("")

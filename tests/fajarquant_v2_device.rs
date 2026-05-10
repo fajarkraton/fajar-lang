@@ -106,7 +106,7 @@ fn device_fn_full_v2_pipeline() {
         ], [4, 4])
 
         let kv = from_data([10.0, 0.0, 0.0, 0.0], [1, 4])
-        let q = fq_v2_quantize(kv, rotation, 4)
+        let q = fq_v2_quantize(kv, rotation.clone(), 4)
         let restored = fq_v2_dequantize(q, rotation)
         type_of(restored)
     "#,

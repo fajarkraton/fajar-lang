@@ -105,7 +105,7 @@ fn fj_tokenize(source: str) -> [i64] {
         }
 
         // Numbers
-        if is_digit_str(c) {
+        if is_digit_str(c.clone()) {
             let mut is_float = false
             pos = pos + 1
             while pos < n && is_digit_str(source.substring(pos, pos + 1)) {
@@ -129,7 +129,7 @@ fn fj_tokenize(source: str) -> [i64] {
         }
 
         // Identifiers and keywords
-        if is_alpha_str(c) {
+        if is_alpha_str(c.clone()) {
             let start = pos
             pos = pos + 1
             while pos < n && is_alnum_str(source.substring(pos, pos + 1)) {
@@ -146,7 +146,7 @@ fn fj_tokenize(source: str) -> [i64] {
         }
 
         // String literals
-        if c == "\"" {
+        if c.clone() == "\"" {
             pos = pos + 1
             while pos < n && source.substring(pos, pos + 1) != "\"" {
                 if source.substring(pos, pos + 1) == "\\" {
@@ -165,47 +165,47 @@ fn fj_tokenize(source: str) -> [i64] {
         // Two-char operators
         if pos + 1 < n {
             let c2 = source.substring(pos + 1, pos + 2)
-            if c == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; continue }
-            if c == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; continue }
-            if c == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; continue }
-            if c == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; continue }
-            if c == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; continue }
-            if c == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; continue }
-            if c == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; continue }
-            if c == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; continue }
-            if c == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; continue }
-            if c == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; continue }
-            if c == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; continue }
-            if c == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; continue }
-            if c == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; continue }
-            if c == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; continue }
+            if c.clone() == "=" && c2 == "=" { tokens = tokens.push(76); pos = pos + 2; continue }
+            if c.clone() == "!" && c2 == "=" { tokens = tokens.push(77); pos = pos + 2; continue }
+            if c.clone() == "<" && c2 == "=" { tokens = tokens.push(80); pos = pos + 2; continue }
+            if c.clone() == ">" && c2 == "=" { tokens = tokens.push(81); pos = pos + 2; continue }
+            if c.clone() == "&" && c2 == "&" { tokens = tokens.push(82); pos = pos + 2; continue }
+            if c.clone() == "|" && c2 == "|" { tokens = tokens.push(83); pos = pos + 2; continue }
+            if c.clone() == "|" && c2 == ">" { tokens = tokens.push(104); pos = pos + 2; continue }
+            if c.clone() == "-" && c2 == ">" { tokens = tokens.push(121); pos = pos + 2; continue }
+            if c.clone() == "=" && c2 == ">" { tokens = tokens.push(122); pos = pos + 2; continue }
+            if c.clone() == ":" && c2 == ":" { tokens = tokens.push(117); pos = pos + 2; continue }
+            if c.clone() == "*" && c2 == "*" { tokens = tokens.push(75); pos = pos + 2; continue }
+            if c.clone() == "+" && c2 == "=" { tokens = tokens.push(92); pos = pos + 2; continue }
+            if c.clone() == "-" && c2 == "=" { tokens = tokens.push(93); pos = pos + 2; continue }
+            if c.clone() == "." && c2 == "." { tokens = tokens.push(102); pos = pos + 2; continue }
         }
 
         // Single-char tokens
-        if c == "+" { tokens = tokens.push(70); pos = pos + 1; continue }
-        if c == "-" { tokens = tokens.push(71); pos = pos + 1; continue }
-        if c == "*" { tokens = tokens.push(72); pos = pos + 1; continue }
-        if c == "/" { tokens = tokens.push(73); pos = pos + 1; continue }
-        if c == "%" { tokens = tokens.push(74); pos = pos + 1; continue }
-        if c == "<" { tokens = tokens.push(78); pos = pos + 1; continue }
-        if c == ">" { tokens = tokens.push(79); pos = pos + 1; continue }
-        if c == "!" { tokens = tokens.push(84); pos = pos + 1; continue }
-        if c == "&" { tokens = tokens.push(85); pos = pos + 1; continue }
-        if c == "|" { tokens = tokens.push(86); pos = pos + 1; continue }
-        if c == "^" { tokens = tokens.push(87); pos = pos + 1; continue }
-        if c == "~" { tokens = tokens.push(88); pos = pos + 1; continue }
-        if c == "=" { tokens = tokens.push(91); pos = pos + 1; continue }
-        if c == "(" { tokens = tokens.push(110); pos = pos + 1; continue }
-        if c == ")" { tokens = tokens.push(111); pos = pos + 1; continue }
-        if c == "{" { tokens = tokens.push(112); pos = pos + 1; continue }
-        if c == "}" { tokens = tokens.push(113); pos = pos + 1; continue }
-        if c == "[" { tokens = tokens.push(114); pos = pos + 1; continue }
-        if c == "]" { tokens = tokens.push(115); pos = pos + 1; continue }
-        if c == ";" { tokens = tokens.push(116); pos = pos + 1; continue }
-        if c == ":" { tokens = tokens.push(118); pos = pos + 1; continue }
-        if c == "," { tokens = tokens.push(119); pos = pos + 1; continue }
-        if c == "." { tokens = tokens.push(120); pos = pos + 1; continue }
-        if c == "?" { tokens = tokens.push(123); pos = pos + 1; continue }
+        if c.clone() == "+" { tokens = tokens.push(70); pos = pos + 1; continue }
+        if c.clone() == "-" { tokens = tokens.push(71); pos = pos + 1; continue }
+        if c.clone() == "*" { tokens = tokens.push(72); pos = pos + 1; continue }
+        if c.clone() == "/" { tokens = tokens.push(73); pos = pos + 1; continue }
+        if c.clone() == "%" { tokens = tokens.push(74); pos = pos + 1; continue }
+        if c.clone() == "<" { tokens = tokens.push(78); pos = pos + 1; continue }
+        if c.clone() == ">" { tokens = tokens.push(79); pos = pos + 1; continue }
+        if c.clone() == "!" { tokens = tokens.push(84); pos = pos + 1; continue }
+        if c.clone() == "&" { tokens = tokens.push(85); pos = pos + 1; continue }
+        if c.clone() == "|" { tokens = tokens.push(86); pos = pos + 1; continue }
+        if c.clone() == "^" { tokens = tokens.push(87); pos = pos + 1; continue }
+        if c.clone() == "~" { tokens = tokens.push(88); pos = pos + 1; continue }
+        if c.clone() == "=" { tokens = tokens.push(91); pos = pos + 1; continue }
+        if c.clone() == "(" { tokens = tokens.push(110); pos = pos + 1; continue }
+        if c.clone() == ")" { tokens = tokens.push(111); pos = pos + 1; continue }
+        if c.clone() == "{" { tokens = tokens.push(112); pos = pos + 1; continue }
+        if c.clone() == "}" { tokens = tokens.push(113); pos = pos + 1; continue }
+        if c.clone() == "[" { tokens = tokens.push(114); pos = pos + 1; continue }
+        if c.clone() == "]" { tokens = tokens.push(115); pos = pos + 1; continue }
+        if c.clone() == ";" { tokens = tokens.push(116); pos = pos + 1; continue }
+        if c.clone() == ":" { tokens = tokens.push(118); pos = pos + 1; continue }
+        if c.clone() == "," { tokens = tokens.push(119); pos = pos + 1; continue }
+        if c.clone() == "." { tokens = tokens.push(120); pos = pos + 1; continue }
+        if c.clone() == "?" { tokens = tokens.push(123); pos = pos + 1; continue }
         if c == "@" { tokens = tokens.push(105); pos = pos + 1; continue }
 
         // Unknown — skip

@@ -64,11 +64,11 @@ fn main() -> i64 {
         let zone_str = to_string(zone)
         let path = "/sys/class/thermal/thermal_zone" + zone_str + "/temp"
         if file_exists(path) {
-            let name = read_zone_type(zone_str)
+            let name = read_zone_type(zone_str.clone())
             let temp = read_temp(zone_str)
             let temp_str = format_temp(temp)
 
-            let mut padded = name
+            let mut padded = name.clone()
             while len(padded) < 22 {
                 padded = padded + " "
             }

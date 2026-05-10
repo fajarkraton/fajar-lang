@@ -480,9 +480,49 @@ impl Interpreter {
                     }
                     .into());
                 }
-                let cloned: Vec<Value> = (**a).clone();
-                Ok(Value::array_from_vec(cloned))
+                // FJARR_LEAK Phase 2 D-FULL: refcount-bump clone (O(1)) instead of
+                // deep Vec clone. All array mutations (push/pop/insert/remove) use
+                // Arc::make_mut for COW, so sharing the inner Arc is safe and avoids
+                // O(n²) cascade in chain bootstrap (~7K LOC stdlib × N clones/fn).
+                Ok(Value::Array(a.clone()))
             }
+            (Value::Str(s), "clone") => {
+                // D-FULL: str.clone() is Rc-based refcount-bump (O(1)).
+                if !arg_vals.is_empty() {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 0,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                Ok(Value::Str(s.clone()))
+            }
+            (Value::Tensor(t), "clone") => {
+                // D-FULL: tensor.clone() is Arc-based refcount-bump (O(1)).
+                if !arg_vals.is_empty() {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 0,
+                        got: arg_vals.len(),
+                    }
+                    .into());
+                }
+                Ok(Value::Tensor(t.clone()))
+            }
+            (v, "clone") if !arg_vals.is_empty() => Err(RuntimeError::ArityMismatch {
+                expected: 0,
+                got: arg_vals.len(),
+            }
+            .into()),
+            // D-FULL: catch-all .clone() for Struct/Enum/Tuple/Map/etc — Rust-side
+            // Value::clone is Rc/Arc-based and effectively O(1).
+            (
+                v @ (Value::Struct { .. }
+                | Value::Enum { .. }
+                | Value::Tuple(_)
+                | Value::Map(_)
+                | Value::Quantized(_)),
+                "clone",
+            ) => Ok(v.clone()),
             (Value::Array(a), "push") => {
                 if arg_vals.len() != 1 {
                     return Err(RuntimeError::ArityMismatch {

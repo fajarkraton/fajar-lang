@@ -100,7 +100,7 @@ while cycle < num_cycles {
 
     // Classify state
     let state = classify_power_state(temp, freq, mem)
-    let power = estimate_power_mw(state)
+    let power = estimate_power_mw(state.clone())
 
     // Track statistics
     total_power = total_power + power
@@ -115,11 +115,11 @@ while cycle < num_cycles {
     }
 
     // Count state occurrences
-    if state == "Idle" {
+    if state.clone() == "Idle" {
         idle_count = idle_count + 1
-    } else if state == "Light" {
+    } else if state.clone() == "Light" {
         light_count = light_count + 1
-    } else if state == "Medium" {
+    } else if state.clone() == "Medium" {
         medium_count = medium_count + 1
     } else if state == "Heavy" {
         heavy_count = heavy_count + 1
@@ -180,7 +180,7 @@ if throttle_count > dom_count {
     dom_count = throttle_count
 }
 
-let action = recommend_action(dominant)
+let action = recommend_action(dominant.clone())
 println(f"Dominant state: {dominant} ({dom_count}/{num_cycles} cycles)")
 println(f"Recommendation: {action}")
 

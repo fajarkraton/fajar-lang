@@ -3389,8 +3389,8 @@ mod tests {
 
     #[test]
     fn move_type_use_after_move_detected() {
-        // Arrays and structs are now Copy (Rc-based runtime semantics).
-        // Move detection still works for &mut T references.
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): arrays are Move (affine).
+        // `let b = a` consumes a; `len(a)` fires SE024.
         let src = r#"
             fn main() -> void {
                 let a: [i64] = [1, 2, 3]
@@ -3398,8 +3398,13 @@ mod tests {
                 len(a)
             }
         "#;
-        // Arrays are Copy now, so this should be OK
-        assert!(check(src).is_ok());
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMoveArray { .. })),
+            "expected SE024 UseAfterMoveArray, got: {errors:?}"
+        );
     }
 
     #[test]
@@ -3417,8 +3422,8 @@ mod tests {
 
     #[test]
     fn fn_call_moves_move_type_arg() {
-        // str is now Copy, so passing it to a function doesn't move it.
-        // Test with an array (still Move) instead.
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): fn-arg consume of an array
+        // marks it Moved; subsequent use fires SE024.
         let src = r#"
             fn consume(a: [i64]) -> void {
                 println(len(a))
@@ -3429,8 +3434,13 @@ mod tests {
                 len(a)
             }
         "#;
-        // Arrays are now Copy (Rc-based runtime), so passing to fn doesn't move
-        assert!(check(src).is_ok());
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMoveArray { .. })),
+            "expected SE024 UseAfterMoveArray, got: {errors:?}"
+        );
     }
 
     #[test]
@@ -3576,7 +3586,8 @@ mod tests {
 
     #[test]
     fn match_enum_destructure_moves_subject() {
-        // Arrays are now Copy (Rc-based runtime), so match doesn't move them
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): match-with-destructure consumes
+        // the subject; subsequent use fires SE024.
         let src = r#"
             fn main() -> void {
                 let x: [i64] = [1, 2, 3]
@@ -3587,8 +3598,13 @@ mod tests {
                 len(x)
             }
         "#;
-        // Array is Copy now, so this should be OK
-        assert!(check(src).is_ok());
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMoveArray { .. })),
+            "expected SE024 UseAfterMoveArray, got: {errors:?}"
+        );
     }
 
     #[test]
@@ -3710,7 +3726,8 @@ mod tests {
 
     #[test]
     fn move_while_immutably_borrowed_me003() {
-        // Arrays are now Copy (Rc-based runtime), so no move conflict.
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): arrays are affine — moving
+        // while a live borrow exists fires ME003 MoveWhileBorrowed.
         let src = r#"
             fn consume(a: [i64]) -> void { println(len(a)) }
             fn main() -> void {
@@ -3720,8 +3737,13 @@ mod tests {
                 println(r)
             }
         "#;
-        // Array is Copy, so passing to consume() doesn't conflict with borrow
-        assert!(check(src).is_ok());
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::MoveWhileBorrowed { .. })),
+            "expected ME003 MoveWhileBorrowed, got: {errors:?}"
+        );
     }
 
     #[test]
@@ -5088,7 +5110,8 @@ mod tests {
 
     #[test]
     fn strict_default_mode_no_move_errors() {
-        // Default mode (non-strict) should NOT produce move errors
+        // FJARR_LEAK Phase 2 D-FULL (v35.5.0): default mode is now strict.
+        // `let t = s` consumes s (str is affine); `println(s)` fires ME001.
         let src = r#"
             fn test() {
                 let s: str = "hello"
@@ -5096,8 +5119,13 @@ mod tests {
                 println(s)
             }
         "#;
-        // Default mode: all types are Copy
-        assert!(check(src).is_ok());
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::UseAfterMove { .. })),
+            "expected ME001 UseAfterMove, got: {errors:?}"
+        );
     }
 
     #[test]

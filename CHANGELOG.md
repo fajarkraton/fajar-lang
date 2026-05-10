@@ -2,6 +2,91 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.5.0] — 2026-05-10 🔐 FJARR_LEAK Phase 2 D-FULL — full-strict default-on — minor
+
+Closes Compass §4.4 "@safe sebagai default" for affine semantics. **All
+non-primitive types (`str`, `[T]`, `struct`, `enum`, tuple-with-move-fields,
+`Tensor`, `Quantized`) are now Move by default** — reuse after consume requires
+explicit `.clone()`. The `--strict-ownership` CLI flag is preserved as a no-op
+for compatibility (default mode is now what strict mode used to be).
+
+### Headline change
+
+- `is_copy_type(ty)` permanently delegates to `is_copy_type_strict(ty)`.
+  Previously this returned `true` for all types in default ("interpreter")
+  mode — that was the pre-Phase-2 contract.
+- `--strict-ownership` is no longer required to get affine semantics. The
+  flag is accepted but no-op (reserved for future "even stricter" modes).
+
+### Cascade fixes (Phase 3)
+
+- **stdlib/parser_ast.fj** (1 site): `op_prec` now reads from `opi[0]`
+  instead of consuming the bound `op` variable.
+- **stdlib/codegen_driver.fj** (~30 sites): re-fetch from ast in let-bindings
+  that previously consumed via Ident; postpone fn-arg consume to last use;
+  use `concat!(r, "")` (non-consuming) to duplicate str values for multi-branch
+  use; broad `vars.clone()` / `ast.clone()` insertions on hot fn-arg consume
+  paths (refcount-bump under COW, O(1) at runtime).
+- **stdlib/analyzer.fj** (6 sites): all `extract_ident(source, starts, ends, …)`
+  calls now `.clone()` each str/[T] arg.
+
+### COW runtime (Phase 5)
+
+`_FjArr` C struct gains `int rc` field. `_fj_arr_clone` is now refcount-bump
+only (O(1)) instead of deep memcpy. `_fj_arr_grow` does Copy-on-Write deep
+copy when `rc > 1` so shared clones don't see each other's mutations. Without
+COW, `.clone()` cascades caused OOM (>26 GB) at chain bootstrap. With COW,
+phase17 self-compile completes in ~106s (baseline ~54s, 2× slowdown for full
+affine semantics).
+
+### Interpreter `.clone()` recognition
+
+Universal O(1) `.clone()` for `Value::Array/Str/Tensor/Struct/Enum/Tuple/Map/
+Quantized` via Rc/Arc-share. Mutating ops (Array `push`/etc.) already use
+`Arc::make_mut` for COW so sharing is safe.
+
+### Pre-Phase-2 lib + integration test updates (Phase 4)
+
+- 7 lib tests in `borrow_lite.rs` + `type_check/mod.rs` updated to assert
+  the new D-FULL contract (SE024/ME001/ME003 expected where the old contract
+  asserted `is_ok()`).
+- 19 Q6A example files updated with `.clone()` at consume sites where the str
+  variable is reused for f-string interpolation or further fn calls. Tooled
+  via `auto_clone_fix3.py`; manual fixes for f-string and loop-body cases.
+- 12 integration test files updated: `eval_tests.rs` (s44/h2/w7/v15),
+  `nova_v2_tests.rs` (v14_n14_1), `safety_tests.rs` (3 tests),
+  `fajarquant_v2_device.rs` (device pipeline), `stack_kv_cache.rs`,
+  `tensor_axis_ops.rs`, `validation_tests.rs`, `stdlib_v3_crypto_signing_
+  integration.rs` (8 crypto round-trips), `selfhost_analyzer_dup_detection.rs`,
+  `analyzer_branch_merge_terminator.rs`.
+
+### E2 design decision: skip (E2.C)
+
+Methods do not consume receivers. `arr.method(x)` continues to read `arr`
+without marking it moved. Combined with COW, this is internally consistent
+with the existing functional-style C runtime where `push`/`pop`/etc. always
+return fresh arrays. Documented in `docs/D_FULL_OPTION_B_PHASE_PLAN.md` §3.
+
+### Stats
+
+```
+Tests:     7,633 lib (+4) + 1900+ integ (80 suites) + 14 doc + 11 SE024
+           + 7 branch_merge + 1 fjarr_leak = ~9,571+ total
+           4/4 phase17 (Stage 2 byte-equality preserved through D-FULL)
+           86/86 stage1_full @ ~13.8s
+LOC:       ~449,000 Rust (~+50 net) | Binary 18 MB | MSRV 1.87
+Modules:   42 pub mods | 54 [x], 0 [sim]/[f]/[s]
+Quality:   0 clippy / 0 fmt warnings
+Tags:      v32.1.0 → v33.{0..2}.0 → v34.{0..5.13} → v35.0.0 → v35.1.0
+           → v35.2.0..3 → v35.3.0..2 → v35.4.0..1 → v35.5.0
+```
+
+### Source of truth
+
+`docs/FJARR_LEAK_PHASE_2_D_FULL_FINDINGS.md` (closure proof) +
+`docs/D_FULL_OPTION_B_PHASE_PLAN.md` (Phase 1 B0 audit + 5-phase plan) +
+`docs/D_FULL_CASCADE_B0_FINDINGS.md` (initial scope-doc).
+
 ## [v35.4.1] — 2026-05-09 ⚡ stdlib/parser_ast.fj cascade — closes v35.4.0 Phase 2 deferral — minor
 
 Wires `str_byte_at` into the self-host chain codegen (Phase A) and migrates

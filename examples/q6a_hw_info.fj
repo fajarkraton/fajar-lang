@@ -142,7 +142,7 @@ fn main() -> i64 {
     while zone < 36 {
         let zone_str = to_string(zone)
         let temp_path = "/sys/class/thermal/thermal_zone" + zone_str + "/temp"
-        if file_exists(temp_path) {
+        if file_exists(temp_path.clone()) {
             let name = read_sysfs("/sys/class/thermal/thermal_zone" + zone_str + "/type")
             let temp_raw = read_sysfs(temp_path)
             match temp_raw.parse_int() {

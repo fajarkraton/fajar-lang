@@ -50,7 +50,7 @@ println("Samples: 50 test inputs")
 println("")
 
 let logpath = "/tmp/q6a_ab_test.log"
-let _logged = log_to_file(logpath, "AB_TEST_START")
+let _logged = log_to_file(logpath.clone(), "AB_TEST_START")
 
 // System status
 let temp = cpu_temp()
@@ -89,7 +89,7 @@ let accuracy_a = (correct_a * 100) / num_samples
 println(f"  Correct: {correct_a}/{num_samples}")
 println(f"  Accuracy: {accuracy_a}%")
 println(f"  Time: {time_a}s")
-let _logged = log_to_file(logpath, f"MODEL_A correct={correct_a} accuracy={accuracy_a} time={time_a}")
+let _logged = log_to_file(logpath.clone(), f"MODEL_A correct={correct_a} accuracy={accuracy_a} time={time_a}")
 println("")
 
 // --- Run Model B ---
@@ -117,7 +117,7 @@ let accuracy_b = (correct_b * 100) / num_samples
 println(f"  Correct: {correct_b}/{num_samples}")
 println(f"  Accuracy: {accuracy_b}%")
 println(f"  Time: {time_b}s")
-let _logged = log_to_file(logpath, f"MODEL_B correct={correct_b} accuracy={accuracy_b} time={time_b}")
+let _logged = log_to_file(logpath.clone(), f"MODEL_B correct={correct_b} accuracy={accuracy_b} time={time_b}")
 println("")
 
 // --- Statistical Comparison ---
@@ -135,13 +135,13 @@ println(f"  Accuracy delta: {abs_diff} samples ({significance}%)")
 
 if correct_a > correct_b {
     println(f"  WINNER: Model A (+{abs_diff} correct)")
-    let _logged = log_to_file(logpath, f"WINNER=A delta={abs_diff}")
+    let _logged = log_to_file(logpath.clone(), f"WINNER=A delta={abs_diff}")
 } else if correct_b > correct_a {
     println(f"  WINNER: Model B (+{abs_diff} correct)")
-    let _logged = log_to_file(logpath, f"WINNER=B delta={abs_diff}")
+    let _logged = log_to_file(logpath.clone(), f"WINNER=B delta={abs_diff}")
 } else {
     println("  RESULT: Statistical tie")
-    let _logged = log_to_file(logpath, "WINNER=TIE")
+    let _logged = log_to_file(logpath.clone(), "WINNER=TIE")
 }
 
 // Latency comparison

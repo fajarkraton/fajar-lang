@@ -30,11 +30,11 @@ let mut model_version = 1
 cache_set("model_version", to_string(model_version))
 
 let _saved = model_save(model_path, f"hotreload_v{model_version}", init_w)
-let mut known_size = file_size(model_path)
+let mut known_size = file_size(model_path.clone())
 
 println(f"Loaded model v{model_version}")
 println(f"Model file: {known_size} bytes")
-log_to_file(logpath, f"LOAD version={model_version}")
+log_to_file(logpath.clone(), f"LOAD version={model_version}")
 println("")
 
 // --- Inference loop with hot-reload check ---
@@ -49,7 +49,7 @@ while cycle < max_cycles {
         model_version = model_version + 1
         known_size = current_size
         cache_set("model_version", to_string(model_version))
-        log_to_file(logpath, f"RELOAD cycle={cycle} version={model_version}")
+        log_to_file(logpath.clone(), f"RELOAD cycle={cycle} version={model_version}")
         println(f"  [{cycle}] HOT-RELOAD -> v{model_version} ({known_size} bytes)")
     } else {
         println(f"  [{cycle}] No update detected")

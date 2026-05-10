@@ -65,12 +65,12 @@ while cmd_id < total_cmds {
     }
 
     // Format and "send"
-    let packet = format_command(cmd_name, cmd_id)
+    let packet = format_command(cmd_name.clone(), cmd_id)
     println(f"  TX [{cmd_id}]: {packet}")
 
     // "Receive" response
     let response = simulate_mcu_response(cmd_name)
-    let parsed = parse_response(response)
+    let parsed = parse_response(response.clone())
     println(f"  RX [{cmd_id}]: {parsed}")
 
     // Log transaction

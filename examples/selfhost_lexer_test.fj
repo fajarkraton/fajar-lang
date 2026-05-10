@@ -106,14 +106,14 @@ fn tokenize_simple(source: str) -> [i64] {
         }
 
         // Numbers
-        if is_digit_str(c) {
+        if is_digit_str(c.clone()) {
             while pos < n && is_digit_str(source.substring(pos, pos + 1)) { pos = pos + 1 }
             tokens = push(tokens, 130)
             continue
         }
 
         // Strings
-        if c == "\"" {
+        if c.clone() == "\"" {
             pos = pos + 1
             while pos < n && source.substring(pos, pos + 1) != "\"" { pos = pos + 1 }
             pos = pos + 1
@@ -122,7 +122,7 @@ fn tokenize_simple(source: str) -> [i64] {
         }
 
         // Identifiers/keywords
-        if is_alpha_str(c) {
+        if is_alpha_str(c.clone()) {
             let start = pos
             while pos < n && is_alnum_str(source.substring(pos, pos + 1)) { pos = pos + 1 }
             let word = source.substring(start, pos)
@@ -132,21 +132,21 @@ fn tokenize_simple(source: str) -> [i64] {
         }
 
         // Operators and punctuation
-        if c == "(" { tokens = push(tokens, 110); pos = pos + 1; continue }
-        if c == ")" { tokens = push(tokens, 111); pos = pos + 1; continue }
-        if c == "{" { tokens = push(tokens, 112); pos = pos + 1; continue }
-        if c == "}" { tokens = push(tokens, 113); pos = pos + 1; continue }
-        if c == "+" { tokens = push(tokens, 70); pos = pos + 1; continue }
-        if c == "*" { tokens = push(tokens, 72); pos = pos + 1; continue }
-        if c == "," { tokens = push(tokens, 119); pos = pos + 1; continue }
-        if c == ":" { tokens = push(tokens, 118); pos = pos + 1; continue }
-        if c == "=" {
+        if c.clone() == "(" { tokens = push(tokens, 110); pos = pos + 1; continue }
+        if c.clone() == ")" { tokens = push(tokens, 111); pos = pos + 1; continue }
+        if c.clone() == "{" { tokens = push(tokens, 112); pos = pos + 1; continue }
+        if c.clone() == "}" { tokens = push(tokens, 113); pos = pos + 1; continue }
+        if c.clone() == "+" { tokens = push(tokens, 70); pos = pos + 1; continue }
+        if c.clone() == "*" { tokens = push(tokens, 72); pos = pos + 1; continue }
+        if c.clone() == "," { tokens = push(tokens, 119); pos = pos + 1; continue }
+        if c.clone() == ":" { tokens = push(tokens, 118); pos = pos + 1; continue }
+        if c.clone() == "=" {
             if pos + 1 < n && source.substring(pos + 1, pos + 2) == "=" {
                 tokens = push(tokens, 76); pos = pos + 2; continue
             }
             tokens = push(tokens, 91); pos = pos + 1; continue
         }
-        if c == "-" {
+        if c.clone() == "-" {
             if pos + 1 < n && source.substring(pos + 1, pos + 2) == ">" {
                 tokens = push(tokens, 121); pos = pos + 2; continue
             }
@@ -171,7 +171,7 @@ fn main() {
 
     // Test 1: Simple function
     let src1 = "fn add(a: i64, b: i64) -> i64 { a + b }"
-    let tokens1 = tokenize_simple(src1)
+    let tokens1 = tokenize_simple(src1.clone())
     println(f"Test 1: \"{src1}\"")
     println(f"  Tokens: {len(tokens1)}")
 
@@ -189,7 +189,7 @@ fn main() {
 
     // Test 2: Let binding
     let src2 = "let mut x = 42"
-    let tokens2 = tokenize_simple(src2)
+    let tokens2 = tokenize_simple(src2.clone())
     println(f"\nTest 2: \"{src2}\"")
     println(f"  Tokens: {len(tokens2)}")
     assert(len(tokens2) == 5)
@@ -202,7 +202,7 @@ fn main() {
 
     // Test 3: If-else
     let src3 = "if x == 0 { true } else { false }"
-    let tokens3 = tokenize_simple(src3)
+    let tokens3 = tokenize_simple(src3.clone())
     println(f"\nTest 3: \"{src3}\"")
     println(f"  Tokens: {len(tokens3)}")
     assert(tokens3[0] == 1)    // if

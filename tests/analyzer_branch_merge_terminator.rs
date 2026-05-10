@@ -131,10 +131,9 @@ fn only_else_branch_terminates_then_state_propagates() {
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn default_mode_pre_phase2_arrays_still_copy() {
-    // Per pre-Phase-2 contract: arrays are Copy in default (lenient) mode.
-    // `let b = a; len(a)` MUST analyze cleanly. E3 doesn't activate
-    // ME001/SE024 in default mode.
+fn default_mode_d_full_arrays_are_affine() {
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): default mode is now full-strict.
+    // `let _b = a` consumes a; `len(a)` fires SE024.
     let src = r#"
         fn main() {
             let a: [i64] = [1, 2, 3]
@@ -143,10 +142,7 @@ fn default_mode_pre_phase2_arrays_still_copy() {
         }
     "#;
     let result = analyze_default(src);
-    assert!(
-        result.is_ok(),
-        "expected lenient-mode array reuse to analyze OK, got: {result:#?}"
-    );
+    assert!(result.is_err(), "expected SE024 under D-FULL default-on");
 }
 
 // ════════════════════════════════════════════════════════════════════════

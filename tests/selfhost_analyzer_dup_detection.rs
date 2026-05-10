@@ -34,9 +34,9 @@ fn run_driver(src: &str) -> Vec<String> {
         r#"
 fn main() {{
     let src = "{escaped}"
-    let spans = tokenize_with_spans(src)
+    let spans = tokenize_with_spans(src.clone())
     let state = analyze_tokens_with_spans(spans, src)
-    let n = error_count(state)
+    let n = error_count(state.clone())
     println(to_string(n))
     if n >= 1 {{
         println(format_error(state.errors[0], state.error_names[0]))

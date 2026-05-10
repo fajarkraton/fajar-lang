@@ -2759,12 +2759,12 @@ fn s44_self_hosted_lexer_fn_definition_token_count() {
 
 #[test]
 fn s44_string_copy_semantics_no_move_error() {
-    // Verify strings are Copy (no ME001 when reusing a string variable)
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): str is affine; .clone() preserves x.
     let src = r#"
         fn check(s: str) -> str { s }
         fn main() -> void {
             let x = "hello"
-            let a = check(x)
+            let a = check(x.clone())
             let b = check(x)
             println(a)
             println(b)
@@ -9552,13 +9552,13 @@ fn h2_file_redirect_truncate_vs_append() {
 
 #[test]
 fn h2_combined_redirect() {
-    // "cmd < in.txt > out.txt" — detect both redirects
+    // FJARR_LEAK Phase 2 D-FULL (v35.5.0): str is affine; .clone() preserves cmd.
     let src = r#"
         fn has_input(cmd: str) -> bool { cmd.contains("<") }
         fn has_output(cmd: str) -> bool { cmd.contains(">") }
         fn main() -> void {
             let cmd = "sort < input.txt > output.txt"
-            println(has_input(cmd))
+            println(has_input(cmd.clone()))
             println(has_output(cmd))
             // Only output
             println(has_input("echo > file"))

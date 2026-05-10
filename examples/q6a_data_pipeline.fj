@@ -124,7 +124,7 @@ while win < num_windows {
     println(f"  W{win}     | {mean} | {variance} | {trend}")
 
     // --- Stage 4: Store ---
-    log_to_file(logpath, f"window={win} mean={mean} var={variance} trend={trend}")
+    log_to_file(logpath.clone(), f"window={win} mean={mean} var={variance} trend={trend}")
     store_count = store_count + 1
 
     win = win + 1

@@ -27,7 +27,7 @@ fn main() {
     // Loopback test: write bytes and read them back
     println("=== Loopback Test ===")
     let test_msg = "Hello from Fajar Lang!"
-    uart_write_str(port, test_msg)
+    uart_write_str(port, test_msg.clone())
     println("  TX: " + test_msg)
 
     // Read back the bytes (simulation: reads from TX buffer)

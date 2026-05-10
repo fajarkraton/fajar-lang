@@ -226,9 +226,9 @@ fn v3_profiler_pipeline() {
     let result = run_ok(
         r#"
         let kv = from_data([1.0, 100.0, 0.5, 0.1, 2.0, 0.01, 0.3, 50.0], [2, 4])
-        let cv = channel_cv(kv, 0)
-        let sr = svd_ratio(kv)
-        let kurt = kurtosis_axis(kv, 0)
+        let cv = channel_cv(kv.clone(), 0)
+        let sr = svd_ratio(kv.clone())
+        let kurt = kurtosis_axis(kv.clone(), 0)
         let skew = skewness_axis(kv, 0)
         // Simulate strategy selection
         let strategy = if cv > 2.0 { "KIVI" } else { if sr > 5.0 { "PCA" } else { "Hadamard" } }

@@ -29,7 +29,7 @@ let broker_log = "/tmp/q6a_mqtt.log"
 
 // Read optional config from environment
 let _interval_env = env_var("FJ_MQTT_INTERVAL")
-let topic_prefix = make_topic(device_id, "telemetry")
+let topic_prefix = make_topic(device_id.clone(), "telemetry")
 
 println(f"Device ID : {device_id}")
 println(f"Topic     : {topic_prefix}")
@@ -46,7 +46,7 @@ while tick < max_ticks {
     let msg = f"[{tick}] {topic_prefix} -> {payload}"
 
     // "Publish" by writing to log (simulates MQTT broker)
-    log_to_file(broker_log, msg)
+    log_to_file(broker_log.clone(), msg.clone())
     println(f"  PUB {msg}")
 
     tick = tick + 1

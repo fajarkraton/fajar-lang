@@ -103,12 +103,12 @@ while req < total_requests {
         }
     }
 
-    let authed = authenticate(token)
+    let authed = authenticate(token.clone())
 
     if authed {
         // Step 4: Check session cache for repeated requests
         let cache_key = f"tls_{client_id}"
-        let cached = cache_get(cache_key)
+        let cached = cache_get(cache_key.clone())
 
         if len(cached) > 0 {
             // Cache hit

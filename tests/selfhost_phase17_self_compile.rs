@@ -77,7 +77,7 @@ fn main() {{
         }}
     }}
     let ast = parse_to_ast(src)
-    let c_src = emit_program(ast)
+    let c_src = emit_program(ast.clone())
     let _ = write_file("/tmp/{label}_self_compile.c", c_src)
     println(f"AST size: {{to_int(len(ast))}}")
 }}
@@ -173,7 +173,7 @@ fn main() {
         }
     }
     let ast = parse_to_ast(src)
-    let c_src = emit_program(ast)
+    let c_src = emit_program(ast.clone())
     let _ = write_file("/tmp/parser_ast_self_compile.c", c_src)
     println(f"AST size: {to_int(len(ast))}")
 }
@@ -314,7 +314,7 @@ fn main() {
     let driver_src = match driver_src_r { Ok(c) => c, Err(_) => { println("codegen_driver read failed"); return } }
     let combined = concat!(codegen_src, "\n", parser_src, "\n", driver_src)
     let ast = parse_to_ast(combined)
-    let c_src = emit_program(ast)
+    let c_src = emit_program(ast.clone())
     let _ = write_file("/tmp/all_three_phase17_self_compile.c", c_src)
     println(f"AST size: {to_int(len(ast))}")
 }
@@ -464,7 +464,7 @@ fn main() {
     let main_src = match main_src_r { Ok(c) => c, Err(_) => { println("selfhost_main read failed"); return } }
     let combined = concat!(codegen_src, "\n", parser_src, "\n", driver_src, "\n", main_src)
     let ast = parse_to_ast(combined)
-    let c_src = emit_program(ast)
+    let c_src = emit_program(ast.clone())
     let _ = write_file("/tmp/fjc_triple_stage1.c", c_src)
     println(f"AST size: {to_int(len(ast))}")
 }

@@ -32,18 +32,20 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.2.0, 2026-05-08 — FJARR_LEAK Phase 2 D-LITE: `[T]` affine via opt-in `--strict-ownership`)
+### Completion Status (v35.5.0, 2026-05-10 — FJARR_LEAK Phase 2 D-FULL: full-strict default-on)
 
 **54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero
-stubs. 39 CLI subcommands. **FJARR_LEAK Phase 2 D-LITE CLOSED**
-(v35.2.0): SE024 dispatch shim via existing `--strict-ownership`
-flag. Default mode unchanged; strict mode fires SE024 on `[T]`
-use-after-move. Pivoted from 14h Strategy D cascade to ~7h D-LITE
-per empirical scope-discovery. 4 standalone correctness ships: E3
-branch-merge analysis, E5 `_fj_arr_clone` preamble, E4 `.clone()`
-end-to-end, E1.5 `MoveTracker::reset()`. **Phase 1** (v35.1.0):
-arena migration; 2.73 MB → **0 bytes lost** ✅. Stage 2 byte-equality
-preserved through both phases.
+stubs. 39 CLI subcommands. **FJARR_LEAK Phase 2 D-FULL CLOSED**
+(v35.5.0): default-on full-strict ownership semantics. All non-primitive
+types (str/[T]/struct/enum/tensor/quantized) are Move; reuse requires
+`.clone()`. Closes Compass §4.4 "@safe sebagai default". COW runtime
+in C (`_FjArr` refcount + Copy-on-Write grow); O(1) interpreter clone
+via Rc/Arc-share. 19 Q6A examples + 13 integration suites + 5 lib
+tests migrated to new contract. Stage 2 byte-equality preserved.
+**Phase 2 D-LITE** (v35.2.0): opt-in via `--strict-ownership` (now
+no-op since default = strict). **Phase 1** (v35.1.0): arena migration;
+2.73 MB → **0 bytes lost** ✅. Stage 2 byte-equality preserved through
+all three FJARR_LEAK phases.
 **SELF-HOST PHASE 18 CALL_INDEX CLOSED** (2026-05-07, commit `9c9ff2a8`):
 silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved per D1.A +
 D2.A + D3.B; 6 new P-tests + pre-push regression hook. **FAJAR_LANG_

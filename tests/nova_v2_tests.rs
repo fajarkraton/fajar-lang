@@ -1571,7 +1571,7 @@ fn v14_n14_1_kernel_complex_struct() {
         fn is_readable(r: MemRegion) -> bool { (r.flags & 1) == 1 }
         fn is_writable(r: MemRegion) -> bool { (r.flags & 2) == 2 }
         let region = MemRegion { base: 0x1000, size: 4096, flags: 3 }
-        assert_eq(is_readable(region), true)
+        assert_eq(is_readable(region.clone()), true)
         assert_eq(is_writable(region), true)
         "#,
     );
