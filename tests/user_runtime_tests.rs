@@ -236,13 +236,21 @@ fn safe_cannot_port_outb() {
 }
 
 #[test]
-fn safe_cannot_call_kernel_fn() {
+fn d_alpha_safe_can_call_kernel_fn() {
+    // D-α (2026-05-10): @safe IS the ergonomic bridge layer per Compass §4.4
+    // + CLAUDE.md §5.3 + the §5.4 worked example. SE021 (KernelCallInSafe)
+    // emission was removed in commit ede47e5b. This was previously named
+    // safe_cannot_call_kernel_fn and asserted is_err(); D-α inverts it.
+    // See docs/decisions/2026-05-10-default-safe-bridge.md.
     let tokens =
-        fajar_lang::lexer::tokenize("@kernel fn hw() -> i64 { 0 }\n@safe fn bad() { hw() }")
+        fajar_lang::lexer::tokenize("@kernel fn hw() -> i64 { 0 }\n@safe fn good() { hw() }")
             .unwrap();
     let program = fajar_lang::parser::parse(tokens).unwrap();
     let result = fajar_lang::analyzer::analyze(&program);
-    assert!(result.is_err());
+    assert!(
+        result.is_ok(),
+        "expected D-α @safe→@kernel OK, got: {result:?}"
+    );
 }
 
 // ════════════════════════════════════════════════════════════════════════
