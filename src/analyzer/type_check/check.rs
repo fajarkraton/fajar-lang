@@ -1976,21 +1976,18 @@ impl TypeChecker {
             }
         }
 
-        // @safe context: cannot access hardware builtins (microkernel isolation)
+        // @safe context: cannot access hardware builtins (microkernel isolation).
+        // Per docs/decisions/2026-05-10-default-safe-bridge.md (D-α), @safe IS
+        // permitted to call @kernel and @device functions directly — it is the
+        // ergonomic bridge layer per Compass §4.4 + CLAUDE.md §5.3 + the §5.4
+        // worked `bridge() -> Action` example. Only direct hardware/OS builtin
+        // access is blocked.
         let in_safe = self.symbols.is_inside_safe();
         if in_safe {
             // SE020: @safe cannot use hardware/OS builtins
             if self.safe_blocked_builtins.contains(callee_name) {
                 self.errors
                     .push(SemanticError::HardwareAccessInSafe { span });
-            }
-            // SE021: @safe cannot call @kernel functions directly
-            if self.kernel_fns.contains(callee_name) {
-                self.errors.push(SemanticError::KernelCallInSafe { span });
-            }
-            // SE022: @safe cannot call @device functions directly — use IPC
-            if self.device_fns.contains(callee_name) {
-                self.errors.push(SemanticError::DeviceCallInSafe { span });
             }
         }
     }

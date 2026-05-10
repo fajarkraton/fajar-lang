@@ -243,42 +243,43 @@ fn se020_proc_create() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 2. SE021: @safe cannot call @kernel functions
+// 2. D-α (2026-05-10): @safe IS the ergonomic bridge — CAN call @kernel
+//    and @device fns. See docs/decisions/2026-05-10-default-safe-bridge.md.
+//    Replaces previously-firing SE021/SE022 tests for these patterns.
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn se021_safe_calls_kernel() {
-    expect_error(
-        "@kernel fn hw_read() -> i64 { 0 }\n@safe fn bad() { hw_read() }",
-        "SE021",
-    );
+fn d_alpha_safe_can_call_kernel() {
+    // Was se021_safe_calls_kernel — D-α inverts the assertion.
+    expect_ok("@kernel fn hw_read() -> i64 { 0 }\n@safe fn good() -> i64 { hw_read() }");
 }
 
 #[test]
-fn se021_safe_calls_kernel_with_return() {
-    expect_error(
-        "@kernel fn get_cr3() -> i64 { 0 }\n@safe fn bad() -> i64 { get_cr3() }",
-        "SE021",
-    );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// 3. SE022: @safe cannot call @device functions
-// ════════════════════════════════════════════════════════════════════════
-
-#[test]
-fn se022_safe_calls_device() {
-    expect_error(
-        "@device fn inference() -> i64 { 0 }\n@safe fn bad() { inference() }",
-        "SE022",
-    );
+fn d_alpha_safe_can_call_kernel_with_return() {
+    // Was se021_safe_calls_kernel_with_return — D-α inverts.
+    expect_ok("@kernel fn get_cr3() -> i64 { 0 }\n@safe fn good() -> i64 { get_cr3() }");
 }
 
 #[test]
-fn se022_safe_calls_device_with_return() {
-    expect_error(
-        "@device fn classify() -> i64 { 42 }\n@safe fn bad() -> i64 { classify() }",
-        "SE022",
+fn d_alpha_safe_can_call_device() {
+    // Was se022_safe_calls_device — D-α inverts.
+    expect_ok("@device fn inference() -> i64 { 0 }\n@safe fn good() -> i64 { inference() }");
+}
+
+#[test]
+fn d_alpha_safe_can_call_device_with_return() {
+    // Was se022_safe_calls_device_with_return — D-α inverts.
+    expect_ok("@device fn classify() -> i64 { 42 }\n@safe fn good() -> i64 { classify() }");
+}
+
+#[test]
+fn d_alpha_safe_bridges_both_kernel_and_device() {
+    // The Compass §5.4 / CLAUDE.md §5.4 worked example — the canonical
+    // demonstration that D-α was always the design intent.
+    expect_ok(
+        "@kernel fn read_sensor() -> i64 { 42 }\n\
+         @device fn infer(x: i64) -> i64 { x }\n\
+         @safe fn bridge() -> i64 { infer(read_sensor()) }",
     );
 }
 

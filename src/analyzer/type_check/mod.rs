@@ -844,20 +844,6 @@ pub enum SemanticError {
         span: Span,
     },
 
-    /// SE021: Direct @kernel function call from @safe context.
-    #[error("SE021: cannot call @kernel function from @safe context — use syscall")]
-    KernelCallInSafe {
-        /// Source location.
-        span: Span,
-    },
-
-    /// SE022: Direct @device function call from @safe context.
-    #[error("SE022: cannot call @device function from @safe context — use IPC")]
-    DeviceCallInSafe {
-        /// Source location.
-        span: Span,
-    },
-
     /// KE005: Inline assembly in @safe context.
     #[error("KE005: inline assembly not allowed in @safe context")]
     AsmInSafeContext {
@@ -1205,8 +1191,6 @@ impl SemanticError {
             | SemanticError::RawPointerInDevice { span, .. }
             | SemanticError::KernelCallInDevice { span, .. }
             | SemanticError::HardwareAccessInSafe { span, .. }
-            | SemanticError::KernelCallInSafe { span, .. }
-            | SemanticError::DeviceCallInSafe { span, .. }
             | SemanticError::AsmInSafeContext { span, .. }
             | SemanticError::AsmInDeviceContext { span, .. }
             | SemanticError::AwaitOutsideAsync { span, .. }

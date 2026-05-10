@@ -1526,7 +1526,9 @@ fn cmd_call_graph(path: &std::path::Path) {
         device_fns.len(),
         safe_fns.len()
     );
-    println!("Context enforcement: checked by analyzer (SE020/SE021/SE022)");
+    println!(
+        "Context enforcement: checked by analyzer (SE020 for @safe hw access; KE/DE codes for @kernel/@device strict boundaries)"
+    );
 }
 
 fn cmd_check(path: &PathBuf) -> ExitCode {

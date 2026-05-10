@@ -337,8 +337,6 @@ impl FjDiagnostic {
             SemanticError::TraitMethodSignatureMismatch { .. } => "SE016",
             SemanticError::TensorShapeMismatch { .. } => "TE001",
             SemanticError::HardwareAccessInSafe { .. } => "SE020",
-            SemanticError::KernelCallInSafe { .. } => "SE021",
-            SemanticError::DeviceCallInSafe { .. } => "SE022",
             SemanticError::AsmInSafeContext { .. } => "KE005",
             SemanticError::AsmInDeviceContext { .. } => "KE006",
             SemanticError::AwaitOutsideAsync { .. } => "SE017",
