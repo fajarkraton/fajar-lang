@@ -1655,14 +1655,36 @@ impl TypeChecker {
         .collect();
 
         // @safe blocked builtins = os_builtins + volatile + CR3/CR2 + buffer LE/BE
-        // — MINUS pure-function byte-level string ops which have zero hardware
-        // access (they read from a Rust-managed `str`). Per Phase A.4 / D-α:
-        // `str_byte_at` and `str_len` are needed by self-host stdlib parsers
-        // running in default-@safe context; categorizing them as hw access
-        // mis-rejects pure-functional code.
+        // — MINUS names whose semantics are purely-functional (no hardware
+        // access, no global mutable state, no kernel side effect). These were
+        // inherited from os_builtins because they originated in OS-prep phases
+        // but are language-level operations on language-managed values.
+        //
+        // Audit per `docs/SAFE_BLOCKED_BUILTINS_AUDIT.md` (2026-05-10).
+        // Carve-out criterion: (1) no real-world side effect, (2) operates on
+        // language-managed values (not raw memory or kernel state),
+        // (3) needed by safe code legitimately.
+        //
+        // Carved-out names:
+        // - `str_byte_at`, `str_len`           : pure Rust-`str` byte ops (v35.6.0)
+        // - `tensor_workload_hint`             : pure FLOP-count estimator math
+        // - `cap_new`, `cap_unwrap`, `cap_is_valid`: language-level Cap<T> type ops
+        //                                          (analogous to Option's Some/None)
+        //
+        // KEPT-BLOCKED (despite read-only semantics): rdtsc, cpuid_*, read_cr*,
+        // read_msr, time_since_boot, timer_get_freq, sys_cpu_temp, sys_ram_*,
+        // get_current_pid, get_proc_count, proc_self, proc_table_addr —
+        // these read privileged CPU/kernel state and information leaks are
+        // conservatively a @safe violation. Native codegen also emits real
+        // hw instructions for these, so they are NOT pure-functional in the
+        // codegen-output sense even if the language-level effect is read-only.
         let mut safe_blocked_builtins = os_builtins.clone();
         safe_blocked_builtins.remove("str_byte_at");
         safe_blocked_builtins.remove("str_len");
+        safe_blocked_builtins.remove("tensor_workload_hint");
+        safe_blocked_builtins.remove("cap_new");
+        safe_blocked_builtins.remove("cap_unwrap");
+        safe_blocked_builtins.remove("cap_is_valid");
         for extra in [
             "volatile_read",
             "volatile_write",
