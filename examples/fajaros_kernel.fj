@@ -13,7 +13,7 @@ fn print_ok(msg: str) {
     println("  [OK] " + msg)
 }
 
-fn main() {
+@unsafe fn main() {
     print_header("FajarOS v3.0 Surya — Boot Sequence")
     println("")
 

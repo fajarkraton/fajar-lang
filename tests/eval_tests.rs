@@ -4331,7 +4331,7 @@ fn cast_i32_sign_extension() {
 #[test]
 fn pointer_add_offset() {
     let source = r#"
-fn main() {
+@kernel fn main() {
     let p = mem_alloc(32, 8)
     mem_write_u64(p, 100)
     let q = p + 8
@@ -4350,7 +4350,7 @@ fn main() {
 #[test]
 fn pointer_sub_offset() {
     let source = r#"
-fn main() {
+@kernel fn main() {
     let p = mem_alloc(32, 8)
     let q = p + 16
     let r = q - 16
@@ -4369,7 +4369,7 @@ fn main() {
 #[test]
 fn pointer_deref_read() {
     let source = r#"
-fn main() {
+@kernel fn main() {
     let p = mem_alloc(8, 8)
     mem_write_u64(p, 42)
     let val = *p
@@ -4384,7 +4384,7 @@ fn main() {
 #[test]
 fn pointer_deref_in_expression() {
     let source = r#"
-fn main() {
+@kernel fn main() {
     let p = mem_alloc(8, 8)
     mem_write_u64(p, 10)
     let val = *p + 5
@@ -5789,7 +5789,7 @@ fn hal_gpio_blinky_interpreter() {
     // Tests Phase 3 builtins (gpio_config/set_output/set_input/set_pull)
     // NOT the v2.0 builtins (gpio_open/write/read which require open lifecycle)
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let r1 = gpio_config(96, 0, 1, 0)
             println(r1)
             let r2 = gpio_set_output(42)
@@ -5810,7 +5810,7 @@ fn hal_gpio_blinky_interpreter() {
 #[test]
 fn hal_uart_init_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let r = uart_init(0, 115200)
             println(r)
             let avail = uart_available(0)
@@ -5824,7 +5824,7 @@ fn hal_uart_init_interpreter() {
 #[test]
 fn hal_spi_i2c_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let r1 = spi_init(0, 1000000)
             let r2 = i2c_init(0, 400000)
             let cs = spi_cs_set(0, 0, 1)
@@ -5842,7 +5842,7 @@ fn hal_spi_i2c_interpreter() {
 #[test]
 fn hal_timer_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let freq = timer_get_freq()
             println(freq > 0)
             timer_mark_boot()
@@ -5858,7 +5858,7 @@ fn hal_timer_interpreter() {
 #[test]
 fn hal_dma_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let s = dma_status(3)
             println(s)
             dma_barrier()
@@ -5916,7 +5916,7 @@ fn fajaros_shell_example() {
 #[test]
 fn hal_display_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             fb_init(800, 600)
             let w = fb_width()
             let h = fb_height()
@@ -5934,7 +5934,7 @@ fn hal_display_interpreter() {
 #[test]
 fn hal_process_interpreter() {
     let src = r#"
-        fn main() {
+        @kernel fn main() {
             let me = proc_self()
             println(me)
             let child = proc_spawn(0)

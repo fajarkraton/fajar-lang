@@ -3,7 +3,7 @@
 // Demonstrates Phase 3 HAL builtins: GPIO, UART, SPI, I2C, Timer, DMA.
 // Runs in interpreter (simulation) and native codegen (bare-metal or JIT).
 
-fn main() {
+@unsafe fn main() {
     println("=== FajarOS HAL Driver Demo ===")
 
     // ── GPIO ──

@@ -28,7 +28,7 @@ fn classify_person(_frame_id: i64) -> str {
     }
 }
 
-fn trigger_buzzer(duration_ms: i64) -> bool {
+@kernel fn trigger_buzzer(duration_ms: i64) -> bool {
     // Simulate GPIO buzzer trigger
     // On real hardware: gpio_write(BUZZER_PIN, 1) → sleep → gpio_write(BUZZER_PIN, 0)
     println(f"  BUZZER: on for {duration_ms}ms")

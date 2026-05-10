@@ -21,7 +21,7 @@ fn cmd_help() {
     println("  halt       — Power off")
 }
 
-fn cmd_sysinfo() {
+@unsafe fn cmd_sysinfo() {
     println("FajarOS v3.0 Surya")
     println("Board:  Radxa Dragon Q6A (QCS6490)")
     println("CPU:    Kryo 670 (4x A78 + 4x A55)")
@@ -38,17 +38,17 @@ fn cmd_sysinfo() {
     }
 }
 
-fn cmd_gpio(pin: i64) {
+@unsafe fn cmd_gpio(pin: i64) {
     gpio_set_output(pin)
     println("GPIO" + to_string(pin) + ": toggled")
 }
 
-fn cmd_temp() {
+@unsafe fn cmd_temp() {
     let t = sys_cpu_temp()
     println(to_string(t / 1000) + "." + to_string((t % 1000) / 100) + " C")
 }
 
-fn cmd_mem() {
+@unsafe fn cmd_mem() {
     let total = sys_ram_total()
     let free = sys_ram_free()
     let used = total - free
@@ -58,7 +58,7 @@ fn cmd_mem() {
     println("Free:   " + to_string(free / (1024 * 1024)) + " MB")
 }
 
-fn cmd_net() {
+@unsafe fn cmd_net() {
     let r = eth_init()
     if r == 0 {
         println("eth0: link up (1000 Mbps)")
@@ -67,7 +67,7 @@ fn cmd_net() {
     }
 }
 
-fn cmd_ps() {
+@unsafe fn cmd_ps() {
     let me = proc_self()
     println("  PID  STATE    NAME")
     println("    0  idle     [idle]")
@@ -75,7 +75,7 @@ fn cmd_ps() {
     println("    " + to_string(me) + "  running  fjsh")
 }
 
-fn cmd_uptime() {
+@unsafe fn cmd_uptime() {
     let ms = time_since_boot()
     let secs = ms / 1000
     let mins = secs / 60
@@ -109,7 +109,7 @@ fn run_command(cmd: str) {
     }
 }
 
-fn main() {
+@unsafe fn main() {
     // Init hardware
     fb_init(1920, 1080)
     uart_init(0, 115200)
