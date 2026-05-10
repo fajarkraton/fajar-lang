@@ -192,6 +192,11 @@ impl SymbolTable {
     }
 
     /// Returns `true` if currently inside a function scope (at any nesting level).
+    ///
+    /// Recognizes every scope kind that represents a function body, including
+    /// the context-annotation kinds (`Safe`, `Unsafe`, `Gpu`). Required so
+    /// `return` validation, NLL borrow tracking, and similar gates fire on
+    /// every kind of function — not just the un-annotated default.
     pub fn is_inside_function(&self) -> bool {
         self.scopes.iter().rev().any(|s| {
             matches!(
@@ -200,6 +205,9 @@ impl SymbolTable {
                     | ScopeKind::Kernel
                     | ScopeKind::Device
                     | ScopeKind::Npu
+                    | ScopeKind::Gpu
+                    | ScopeKind::Safe
+                    | ScopeKind::Unsafe
                     | ScopeKind::AsyncFn
             )
         })
