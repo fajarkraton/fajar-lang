@@ -36,8 +36,12 @@ for compatibility (default mode is now what strict mode used to be).
 only (O(1)) instead of deep memcpy. `_fj_arr_grow` does Copy-on-Write deep
 copy when `rc > 1` so shared clones don't see each other's mutations. Without
 COW, `.clone()` cascades caused OOM (>26 GB) at chain bootstrap. With COW,
-phase17 self-compile completes in ~106s (baseline ~54s, 2× slowdown for full
-affine semantics).
+phase17 self-compile is **unchanged from v35.4.1 within noise**: ~50s parallel
+(default `cargo test`) / ~101–103s serial (`--test-threads=1`). D-FULL
+ownership semantics add ~0s overhead. *(Corrected 2026-05-10 EOS-27 — initial
+ship-note compared parallel-baseline against serial-post-ship and erroneously
+reported a 2× slowdown. See `docs/PHASE17_PERF_B0_FINDINGS.md` for the apples-
+to-apples reproduction at v35.4.1 vs v35.5.0.)*
 
 ### Interpreter `.clone()` recognition
 
