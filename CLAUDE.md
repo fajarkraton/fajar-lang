@@ -32,16 +32,24 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.5.0, 2026-05-10 — FJARR_LEAK Phase 2 D-FULL: full-strict default-on)
+### Completion Status (v35.6.0, 2026-05-10 — Compass §4.4 context-dimension closure)
 
 **54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero
-stubs. 39 CLI subcommands. **FJARR_LEAK Phase 2 D-FULL CLOSED**
-(v35.5.0): default-on full-strict ownership semantics. All non-primitive
-types (str/[T]/struct/enum/tensor/quantized) are Move; reuse requires
-`.clone()`. Closes Compass §4.4 "@safe sebagai default". COW runtime
-in C (`_FjArr` refcount + Copy-on-Write grow); O(1) interpreter clone
-via Rc/Arc-share. 19 Q6A examples + 13 integration suites + 5 lib
-tests migrated to new contract. Stage 2 byte-equality preserved.
+stubs. 39 CLI subcommands. **COMPASS §4.4 FULLY CLOSED**: v35.5.0
+closed it at the type-system dimension (affine D-FULL); **v35.6.0
+closes it at the context dimension** (`fn` without annotation = `@safe`
+microkernel-isolated by default). D-α decision: `@safe` is the
+ergonomic bridge layer (CAN call `@kernel` and `@device` directly per
+Compass §5.4). SE021/SE022 emission removed. `is_inside_function()`
+extended to all annotated kinds. `str_byte_at` + `str_len` carved out
+of `safe_blocked_builtins` (pure-functional byte-level ops; not hw).
+28 sites annotated across 8 files. Stage 2 byte-equality preserved.
+**FJARR_LEAK Phase 2 D-FULL CLOSED** (v35.5.0): default-on full-strict
+ownership semantics. All non-primitive types
+(str/[T]/struct/enum/tensor/quantized) are Move; reuse requires
+`.clone()`. COW runtime in C (`_FjArr` refcount + Copy-on-Write grow);
+O(1) interpreter clone via Rc/Arc-share. 19 Q6A examples + 13
+integration suites + 5 lib tests migrated to new contract.
 **Phase 2 D-LITE** (v35.2.0): opt-in via `--strict-ownership` (now
 no-op since default = strict). **Phase 1** (v35.1.0): arena migration;
 2.73 MB → **0 bytes lost** ✅. Stage 2 byte-equality preserved through
@@ -113,6 +121,8 @@ Tags:      v32.1.0 → v33.{0,1,2}.0 → v33.4.0..v33.8.0 → v34.{0..5.13} → 
            v35.1.0: 🎯 FJARR_LEAK Phase 1 (88 bytes/array → 0; arena copy-grow)
            v35.2.0: 🎯 FJARR_LEAK Phase 2 D-LITE (SE024 opt-in `--strict-ownership`)
            v35.4.1: ⚡ parser_ast.fj byte_at cascade (10-20× chain-bootstrap parse perf)
+           v35.5.0: 🔐 FJARR_LEAK Phase 2 D-FULL — affine semantics default-on
+           v35.6.0: 🛡️ Compass §4.4 context-dimension closure — @safe sebagai default
 
 Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_FINDINGS.md + docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md + docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md
@@ -124,6 +134,8 @@ Drift history → docs/FJARR_LEAK_PHASE_2_FINDINGS.md + docs/FJARR_LEAK_PHASE_1_
 
 | Version | Date | Highlight |
 |---|---|---|
+| **v35.6.0** "@safe default" | 2026-05-10 | 🛡️ Compass §4.4 closed at context dimension. `fn` without annotation = `@safe` (microkernel-isolated). D-α: `@safe` is ergonomic bridge — CAN call `@kernel` / `@device` (SE021/SE022 removed). 28 sites annotated. `str_byte_at`/`str_len` carved out of `safe_blocked_builtins` (pure-functional). Stage 2 byte-equality preserved. → KERNEL_MODE_PHASE_A_B0_FINDINGS + decisions/2026-05-10-default-safe-bridge. |
+| **v35.5.0** "FJARR_LEAK D-FULL" | 2026-05-10 | 🔐 Compass §4.4 closed at type-system dimension (affine semantics default-on). All non-primitive types Move; reuse → `.clone()`. COW `_FjArr` (rc+grow) prevents OOM at chain bootstrap. → FJARR_LEAK_PHASE_2_D_FULL_FINDINGS. |
 | **v35.4.1** "parser_ast cascade" | 2026-05-09 | ⚡ Closes v35.4.0 Phase 2 deferral. B0 #9: str_byte_at already existed in interpreter+analyzer+LLVM; only chain codegen wiring missing. Phase A wires _fj_str_byte_at into stdlib/codegen.fj; Phase B migrates 94 substring + 110 ASCII compares + 4 helpers in parser_ast.fj. 10-20× chain-bootstrap parse perf. → V35_4_1_BYTE_AT_B0_FINDINGS. |
 | **v35.4.0** "lexer cascade" | 2026-05-09 | ⚡ stdlib/lexer.fj → char_at + char literals (43 substring + 165 compares + 3 helpers; 5-10× ASCII perf). Phase 2 parser_ast.fj DEFERRED (char_at is codepoint-idx; parser uses byte-idx; needs byte_at). → V35_4_0_LEXER_PERF_B0_FINDINGS. |
 | **v35.2.3..v35.3.2** | 2026-05-09 | 🔐 Full crypto exposure (31 fns + RSA + Ed25519) + X25519-dalek fix + char_at analyzer Type::Char fix + TQ12.2 SQLite + lib cleanup. → V35_3_* + CQ1_4_RSA_B0_FINDINGS. |
@@ -725,5 +737,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 35.2 (**v35.2.0 FJARR_LEAK Phase 2 D-LITE 2026-05-08**: `[T]` affine semantics via opt-in `--strict-ownership` flag + SE024 dispatch shim; 4 standalone correctness ships (E3/E5/E4/E1.5); 26 self-host phases closed; 120 dedicated tests; ~45h cumulative across v33.4.0..v35.2.0). Predecessors v35.1.0 (FJARR_LEAK Phase 1 arena, 88 bytes/array → 0) + v35.0.0 (STAGE 2 SELF-HOST TRIPLE-TEST, fjc 140KB ELF self-compiles byte-identical, ~57× speedup). Quality gates: 18,152 total tests (7,629 lib + 10,489 integ + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge), 0 clippy / 0 fmt / 0 unwrap warnings. Tags v33.{0.0..2.0} + v34.{0..5.13} + v35.0.0 + v35.1.0 + v35.2.0. Source of truth: `docs/FJARR_LEAK_PHASE_2_FINDINGS.md` (v35.2.0) + `docs/FJARR_LEAK_PHASE_1_FINDINGS.md` (v35.1.0) + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` (v34..v35). Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-08*
+*CLAUDE.md Version: 35.6 (**v35.6.0 Compass §4.4 context-dimension closure 2026-05-10**: `fn` without annotation = `@safe` by default; D-α makes `@safe` the ergonomic bridge layer that can call `@kernel`/`@device` directly; SE021/SE022 emission removed; 28 sites annotated across 8 files; `str_byte_at`+`str_len` carved out of `safe_blocked_builtins`; Stage 2 byte-equality preserved through D-α + A.1 + A.2 + A.3 + A.4). Predecessors v35.5.0 (FJARR_LEAK Phase 2 D-FULL — type-system §4.4 closure) + v35.2.0 (D-LITE) + v35.1.0 (Phase 1 arena) + v35.0.0 (STAGE 2 SELF-HOST TRIPLE-TEST). Quality gates @ HEAD: 7,633 lib + 86/86 stage1_full + 4/4 phase17 byte-equality + full integ --no-fail-fast 0 failures + 149/149 context_safety + clippy/fmt clean. Tags v33.{0.0..2.0} + v34.{0..5.13} + v35.0.0..v35.6.0. Source of truth: `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/decisions/2026-05-10-default-safe-bridge.md` (v35.6.0) + `docs/FJARR_LEAK_PHASE_2_D_FULL_FINDINGS.md` (v35.5.0) + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` (v34..v35). Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-10*

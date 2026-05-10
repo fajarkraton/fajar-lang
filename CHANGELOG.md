@@ -2,6 +2,105 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [v35.6.0] — 2026-05-10 🛡️ Compass §4.4 context-dimension closure — @safe sebagai default — minor
+
+**The strategic compass §4.4 promise "@safe sebagai default" is now fully
+realized at every dimension.** v35.5.0 closed it at the *type-system*
+dimension (affine D-FULL — non-primitive types are Move by default).
+v35.6.0 closes it at the *context* dimension: **functions without a
+context annotation are now `@safe` by default**, not the permissive
+`Function` kind they used to default to.
+
+Practically: an unannotated `fn` body is now microkernel-isolated —
+hardware/OS builtins (`port_outb`, `mem_alloc`, `irq_register`, `fb_init`
+…) trigger SE020 unless the fn opts in via `@kernel` / `@unsafe`.
+Cross-context calls remain ergonomic: per the new D-α decision
+(`docs/decisions/2026-05-10-default-safe-bridge.md`), `@safe` MAY call
+`@kernel` and `@device` directly — it is the canonical bridge layer
+matching the §5.4 worked example.
+
+### Headline change
+
+```diff
+// src/analyzer/type_check/check.rs:160
+- _ => crate::analyzer::scope::ScopeKind::Function,  // permissive default
++ _ => crate::analyzer::scope::ScopeKind::Safe,       // microkernel-isolated default
+```
+
+### Phase-by-phase shipped in this release
+
+| Phase | Commit | What |
+|-------|--------|------|
+| **B0 + sub-B0** | `5d2d79da` + `a0a2083f` | Hands-on cascade probe — surfaced 4 root-cause buckets and the Compass-vs-code disagreement on @safe→@kernel calls |
+| **D1** | `26bfdd8b` | Decision file: D-α (relax analyzer to match Compass) chosen over D-β (tighten Compass) |
+| **A.1** | `629af4c6` | `is_inside_function()` extended to recognize `Safe` / `Unsafe` / `Gpu` scope kinds |
+| **A.2** | `ede47e5b` + `487a8c79` | D-α implementation: removed `KernelCallInSafe` / `DeviceCallInSafe` (SE021 / SE022) variants and 4 stale assertions |
+| **A.3 batch 1** | `ff1b629c` | 3 fb_* test sources annotated `@kernel` |
+| **A.3 batch 2** | `f91be569` | 15 eval_tests sources (4 pointer + 7 hal inline + 4 example .fj) annotated |
+| **A.3 batch 3** | `8a90a8ec` | Final 9 sites (Cap + tensor_workload + schedule_ai + p_all_features) |
+| **A.4** | `b5dab01a` | The flip itself + str_byte_at/str_len carve-out from safe_blocked_builtins |
+
+### Source carve-outs
+
+`str_byte_at` and `str_len` are now allowed in `@safe` context.
+Architecturally these are pure-functional byte-level string operations
+(zero hardware access); inheriting them from `os_builtins` into
+`safe_blocked_builtins` was a categorization error. The self-host
+stdlib parser (`stdlib/parser_ast.fj`, 93 `str_byte_at` call sites) needs
+them under the new default. Other os_builtins (`mem_*`, `port_*`,
+`irq_*`, `fb_*`, `kb_*`, `proc_*`, …) remain `safe_blocked_builtins`
+unchanged.
+
+### Migration impact
+
+For repository code: **28 sites annotated** across 8 files (3 fb_* + 11
+inline eval_tests + 4 example .fj + 9 final batch + 1 user_runtime
+follow-up + auto-fixes via context_safety_tests rename). Stdlib *.fj
+files required no annotation thanks to the str_byte_at carve-out and
+the absence of other hw builtin usage in the chain modules.
+
+For external code: the `--strict-ownership` flag is still a no-op
+(absorbed into D-FULL default in v35.5.0). No new flags. Any
+unannotated user fn that calls hw/OS builtins must now add
+`@kernel` / `@unsafe`. f-strings, struct ops, tensor ops, and pure
+logic are all unaffected.
+
+### D-α: @safe is the ergonomic bridge
+
+`@safe` no longer fires SE021 / SE022 on calls to `@kernel` / `@device`
+functions. The CLAUDE.md §5.3 enforcement table — which always said
+`@safe → @kernel` and `@safe → @device` are OK — now matches the
+analyzer. The §5.4 worked `bridge() -> Action` example compiles
+end-to-end.
+
+### Stats
+
+```
+Tests:     7,633 lib + 86/86 stage1_full + 4/4 phase17 (Stage 2
+           byte-equality preserved through D-α + A.1 + A.2 + A.3 + A.4)
+           + 149/149 context_safety (+1 D-α bridge regression test)
+           + full integ --tests --no-fail-fast: 0 failures
+LOC:       ~449,000 Rust (+15 net) | Binary 18 MB | MSRV 1.87
+Modules:   42 pub mods | 54 [x], 0 [sim]/[f]/[s]
+Quality:   0 clippy / 0 fmt warnings
+Tags:      v32.1.0 → v33.{0..2}.0 → v34.{0..5.13} → v35.0.0 → v35.1.0
+           → v35.2.0..3 → v35.3.0..2 → v35.4.0..1 → v35.5.0 → v35.6.0
+```
+
+### Source of truth
+
+- `docs/KERNEL_MODE_B0_FINDINGS.md` — initial scope audit
+- `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` — sub-B0 with full failure-bucket cascade analysis
+- `docs/decisions/2026-05-10-default-safe-bridge.md` — D-α decision proof
+- `docs/PHASE17_PERF_B0_FINDINGS.md` — companion v35.5.0 perf B0 (no-regression closure)
+
+### Effort variance
+
+Cumulative ~5h actual vs B0 estimate 4-7h: B0 1h, sub-B0 45min, D1
+10min, A.1 10min, A.2 30min, A.2 follow-up 10min, A.3 batches 75min
+combined, A.4 50min. A.4 alone landed +900% over its 5min estimate
+because of the str_byte_at architectural surface-fix detour.
+
 ## [v35.5.0] — 2026-05-10 🔐 FJARR_LEAK Phase 2 D-FULL — full-strict default-on — minor
 
 Closes Compass §4.4 "@safe sebagai default" for affine semantics. **All
