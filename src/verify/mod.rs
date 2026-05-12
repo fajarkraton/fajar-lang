@@ -1,47 +1,40 @@
-//! Formal Verification v2 — specification language, SMT solver, tensor shape proofs.
+//! Formal Verification — production surface only (post-2026-05-12 SMT-freeze).
 //!
-//! Enables safety-critical certification (DO-178C, ISO 26262) for embedded ML.
+//! Enables compile-time tensor-shape verification (via `tensor_verify`) and
+//! symbolic execution of verification conditions (via `symbolic` + `spec`).
 //!
-//! ## Production surface (post-2026-05-12 SMT-freeze)
+//! ## Production modules
 //!
-//! - `symbolic` — Symbolic execution engine (V1, production CLI)
-//! - `spec` — Verification-condition spec language (production CLI)
-//! - `tensor_verify` — Tensor shape verification (production analyzer)
+//! - `spec` — Verification-condition spec language (consumed by main.rs CLI step 3)
+//! - `symbolic` — Symbolic execution engine (consumed by main.rs CLI + analyzer)
+//! - `tensor_verify` — Tensor shape verification (consumed by analyzer/type_check)
 //!
-//! ## Test-only surface (pending Path C decision)
-//!
-//! - `certification` — DO-178C/ISO-26262 evidence generation (tests only)
-//! - `pipeline` — Verification pipeline glue (tests only)
-//! - `smt` — SMT solver bridge (tests only)
-//!
-//! ## 2026-05-12 — Path A + Path B SMT-freeze (Compass §5.1)
+//! ## 2026-05-12 — Path A + B + C SMT-freeze complete (Compass §5.1)
 //!
 //! Under Compass §5.1 "SMT verification (DO-178C) → Bekukan. Butuh tim
-//! untuk certification serius.", the following Sprint V1-V5 modules were
-//! removed as dead research surface (zero consumers anywhere in src/,
-//! tests/, examples/, benches/, stdlib/):
+//! untuk certification serius.", the entire SMT-verification research
+//! surface has been removed across three phases:
 //!
-//! Path A (commit `a2649182`):
-//! - `device_proofs` (V4, 1,121 LOC, 24 self-tests) — "All simulated, no real Z3"
+//! - **Path A** (commit `a2649182`): `device_proofs` (V4) — 1,121 LOC, 24 self-tests.
+//! - **Path B** (commit `6ab84dc9`): 6 zero-consumer modules — `kernel_proofs`
+//!   (V3), `proof_cache` (V5), `properties` (V2), `inference`, `theories`,
+//!   `benchmarks` — 7,116 LOC, 168 self-tests.
+//! - **Path C** (this commit): 3 test-only modules — `certification`, `pipeline`,
+//!   `smt` — 3,766 LOC + 90 self-tests + 18 test-consumer cleanups across
+//!   eval/mod.rs (12), feature_flag_tests.rs (3 cfg-gated), nova_v2_tests.rs (3).
+//!   Plus `smt = ["dep:z3"]` Cargo.toml feature flag removed.
 //!
-//! Path B (this commit):
-//! - `kernel_proofs` (V3, 987 LOC, 24 self-tests) — `@kernel` safety proofs
-//! - `properties` (V2, 1,194 LOC, 25 self-tests) — property language
-//! - `proof_cache` (V5, 1,239 LOC, 22 self-tests) — proof caching
-//! - `inference` (1,401 LOC, 36 self-tests)
-//! - `theories` (1,170 LOC, 30 self-tests) — SMT theories
-//! - `benchmarks` (1,125 LOC, 31 self-tests) — verify benchmarks
+//! **Cumulative SMT-freeze reclaim: ~12,003 LOC across 10 modules + ~280 tests.**
 //!
-//! See `docs/DEVICE_PROOFS_LOAD_BEARING_B0_FINDINGS.md` (systemic finding §5) +
-//! `docs/decisions/2026-05-12-{device-proofs,verify-path-b}-deletion.md`.
+//! See B0 audits: `docs/DEVICE_PROOFS_LOAD_BEARING_B0_FINDINGS.md` (systemic),
+//! `docs/VERIFY_PATH_C_LOAD_BEARING_B0_FINDINGS.md` (Path C).
+//! Decisions: `docs/decisions/2026-05-12-{device-proofs,verify-path-b,verify-path-c}-deletion.md`.
 //!
-//! Path C (deferred) would remove the 3 test-only modules above plus
-//! their test consumers in `eval/mod.rs`, `tests/feature_flag_tests.rs`,
-//! `tests/nova_v2_tests.rs`.
+//! Re-entry condition: Compass §5.1 SMT-verification verdict overturned by
+//! Fajar in a follow-up decision file + certification team commitment +
+//! Plan Hygiene §6.8 B0/plan/phased ship. Files recoverable via
+//! `git log --diff-filter=D -- src/verify/<name>.rs`.
 
-pub mod certification;
-pub mod pipeline;
-pub mod smt;
 pub mod spec;
 pub mod symbolic;
 pub mod tensor_verify;

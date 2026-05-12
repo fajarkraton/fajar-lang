@@ -54,9 +54,6 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }  # v35.3.1 (2026
 rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.26", optional = true }
 
-# V8 GC4: Real SMT solver
-z3 = { version = "0.12", optional = true }
-
 # V8 GC2: Real FFI (C++ via libclang, Python via pyo3)
 clang-sys = { version = "1.8", optional = true, features = ["clang_18_0", "runtime"] }
 pyo3 = { version = "0.24", optional = true, features = ["auto-initialize"] }
@@ -113,7 +110,6 @@ llvm = ["dep:inkwell"]
 tls = ["dep:rustls", "dep:webpki-roots"]
 cpp-ffi = ["dep:clang-sys"]
 python-ffi = ["dep:pyo3"]
-smt = ["dep:z3"]
 gui = ["dep:winit", "dep:softbuffer"]
 websocket = ["dep:tungstenite"]
 mqtt = ["dep:rumqttc"]

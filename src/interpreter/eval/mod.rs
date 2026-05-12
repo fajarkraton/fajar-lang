@@ -7259,52 +7259,12 @@ let y = x",
     // ===================================================================
 
     // Sprint N1: Verified @kernel Functions
-
-    #[test]
-    fn n1_1_smt_prove_non_negative() {
-        use crate::verify::smt::prove_non_negative;
-        let result = prove_non_negative("x", "x >= 0");
-        assert!(result.is_proven());
-    }
-
-    #[test]
-    fn n1_2_smt_prove_array_bounds() {
-        use crate::verify::smt::prove_array_bounds;
-        let result = prove_array_bounds("i >= 0 && i < 10", 10);
-        assert!(result.is_proven());
-    }
-
-    #[test]
-    fn n1_3_smt_prove_no_overflow() {
-        use crate::verify::smt::prove_no_i32_overflow;
-        let result = prove_no_i32_overflow(0, 100, 0, 100);
-        assert!(result.is_proven());
-    }
-
-    #[test]
-    fn n1_4_smt_prove_matmul_shapes() {
-        use crate::verify::smt::prove_matmul_shapes;
-        let result = prove_matmul_shapes(4, 3, 3, 5);
-        assert!(result.is_proven());
-    }
-
-    #[test]
-    fn n1_5_smt_check_satisfiable() {
-        use crate::verify::smt::check_satisfiable;
-        let assertions = vec![
-            ("x".to_string(), 0i64, ">=", 0i64),
-            ("x".to_string(), 0, "<", 100),
-        ];
-        let result = check_satisfiable(&assertions);
-        assert!(result.is_failed()); // Sat means satisfiable (a model exists)
-    }
-
-    #[test]
-    fn n1_6_smt_prove_with_timeout() {
-        use crate::verify::smt::prove_with_timeout;
-        let result = prove_with_timeout("n", "n >= 0", 1000);
-        assert!(result.is_proven());
-    }
+    //
+    // 2026-05-12 Path C SMT-freeze (Compass §5.1): n1_1..n1_6 + n1_9 + n1_10
+    // removed alongside deletion of verify::{smt,certification,pipeline}.
+    // See docs/VERIFY_PATH_C_LOAD_BEARING_B0_FINDINGS.md +
+    // docs/decisions/2026-05-12-verify-path-c-deletion.md.
+    // n1_7 + n1_8 retained — they exercise verify::symbolic (production-live).
 
     #[test]
     fn n1_7_symbolic_engine_creation() {
@@ -7323,24 +7283,6 @@ let y = x",
         let counterexamples = engine.check_property("size >= 0", "kernel.fj", 42);
         // Symbolic vars are unconstrained, so may find counterexample
         let _ = counterexamples;
-    }
-
-    #[test]
-    fn n1_9_proof_cache() {
-        use crate::verify::smt::ProofCache;
-        use crate::verify::smt::SmtResult;
-        let mut cache = ProofCache::default();
-        cache.insert(12345, 67890, SmtResult::Unsat, 1000);
-        assert_eq!(cache.size(), 1);
-        let hit = cache.get(12345, 67890);
-        assert!(hit.is_some());
-    }
-
-    #[test]
-    fn n1_10_misra_compliance() {
-        use crate::verify::certification::check_misra_compliance;
-        let result = check_misra_compliance(false, false, false, false, false, "main.fj");
-        assert!(result.compliance_rate() >= 0.0);
     }
 
     // Sprint N2: Kernel Optimization
@@ -7686,20 +7628,7 @@ let y = x",
         assert!(ptx.contains("predict_duration"));
     }
 
-    #[test]
-    fn n4_9_smt_kernel_safety() {
-        use crate::verify::smt::prove_array_bounds;
-        // Verify kernel stack doesn't overflow (< 8192 bytes)
-        let result = prove_array_bounds("stack_ptr >= 0 && stack_ptr < 8192", 8192);
-        assert!(result.is_proven());
-    }
-
-    #[test]
-    fn n4_10_do178c_evidence() {
-        use crate::verify::certification::{DalLevel, generate_do178c_evidence};
-        let evidence = generate_do178c_evidence(DalLevel::DalC, true, false, true, 0.95);
-        assert!(!evidence.is_empty());
-    }
+    // 2026-05-12 Path C SMT-freeze: n4_9 (smt) + n4_10 (certification) removed.
 
     // Sprint N5: Hardware Abstraction v2
 
@@ -7791,12 +7720,7 @@ let y = x",
         assert!(grid.total_threads() >= 1000);
     }
 
-    #[test]
-    fn n5_9_smt_matmul_mismatch() {
-        use crate::verify::smt::prove_matmul_shapes;
-        let result = prove_matmul_shapes(4, 3, 5, 2); // k1 != k2
-        assert!(result.is_failed());
-    }
+    // 2026-05-12 Path C SMT-freeze: n5_9 (smt) removed.
 
     #[test]
     fn n5_10_memory_alloc_alignment() {
@@ -7862,12 +7786,7 @@ let y = x",
         assert_eq!(node.quorum(), 1);
     }
 
-    #[test]
-    fn n6_5_smt_overflow_large() {
-        use crate::verify::smt::prove_no_i32_overflow;
-        let result = prove_no_i32_overflow(i32::MIN, i32::MAX, 0, 1);
-        assert!(result.is_failed()); // full range + 1 can overflow
-    }
+    // 2026-05-12 Path C SMT-freeze: n6_5 (smt) removed.
 
     #[test]
     fn n6_6_spirv_backend_explicit() {
@@ -7909,13 +7828,7 @@ let y = x",
         assert!(mm.size() > 0);
     }
 
-    #[test]
-    fn n6_10_proof_cache_miss() {
-        use crate::verify::smt::ProofCache;
-        let mut cache = ProofCache::default();
-        assert!(cache.get(99999, 11111).is_none());
-        assert_eq!(cache.size(), 0);
-    }
+    // 2026-05-12 Path C SMT-freeze: n6_10 (smt) removed.
 
     // Sprint N7: Userland Libraries
 
@@ -8094,16 +8007,7 @@ let y = x",
         assert!(b.0 > 0);
     }
 
-    #[test]
-    fn n8_9_smt_satisfiable_range() {
-        use crate::verify::smt::check_satisfiable;
-        let assertions = vec![
-            ("x".to_string(), 0i64, ">=", 10i64),
-            ("x".to_string(), 0, "<=", 20),
-        ];
-        let result = check_satisfiable(&assertions);
-        assert!(result.is_failed()); // Sat means satisfiable (a model exists)
-    }
+    // 2026-05-12 Path C SMT-freeze: n8_9 (smt) removed.
 
     #[test]
     fn n8_10_fusion_total_ops() {
@@ -8237,13 +8141,8 @@ let y = x",
     }
 
     // Sprint N10: Release
-
-    #[test]
-    fn n10_1_iso26262_evidence() {
-        use crate::verify::certification::{AsilLevel, generate_iso26262_evidence};
-        let evidence = generate_iso26262_evidence(AsilLevel::AsilD, true, true, true, true);
-        assert!(!evidence.is_empty());
-    }
+    //
+    // 2026-05-12 Path C SMT-freeze: n10_1 (certification) + n10_3 (smt) removed.
 
     #[test]
     fn n10_2_spirv_full_module() {
@@ -8275,17 +8174,6 @@ let y = x",
         assert!(m.validate().is_empty());
         let words = m.emit_words();
         assert_eq!(words[0], 0x0723_0203);
-    }
-
-    #[test]
-    fn n10_3_proof_cache_hit_rate() {
-        use crate::verify::smt::ProofCache;
-        use crate::verify::smt::SmtResult;
-        let mut cache = ProofCache::default();
-        cache.insert(1, 1, SmtResult::Unsat, 100);
-        let _ = cache.get(1, 1); // hit
-        let _ = cache.get(2, 2); // miss
-        assert!(cache.hit_rate() >= 0.0);
     }
 
     #[test]
@@ -8486,12 +8374,7 @@ let y = x",
         assert_eq!(*latest, SemVer::new(0, 2, 0));
     }
 
-    #[test]
-    fn w1_9_smt_array_out_of_bounds() {
-        use crate::verify::smt::prove_array_bounds;
-        let result = prove_array_bounds("i >= 0 && i <= 10", 10); // i can be 10, array size 10 → OOB
-        assert!(result.is_failed());
-    }
+    // 2026-05-12 Path C SMT-freeze: w1_9 (smt) removed.
 
     #[test]
     fn w1_10_memory_read_unalloc() {
@@ -8616,13 +8499,7 @@ len(data)"#,
         assert!(d.group_count_x > 3000);
     }
 
-    #[test]
-    fn w2_10_smt_non_negative_negative() {
-        use crate::verify::smt::prove_non_negative;
-        let result = prove_non_negative("x", "x > -5");
-        // x > -5 includes negatives, so non-negative proof should fail
-        assert!(result.is_failed());
-    }
+    // 2026-05-12 Path C SMT-freeze: w2_10 (smt) removed.
 
     // Sprint W3: Distributed MNIST Training
 
@@ -8693,12 +8570,7 @@ len(data)"#,
         assert_eq!(n7.quorum(), 4);
     }
 
-    #[test]
-    fn w3_7_smt_matmul_valid() {
-        use crate::verify::smt::prove_matmul_shapes;
-        let r = prove_matmul_shapes(28, 784, 784, 128);
-        assert!(r.is_proven()); // MNIST: 28 images × 784 features × 128 hidden
-    }
+    // 2026-05-12 Path C SMT-freeze: w3_7 (smt) removed.
 
     #[test]
     fn w3_8_fusion_chain() {
@@ -8890,12 +8762,7 @@ len(data)"#,
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn w5_2_smt_kernel_stack() {
-        use crate::verify::smt::prove_array_bounds;
-        let r = prove_array_bounds("sp >= 0 && sp < 4096", 4096);
-        assert!(r.is_proven());
-    }
+    // 2026-05-12 Path C SMT-freeze: w5_2 (smt) removed.
 
     #[test]
     fn w5_3_memory_small_alloc() {
@@ -8982,12 +8849,7 @@ len(data)"#,
         assert_eq!(inst[0].tags.get("board").unwrap(), "dragon-q6a");
     }
 
-    #[test]
-    fn w5_9_smt_overflow_safe_small() {
-        use crate::verify::smt::prove_no_i32_overflow;
-        let r = prove_no_i32_overflow(0, 127, 0, 127);
-        assert!(r.is_proven()); // INT8 range, safe for i32
-    }
+    // 2026-05-12 Path C SMT-freeze: w5_9 (smt) removed.
 
     #[test]
     fn w5_10_interpreter_eye() {
@@ -9484,16 +9346,7 @@ results
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn w10_7_smt_all_proofs() {
-        use crate::verify::smt::{
-            prove_array_bounds, prove_matmul_shapes, prove_no_i32_overflow, prove_non_negative,
-        };
-        assert!(prove_non_negative("x", "x >= 0").is_proven());
-        assert!(prove_array_bounds("i >= 0 && i < 100", 100).is_proven());
-        assert!(prove_matmul_shapes(10, 20, 20, 30).is_proven());
-        assert!(prove_no_i32_overflow(0, 1000, 0, 1000).is_proven());
-    }
+    // 2026-05-12 Path C SMT-freeze: w10_7 (smt) removed.
 
     #[test]
     fn w10_8_distributed_full() {

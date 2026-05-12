@@ -128,17 +128,9 @@ fn v14_n1_9_kernel_filesystem_inode() {
     );
 }
 
-#[test]
-fn v14_n1_10_verify_module_exists_and_has_api() {
-    // The verify module should exist and export real functions
-    assert!(
-        std::path::Path::new("src/verify").exists()
-            || std::path::Path::new("src/verify.rs").exists(),
-        "verify module should exist"
-    );
-    // Verify pipeline is importable
-    let _ = fajar_lang::verify::pipeline::VerificationPipeline::new();
-}
+// 2026-05-12 Path C SMT-freeze (Compass §5.1): v14_n1_10 removed
+// alongside deletion of verify::pipeline. See
+// docs/decisions/2026-05-12-verify-path-c-deletion.md.
 
 // ═══════════════════════════════════════════════════════════════
 // N2: Kernel Optimization — real codegen verification (10 tests)
@@ -573,11 +565,7 @@ fn v14_n5_10_match_in_kernel() {
 // N6-N10: Infrastructure Verification (50 tests)
 // ═══════════════════════════════════════════════════════════════
 
-#[test]
-fn v14_n6_1_verify_pipeline_api() {
-    let pipeline = fajar_lang::verify::pipeline::VerificationPipeline::new();
-    let _ = format!("{pipeline:?}");
-}
+// 2026-05-12 Path C SMT-freeze: v14_n6_1 removed alongside verify::pipeline deletion.
 
 #[test]
 fn v14_n6_2_wasi_module_exists() {
@@ -1501,11 +1489,7 @@ fn v14_n12_10_boot_log() {
 // N13: Kernel Verification Patterns (5 tests)
 // ═══════════════════════════════════════════════════════════════
 
-#[test]
-fn v14_n13_1_verify_module_api() {
-    let p = fajar_lang::verify::pipeline::VerificationPipeline::new();
-    assert!(p.results.is_empty(), "fresh pipeline has no results");
-}
+// 2026-05-12 Path C SMT-freeze: v14_n13_1 removed alongside verify::pipeline deletion.
 
 #[test]
 fn v14_n13_2_kernel_returns_correct_types() {

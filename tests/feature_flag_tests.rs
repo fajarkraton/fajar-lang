@@ -133,30 +133,10 @@ mod feature_cuda {
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SMT (feature = "smt")
-// ═══════════════════════════════════════════════════════════
-
-#[cfg(feature = "smt")]
-mod feature_smt {
-    use fajar_lang::verify::smt::*;
-
-    #[test]
-    fn solver_config_defaults() {
-        let cfg = SolverConfig::default();
-        assert_eq!(cfg.timeout_ms, 5000);
-    }
-
-    #[test]
-    fn smt_logic_display() {
-        assert_eq!(format!("{}", SmtLogic::QfLia), "QF_LIA");
-    }
-
-    #[test]
-    fn solver_backend_display() {
-        assert_eq!(format!("{}", SolverBackend::Z3), "Z3");
-    }
-}
+// 2026-05-12 Path C SMT-freeze (Compass §5.1): the SMT feature_smt mod
+// (cfg-gated by feature = "smt") was removed alongside deletion of
+// verify::smt + Cargo.toml smt feature. See
+// docs/decisions/2026-05-12-verify-path-c-deletion.md.
 
 // ═══════════════════════════════════════════════════════════
 // C++ FFI (feature = "cpp-ffi")
