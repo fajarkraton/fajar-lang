@@ -79,7 +79,7 @@ detailed entries.
 ### Current Totals (v35.2.0 "FJARR_LEAK Phase 2 D-LITE", 2026-05-08)
 
 ```
-Tests:     7,629 lib + 10,489 integ (72 files) + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge + 1 ignored = 18,152
+Tests:     7,633 lib + 10,489 integ (72 files) + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge + 1 ignored = 18,156
            (0 fail, 0 flake; phase17 4/4 byte-equality preserved through E5+E4+D-LITE)
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
 LOC:       ~449,000 Rust (391+ files) | Binary 18 MB | MSRV 1.87 | 243 .fj examples
@@ -537,9 +537,9 @@ Key: **SE024** UseAfterMoveArray (always-on for `[T]`) | **ME001** UseAfterMove 
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: 18,132 tests (7,629 lib + 10,489 integ in 72 files + 14 doc + 1 ignored)
+### 9.1 Test Suite: 18,136 tests (7,633 lib + 10,489 integ in 72 files + 14 doc + 1 ignored)
 
-> Numbers re-verified 2026-05-06 via `cargo test --lib` (7,629), `cargo test --tests`
+> Numbers re-verified 2026-05-12 via `cargo test --lib` (7,633), `cargo test --tests`
 > (10,489 across 72 integ files), `cargo test --doc` (14). Stress test (V26 A1.4) runs
 > `cargo test --lib -- --test-threads=64 × 5` per push (5/5 PASS audit-day).
 > Prior v33.2.0 numbers (~10,138, 7,626 + 2,498) were stale: integ count was
@@ -624,7 +624,7 @@ Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (p
 ```bash
 # Build & test (mandatory before commit)
 cargo build [--release]
-cargo test --lib                                 # 7,629 lib tests
+cargo test --lib                                 # 7,633 lib tests
 cargo test --tests                               # 10,489 integ tests across 72 files
                                                  # NOTE: do NOT use --test '*' (shell glob runs only 1 target)
 cargo test --lib -- --test-threads=64            # stress (V26 §6.7 rule)
@@ -657,6 +657,8 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 | When You Need... | Read This |
 |---|---|
+| **Compass §4.4 context-dimension closure (2026-05-10, v35.6.0)** | **`docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md`** + decision `docs/decisions/2026-05-10-default-safe-bridge.md` (D-α: `@safe` is ergonomic bridge, CAN call `@kernel`/`@device`) + `docs/SAFE_BLOCKED_BUILTINS_AUDIT.md` (3-criteria carve-out test). 28 sites annotated; SE021/SE022 emission removed; `str_byte_at`+`str_len` carved out as pure-functional. |
+| **FJARR_LEAK Phase 2 D-FULL closure (2026-05-10, v35.5.0)** | **`docs/FJARR_LEAK_PHASE_2_D_FULL_FINDINGS.md`** + plan `docs/D_FULL_OPTION_B_PHASE_PLAN.md` + B0 `docs/D_FULL_CASCADE_B0_FINDINGS.md`. Affine semantics default-on; COW `_FjArr` (rc+grow); Compass §4.4 closed at type-system dimension. |
 | **FJARR_LEAK Phase 1 CLOSED (2026-05-08, v35.1.0)** | **`docs/FJARR_LEAK_PHASE_1_FINDINGS.md`** + plan `docs/FJARR_LEAK_PLAN.md` + B0 `docs/FJARR_LEAK_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-fjarr-leak-strategy.md` (Choice F: A-now arena + D-Phase-19 linear types). `_FjArr` realloc-leak class CLOSED 88 bytes/array → 0; 102 self-host tests; Stage 2 byte-equality preserved. Phase 2 (D linear-types) deferred to v36.x roadmap. |
 | **Phase 18 CALL_INDEX CLOSED (2026-05-07, commit 9c9ff2a8)** | **`docs/SELFHOST_FJ_PHASE_18_FINDINGS.md`** + plan `docs/CALL_INDEX_PLAN.md` + B0 `docs/CALL_INDEX_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-call-index-shape.md` (D1.A + D2.A + D3.B). Silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved; 6 new P-tests (P81..P86) + pre-push regression hook. |
 | **T4 dup-fn detection CLOSED (commit 38e23f56)** | **`docs/T4_DUP_FN_PLAN.md`** — closed independently from FJARR_LEAK / CALL_INDEX. |
