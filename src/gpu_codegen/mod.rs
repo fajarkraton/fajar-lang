@@ -1,10 +1,13 @@
-//! Native GPU Codegen — PTX/SPIR-V/Metal/HLSL backend, kernel fusion,
-//! GPU memory management, and AST-driven GPU IR lowering.
+//! Native GPU Codegen — PTX/SPIR-V backend, kernel fusion, GPU memory
+//! management, and AST-driven GPU IR lowering.
+//!
+//! v35.7.1 (Action C, Compass §5.1 simplification): Metal + HLSL backends
+//! removed. SPIR-V frozen (see `spirv.rs` module header). PTX remains the
+//! actively-developed path (RTX 4090 verified). See
+//! `docs/decisions/2026-05-12-gpu-codegen-simplification.md` for rationale.
 
 pub mod fusion;
 pub mod gpu_memory;
-pub mod hlsl;
-pub mod metal;
 pub mod ptx;
 pub mod spirv;
 
@@ -328,115 +331,6 @@ impl GpuKernel {
         lines.push("}}".into());
         lines.join("\n")
     }
-
-    /// Generate Metal Shading Language from this kernel.
-    pub fn to_metal(&self) -> String {
-        let mut lines = Vec::new();
-        lines.push("#include <metal_stdlib>".into());
-        lines.push("using namespace metal;".into());
-        lines.push(String::new());
-        // Shared memory (threadgroup)
-        for (name, count) in &self.shared_memory {
-            lines.push(format!("threadgroup float {name}[{count}];"));
-        }
-        if !self.shared_memory.is_empty() {
-            lines.push(String::new());
-        }
-        lines.push(format!("kernel void {}(", self.name));
-        for (i, buf) in self.buffers.iter().enumerate() {
-            let comma = if i + 1 < self.buffers.len() { "," } else { "" };
-            lines.push(format!("\tdevice float* {buf} [[buffer({i})]]{comma}"));
-        }
-        lines.push("\tuint id [[thread_position_in_grid]]".into());
-        lines.push(") {".into());
-        // Body
-        for stmt in &self.body {
-            match stmt {
-                GpuStmt::Store { target, value } => {
-                    let expr_str = gpu_expr_to_metal(value);
-                    lines.push(format!("\t{target}[id] = {expr_str};"));
-                }
-                GpuStmt::Return => {}
-            }
-        }
-        lines.push("}".into());
-        lines.join("\n")
-    }
-
-    /// Generate HLSL compute shader from this kernel.
-    pub fn to_hlsl(&self, thread_group_size: u32) -> String {
-        let mut lines = Vec::new();
-        for (i, buf) in self.buffers.iter().enumerate() {
-            lines.push(format!("RWStructuredBuffer<float> {buf} : register(u{i});"));
-        }
-        // Shared memory (groupshared)
-        for (name, count) in &self.shared_memory {
-            lines.push(format!("groupshared float {name}[{count}];"));
-        }
-        lines.push(String::new());
-        // Use kernel's workgroup size if explicitly set (non-default), else use caller's.
-        let tgs = if self.workgroup_size != (64, 1, 1) {
-            self.workgroup_size.0
-        } else {
-            thread_group_size
-        };
-        lines.push(format!("[numthreads({tgs}, 1, 1)]"));
-        lines.push(format!(
-            "void {}(uint3 id : SV_DispatchThreadID) {{",
-            self.name
-        ));
-        for stmt in &self.body {
-            match stmt {
-                GpuStmt::Store { target, value } => {
-                    let expr_str = gpu_expr_to_hlsl(value);
-                    lines.push(format!("\t{target}[id.x] = {expr_str};"));
-                }
-                GpuStmt::Return => {}
-            }
-        }
-        lines.push("}".into());
-        lines.join("\n")
-    }
-}
-
-/// Convert GpuExpr to Metal expression string.
-fn gpu_expr_to_metal(expr: &GpuExpr) -> String {
-    match expr {
-        GpuExpr::BufferLoad(name) => format!("{name}[id]"),
-        GpuExpr::FloatLit(v) => format!("{v}"),
-        GpuExpr::IntLit(v) => format!("{v}"),
-        GpuExpr::BinOp { left, op, right } => {
-            let l = gpu_expr_to_metal(left);
-            let r = gpu_expr_to_metal(right);
-            let op_str = match op {
-                GpuBinOp::Add => "+",
-                GpuBinOp::Sub => "-",
-                GpuBinOp::Mul => "*",
-                GpuBinOp::Div => "/",
-            };
-            format!("({l} {op_str} {r})")
-        }
-    }
-}
-
-/// Convert GpuExpr to HLSL expression string.
-fn gpu_expr_to_hlsl(expr: &GpuExpr) -> String {
-    match expr {
-        GpuExpr::BufferLoad(name) => format!("{name}[id.x]"),
-        GpuExpr::FloatLit(v) => format!("{v}"),
-        GpuExpr::IntLit(v) => format!("{v}"),
-        GpuExpr::BinOp { left, op, right } => {
-            let l = gpu_expr_to_hlsl(left);
-            let r = gpu_expr_to_hlsl(right);
-            let op_str = match op {
-                GpuBinOp::Add => "+",
-                GpuBinOp::Sub => "-",
-                GpuBinOp::Mul => "*",
-                GpuBinOp::Div => "/",
-            };
-            format!("({l} {op_str} {r})")
-        }
-    }
 }
 
 /// Convert GpuExpr to PTX instruction string.
@@ -473,40 +367,6 @@ mod tests {
         assert_eq!(ir.kernels.len(), 1);
         assert_eq!(ir.kernels[0].name, "add_kernel");
         assert_eq!(ir.kernels[0].buffers.len(), 3);
-    }
-
-    #[test]
-    fn v14_gpu_ir_to_metal() {
-        let source = r#"
-            @gpu fn add(a: f32, b: f32, out: f32) {
-                let out = a + b
-            }
-            fn main() { }
-        "#;
-        let tokens = crate::lexer::tokenize(source).unwrap();
-        let program = crate::parser::parse(tokens).unwrap();
-        let ir = lower_to_gpu_ir(&program).unwrap();
-        let metal = ir.kernels[0].to_metal();
-        assert!(metal.contains("kernel void add("));
-        assert!(metal.contains("a[id]"));
-        assert!(metal.contains("+"));
-    }
-
-    #[test]
-    fn v14_gpu_ir_to_hlsl() {
-        let source = r#"
-            @gpu fn mul(a: f32, b: f32, out: f32) {
-                let out = a * b
-            }
-            fn main() { }
-        "#;
-        let tokens = crate::lexer::tokenize(source).unwrap();
-        let program = crate::parser::parse(tokens).unwrap();
-        let ir = lower_to_gpu_ir(&program).unwrap();
-        let hlsl = ir.kernels[0].to_hlsl(256);
-        assert!(hlsl.contains("[numthreads(256, 1, 1)]"));
-        assert!(hlsl.contains("void mul("));
-        assert!(hlsl.contains("*"));
     }
 
     #[test]

@@ -1219,13 +1219,16 @@ fn v14_w15_3_effect_with_ml() {
 
 #[test]
 fn v14_w15_4_gpu_annotation_parses() {
+    // v35.7.1 (Action C): Metal backend removed; structural check via to_ptx.
+    // Original assertion verified `kernel void` Metal syntax; PTX equivalent
+    // is `.entry <name>` for the same structural invariant.
     let source = "@gpu fn kernel(a: f32, b: f32, c: f32) { let c = a + b }\nfn main() {}";
     let tokens = fajar_lang::lexer::tokenize(source).unwrap();
     let program = fajar_lang::parser::parse(tokens).unwrap();
     let ir = fajar_lang::gpu_codegen::lower_to_gpu_ir(&program);
     assert!(ir.is_ok());
-    let metal = ir.unwrap().kernels[0].to_metal();
-    assert!(metal.contains("kernel void"));
+    let ptx = ir.unwrap().kernels[0].to_ptx();
+    assert!(ptx.contains(".entry kernel"));
 }
 
 #[test]

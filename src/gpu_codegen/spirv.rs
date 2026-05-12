@@ -1,5 +1,13 @@
 //! SPIR-V Backend — generate SPIR-V binary modules, compute shaders,
 //! storage buffers, workgroup memory, barriers, validation, Vulkan dispatch.
+//!
+//! **FROZEN** (v35.7.1, 2026-05-12) per Strategic Compass §5.1.
+//! Not under active development. PTX is the actively-developed GPU backend
+//! (NVIDIA, RTX 4090 verified). SPIR-V retained for cross-platform Vulkan
+//! compute research; 33 tests still passing. Re-entry conditions for active
+//! development: a verified user/customer surfaces, or the embedded niche
+//! gains a cross-platform Vulkan target. See
+//! `docs/decisions/2026-05-12-gpu-codegen-simplification.md` for rationale.
 
 use std::fmt;
 

@@ -601,10 +601,13 @@ fn v14_n6_5_formatter_module_exists() {
 
 #[test]
 fn v14_n6_6_gpu_codegen_all_backends() {
+    // v35.7.1 (Action C, Compass §5.1): Metal + HLSL backends removed.
+    // SPIR-V frozen, PTX actively developed. See
+    // docs/decisions/2026-05-12-gpu-codegen-simplification.md.
     assert!(std::path::Path::new("src/gpu_codegen/spirv.rs").exists());
     assert!(std::path::Path::new("src/gpu_codegen/ptx.rs").exists());
-    assert!(std::path::Path::new("src/gpu_codegen/metal.rs").exists());
-    assert!(std::path::Path::new("src/gpu_codegen/hlsl.rs").exists());
+    assert!(!std::path::Path::new("src/gpu_codegen/metal.rs").exists());
+    assert!(!std::path::Path::new("src/gpu_codegen/hlsl.rs").exists());
 }
 
 #[test]

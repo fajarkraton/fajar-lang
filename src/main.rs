@@ -556,15 +556,15 @@ fn main_inner() -> ExitCode {
             if target == "wasm32-wasi-p2" || target == "wasm32-wasip2" {
                 return cmd_build_wasi_p2(&path, output.as_deref(), verbose);
             }
-            // V14 Phase 1: AST-driven GPU codegen for SPIR-V/PTX/Metal/HLSL.
+            // V14 Phase 1: AST-driven GPU codegen for SPIR-V/PTX.
             // Reads .fj source, parses it, finds @gpu fns, and generates shader code.
             // Falls back to hardcoded minimal kernel if no .fj source has @gpu fns.
-            if matches!(target.as_str(), "spirv" | "ptx" | "metal" | "hlsl") {
+            // v35.7.1 (Action C): Metal + HLSL targets removed. See
+            // docs/decisions/2026-05-12-gpu-codegen-simplification.md.
+            if matches!(target.as_str(), "spirv" | "ptx") {
                 let ext = match target.as_str() {
                     "spirv" => "spv",
                     "ptx" => "ptx",
-                    "metal" => "metal",
-                    "hlsl" => "hlsl",
                     _ => unreachable!(),
                 };
                 let default_out = format!("output.{ext}");
@@ -609,8 +609,6 @@ fn main_inner() -> ExitCode {
                     match target.as_str() {
                         "spirv" => (kernel.to_spirv(), "SPIR-V compute shader"),
                         "ptx" => (kernel.to_ptx().into_bytes(), "PTX assembly"),
-                        "metal" => (kernel.to_metal().into_bytes(), "Metal shader"),
-                        "hlsl" => (kernel.to_hlsl(256).into_bytes(), "HLSL shader"),
                         _ => unreachable!(),
                     }
                 } else {
@@ -633,16 +631,6 @@ fn main_inner() -> ExitCode {
                             };
                             m.add_elementwise_add_kernel("main");
                             (m.emit().into_bytes(), "PTX assembly")
-                        }
-                        "metal" => {
-                            let mut m = fajar_lang::gpu_codegen::metal::MetalModule::new("main");
-                            m.emit_add_kernel();
-                            (m.source().as_bytes().to_vec(), "Metal shader")
-                        }
-                        "hlsl" => {
-                            let mut m = fajar_lang::gpu_codegen::hlsl::HlslModule::new("CSMain");
-                            m.emit_add_kernel(256);
-                            (m.source().as_bytes().to_vec(), "HLSL shader")
                         }
                         _ => unreachable!(),
                     }
