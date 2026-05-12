@@ -1353,6 +1353,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 
 [[package]]
+name = "fajar-distributed"
+version = "0.1.0"
+source = "git+https://github.com/fajarkraton/fajar-distributed?rev=4011a3d582cd87f20b64c78ee4b1798790d472a7#4011a3d582cd87f20b64c78ee4b1798790d472a7"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "fajar-lang"
 version = "35.0.0"
 dependencies = [
@@ -1373,6 +1381,8 @@ dependencies = [
  "criterion",
  "dap",
  "ed25519-dalek",
+ "fajar-distributed",
+ "fajar-wasi-p2",
  "fajarquant",
  "getrandom 0.2.17",
  "hmac",
@@ -1408,6 +1418,11 @@ dependencies = [
  "winit",
  "x25519-dalek",
 ]
+
+[[package]]
+name = "fajar-wasi-p2"
+version = "0.1.0"
+source = "git+https://github.com/fajarkraton/fajar-wasi-p2?rev=d57d3b2100268438d2f48fa7473d481212144e18#d57d3b2100268438d2f48fa7473d481212144e18"
 
 [[package]]
 name = "fajarquant"

@@ -23,6 +23,15 @@ path = "src/main.rs"
 # (do NOT commit the path form — it breaks CI).
 fajarquant = { git = "https://github.com/fajarkraton/fajarquant", rev = "b05ecf1705ba79145049373510ad63f42ab5efbe" }
 
+# fajar-wasi-p2 + fajar-distributed — extracted to standalone crates (Compass §5.1
+# Path E + F, EOS-38 2026-05-12). Same git+rev pattern as fajarquant.
+# Local dev iteration may temporarily switch to { path = "../fajar-{wasi-p2,distributed}" }
+# but DO NOT commit the path form — breaks CI.
+# Currently dormant: src/wasi_p2/ + src/distributed/ are still local-authoritative.
+# Re-export shim + local removal land at Phase E.5 + F.5.
+fajar-wasi-p2 = { git = "https://github.com/fajarkraton/fajar-wasi-p2", rev = "d57d3b2100268438d2f48fa7473d481212144e18" }
+fajar-distributed = { git = "https://github.com/fajarkraton/fajar-distributed", rev = "4011a3d582cd87f20b64c78ee4b1798790d472a7" }
+
 thiserror = "2.0"
 miette = { version = "7.0", features = ["fancy"] }
 clap = { version = "4.5", features = ["derive"] }
