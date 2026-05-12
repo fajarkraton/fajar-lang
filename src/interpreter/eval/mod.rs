@@ -7833,59 +7833,6 @@ let y = x",
     // Sprint N7: Userland Libraries
 
     #[test]
-    fn n7_1_component_instance_creation() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let inst =
-            ComponentInstance::new("userland-lib", vec![0x00, 0x61, 0x73, 0x6D], HashMap::new());
-        assert_eq!(inst.name(), "userland-lib");
-        assert!(!inst.has_executed());
-    }
-
-    #[test]
-    fn n7_2_component_instance_run() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let mut inst = ComponentInstance::new("libc", vec![0x00], HashMap::new());
-        let code = inst.run().unwrap();
-        assert_eq!(code, 0);
-        assert!(inst.has_executed());
-    }
-
-    #[test]
-    fn n7_3_component_double_run() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let mut inst = ComponentInstance::new("test", vec![], HashMap::new());
-        inst.run().unwrap();
-        assert!(inst.run().is_err()); // already executed
-    }
-
-    #[test]
-    fn n7_4_component_linker() {
-        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
-        use std::collections::HashMap;
-        let mut linker = ComponentLinker::new();
-        linker.register(ComponentInstance::new("app", vec![], HashMap::new()));
-        assert_eq!(linker.instance_count(), 1);
-    }
-
-    #[test]
-    fn n7_5_component_exports() {
-        use crate::wasi_p2::component::ExportKind;
-        use crate::wasi_p2::composition::{ComponentInstance, ExportDef};
-        use std::collections::HashMap;
-        let mut inst = ComponentInstance::new("libm", vec![], HashMap::new());
-        inst.add_export(ExportDef {
-            name: "sin".into(),
-            kind: ExportKind::Func,
-            params: vec!["f64".into()],
-            result: Some("f64".into()),
-        });
-        assert!(inst.get_export("sin").is_some());
-    }
-
-    #[test]
     fn n7_6_ffi_mangle_name() {
         use crate::ffi_v2::cpp::mangle_name;
         let mangled = mangle_name(&["std".into()], "sort", &[]);
@@ -7898,31 +7845,6 @@ let y = x",
         let mangled = mangle_name(&[], "hello", &[]);
         let demangled = demangle_name(&mangled);
         assert!(demangled.contains("hello"));
-    }
-
-    #[test]
-    fn n7_8_wit_parse_interface() {
-        use crate::wasi_p2::wit_parser::parse_wit;
-        let wit = "package test:example@1.0.0;\ninterface math {\n  add: func(a: s32, b: s32) -> s32;\n}\n";
-        let doc = parse_wit(wit).unwrap();
-        assert!(!doc.interfaces.is_empty());
-    }
-
-    #[test]
-    fn n7_9_wit_parse_world() {
-        use crate::wasi_p2::wit_parser::parse_wit;
-        let wit = "package test:app@1.0.0;\nworld my-world {\n  import wasi:io/streams;\n}\n";
-        let doc = parse_wit(wit).unwrap();
-        assert!(!doc.worlds.is_empty());
-    }
-
-    #[test]
-    fn n7_10_component_return_value() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let mut inst = ComponentInstance::new("test", vec![], HashMap::new());
-        inst.set_return_value(42);
-        assert_eq!(inst.run().unwrap(), 42);
     }
 
     // Sprint N8: GUI Framework
@@ -8073,27 +7995,6 @@ let y = x",
     }
 
     #[test]
-    fn n9_5_component_adapter() {
-        use crate::wasi_p2::composition::ComponentAdapter;
-        let adapter = ComponentAdapter::new(vec![0x00, 0x61, 0x73, 0x6D]);
-        let adapted = adapter.adapt();
-        assert!(!adapted.is_empty());
-    }
-
-    #[test]
-    fn n9_6_component_linker_imports() {
-        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
-        use std::collections::HashMap;
-        let mut imports = HashMap::new();
-        imports.insert("wasi:io/streams".into(), "wasi-io".into());
-        let mut linker = ComponentLinker::new();
-        linker.register(ComponentInstance::new("app", vec![], imports));
-        let unresolved = linker.check_all_imports();
-        // "wasi-io" not registered, so it's unresolved
-        assert!(!unresolved.is_empty());
-    }
-
-    #[test]
     fn n9_7_sbom_spdx() {
         use crate::package::sbom::{DepInfo, SbomFormat, generate_sbom};
         let deps = vec![DepInfo {
@@ -8198,15 +8099,6 @@ let y = x",
     }
 
     #[test]
-    fn n10_6_component_binary() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let binary = vec![0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
-        let inst = ComponentInstance::new("wasm-module", binary.clone(), HashMap::new());
-        assert_eq!(inst.binary(), &binary);
-    }
-
-    #[test]
     fn n10_7_ffi_generate_class() {
         use crate::ffi_v2::cpp::{CppClass, generate_class_binding};
         let class = CppClass {
@@ -8238,14 +8130,6 @@ let y = x",
             mm.free(addr).unwrap();
         }
         assert!(mm.allocated_regions().is_empty());
-    }
-
-    #[test]
-    fn n10_9_wit_parse_empty() {
-        use crate::wasi_p2::wit_parser::parse_wit;
-        let result = parse_wit("");
-        // Empty input should either parse to empty doc or error
-        let _ = result;
     }
 
     #[test]
@@ -8387,65 +8271,6 @@ let y = x",
     // Sprint W2: WASI HTTP Server
 
     #[test]
-    fn w2_1_wit_parse_full() {
-        use crate::wasi_p2::wit_parser::parse_wit;
-        let wit = r#"package wasi:http@0.2.0;
-interface types {
-  type body = list<u8>;
-  record request {
-    method: string,
-    path: string,
-  }
-  record response {
-    status: u16,
-    body: body,
-  }
-}
-world http-server {
-  import wasi:io/streams;
-  export handler: func(req: string) -> string;
-}
-"#;
-        let doc = parse_wit(wit).unwrap();
-        assert!(!doc.interfaces.is_empty());
-        assert!(!doc.worlds.is_empty());
-    }
-
-    #[test]
-    fn w2_2_component_linker_link() {
-        use crate::wasi_p2::component::ExportKind;
-        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker, ExportDef};
-        use std::collections::HashMap;
-        let mut linker = ComponentLinker::new();
-        let mut provider = ComponentInstance::new("wasi-io", vec![], HashMap::new());
-        provider.add_export(ExportDef {
-            name: "wasi:io/streams".into(),
-            kind: ExportKind::Instance,
-            params: vec![],
-            result: None,
-        });
-        let mut imports = HashMap::new();
-        imports.insert("wasi:io/streams".into(), "wasi-io".into());
-        let app = ComponentInstance::new("http-app", vec![], imports);
-        linker.register(provider);
-        linker.register(app);
-        linker
-            .link("wasi-io", "wasi:io/streams", "http-app", "wasi:io/streams")
-            .unwrap();
-        let unresolved = linker.check_all_imports();
-        assert!(unresolved.is_empty()); // all imports satisfied
-    }
-
-    #[test]
-    fn w2_3_component_set_return() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let mut inst = ComponentInstance::new("http-handler", vec![], HashMap::new());
-        inst.set_return_value(200);
-        assert_eq!(inst.run().unwrap(), 200);
-    }
-
-    #[test]
     fn w2_4_interpreter_http_route() {
         let mut interp = Interpreter::new();
         let result = interp.eval_source(
@@ -8480,16 +8305,6 @@ len(data)"#,
         let c = VersionConstraint::parse("<2.0.0").unwrap();
         assert!(c.matches(&SemVer::new(1, 9, 9)));
         assert!(!c.matches(&SemVer::new(2, 0, 0)));
-    }
-
-    #[test]
-    fn w2_8_component_imports_map() {
-        use crate::wasi_p2::composition::ComponentInstance;
-        use std::collections::HashMap;
-        let mut imports = HashMap::new();
-        imports.insert("wasi:keyvalue/store".into(), "kv-provider".into());
-        let inst = ComponentInstance::new("kv-app", vec![], imports);
-        assert!(inst.imports().contains_key("wasi:keyvalue/store"));
     }
 
     #[test]
@@ -8907,15 +8722,6 @@ map_get(m, "key")"#,
     }
 
     #[test]
-    fn w6_6_wit_parse_types() {
-        use crate::wasi_p2::wit_parser::parse_wit;
-        let wit =
-            "package test:json@1.0.0;\ninterface parser {\n  type json-value = list<u8>;\n}\n";
-        let doc = parse_wit(wit);
-        assert!(doc.is_ok());
-    }
-
-    #[test]
     fn w6_7_registry_constraint_resolve_latest() {
         use crate::package::registry::{Registry, SemVer, VersionConstraint};
         let mut reg = Registry::new();
@@ -8975,17 +8781,6 @@ r"#,
         let mut interp = Interpreter::new();
         let result = interp.eval_source("fn double(x: i32) -> i32 { x * 2 }\ndouble(21)");
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn w7_4_component_linker_multiple() {
-        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker};
-        use std::collections::HashMap;
-        let mut linker = ComponentLinker::new();
-        linker.register(ComponentInstance::new("a", vec![], HashMap::new()));
-        linker.register(ComponentInstance::new("b", vec![], HashMap::new()));
-        linker.register(ComponentInstance::new("c", vec![], HashMap::new()));
-        assert_eq!(linker.instance_count(), 3);
     }
 
     #[test]
@@ -9260,32 +9055,6 @@ method_str(Method::Post)
 "#;
         let result = interp.eval_source(code);
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn w10_3_component_full_stack() {
-        use crate::wasi_p2::component::ExportKind;
-        use crate::wasi_p2::composition::{ComponentInstance, ComponentLinker, ExportDef};
-        use std::collections::HashMap;
-        let mut linker = ComponentLinker::new();
-        // Backend component
-        let mut backend = ComponentInstance::new("backend", vec![], HashMap::new());
-        backend.add_export(ExportDef {
-            name: "api/handler".into(),
-            kind: ExportKind::Func,
-            params: vec!["request".into()],
-            result: Some("response".into()),
-        });
-        // Frontend component
-        let mut frontend_imports = HashMap::new();
-        frontend_imports.insert("api/handler".into(), "backend".into());
-        let frontend = ComponentInstance::new("frontend", vec![], frontend_imports);
-        linker.register(backend);
-        linker.register(frontend);
-        linker
-            .link("backend", "api/handler", "frontend", "api/handler")
-            .unwrap();
-        assert!(linker.check_all_imports().is_empty());
     }
 
     #[test]

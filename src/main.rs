@@ -5807,7 +5807,8 @@ fn cmd_verify(path: &PathBuf, format: &str, verbose: bool, _strict: bool) -> Exi
 /// V14: `fj run --cluster` — run in distributed cluster mode.
 /// V14: `fj build --target wasm32-wasi-p2` — build WASI P2 component.
 fn cmd_build_wasi_p2(path: &PathBuf, output: Option<&std::path::Path>, verbose: bool) -> ExitCode {
-    use fajar_lang::wasi_p2::component::{
+    // wasi_p2 extracted to fajarkraton/fajar-wasi-p2 (Phase E.5, Compass §5.1).
+    use fajar_wasi_p2::component::{
         ComponentBuilder, ComponentFuncType, ComponentTypeKind, ComponentValType, ExportKind,
         validate_component,
     };

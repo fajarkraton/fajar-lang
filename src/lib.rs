@@ -69,7 +69,7 @@ pub mod stdlib_v3;
 pub mod testing;
 pub mod verify;
 pub mod vm;
-pub mod wasi_p2;
+// wasi_p2 extracted to fajarkraton/fajar-wasi-p2 at Phase E.5 (Compass §5.1).
 pub mod wasi_v12;
 
 use analyzer::SemanticError;

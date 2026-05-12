@@ -567,10 +567,8 @@ fn v14_n5_10_match_in_kernel() {
 
 // 2026-05-12 Path C SMT-freeze: v14_n6_1 removed alongside verify::pipeline deletion.
 
-#[test]
-fn v14_n6_2_wasi_module_exists() {
-    assert!(std::path::Path::new("src/wasi_p2").exists());
-}
+// 2026-05-12 Phase E.5: v14_n6_2_wasi_module_exists removed — wasi_p2 extracted
+// to fajarkraton/fajar-wasi-p2 (Compass §5.1). Coverage in extracted crate.
 
 #[test]
 fn v14_n6_3_selfhost_module_exists() {

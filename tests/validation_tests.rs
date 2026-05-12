@@ -181,12 +181,9 @@ fn v14_w2_2_json_response() {
     assert!(r.is_ok());
 }
 
-#[test]
-fn v14_w2_3_wasi_build_target() {
-    // WASI P2 module should exist
-    let exists = std::path::Path::new("src/wasi_p2").exists();
-    assert!(exists, "WASI P2 module should exist");
-}
+// v14_w2_3_wasi_build_target removed at Phase E.5 — wasi_p2 extracted to
+// fajarkraton/fajar-wasi-p2 (Compass §5.1). Coverage now lives in the
+// extracted crate's own test suite.
 
 #[test]
 fn v14_w2_4_request_parsing() {
