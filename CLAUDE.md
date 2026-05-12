@@ -32,9 +32,10 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.6.0, 2026-05-10 — Compass §4.4 context-dimension closure)
+### Completion Status (v35.6.0 baseline, 2026-05-10 — Compass §4.4 context-dimension closure; **engineering-only changes through EOS-37 2026-05-12**)
 
-**54 modules: 54 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 39 CLI subcommands.
+**40 modules: 40 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 39 CLI subcommands.
+*Module count dropped from 54 → 40 in the 2026-05-12 session via Compass §5.1 freeze: full dep-types (-3: tensor_shapes + arrays + patterns) + GPU non-PTX (-2: metal + hlsl; spirv frozen) + verify/ SMT-freeze Path A+B+C (-10: device_proofs + 6 zero-consumer + certification + pipeline + smt). Reclaim: ~15.6K LOC. Only `dependent::nat` + `verify::{spec,symbolic,tensor_verify}` survive as production load-bearing.*
 
 - **COMPASS §4.4 FULLY CLOSED.** v35.5.0 closed type-system dimension (affine D-FULL); v35.6.0 closes context dimension (`fn` without annotation = `@safe`, microkernel-isolated). D-α: `@safe` is the ergonomic bridge — CAN call `@kernel`/`@device` (SE021/SE022 removed). 28 sites annotated; Stage 2 byte-equality preserved.
 - **FJARR_LEAK Phase 1+2 closed** (v35.1.0..v35.5.0): arena migration → 2.73 MB → 0 bytes lost; affine semantics default-on; COW `_FjArr`; 19 Q6A examples + 13 integ + 5 lib migrated.
@@ -76,15 +77,15 @@ detailed entries.
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (v35.2.0 "FJARR_LEAK Phase 2 D-LITE", 2026-05-08)
+### Current Totals (post-EOS-37, 2026-05-12 — Compass §5.1 SMT-freeze + dep-types + GPU non-PTX closure)
 
 ```
-Tests:     7,633 lib + 10,489 integ (72 files) + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge + 1 ignored = 18,156
-           (0 fail, 0 flake; phase17 4/4 byte-equality preserved through E5+E4+D-LITE)
+Tests:     7,211 lib + 10,136 integ (78 files) + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge + 1 ignored = ~17,381
+           (0 fail, 0 flake; phase17 4/4 byte-equality preserved through SMT-freeze cascade)
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
-LOC:       ~449,000 Rust (391+ files) | Binary 18 MB | MSRV 1.87 | 243 .fj examples
-Modules:   42 pub mods | 54 [x], 0 [sim]/[f]/[s] (HONEST_AUDIT_V33; V26 A3 closed all gaps)
-CLI:       39 subcommands (all production) | CI: 7 workflows | Features: 11 flags
+LOC:       ~437,000 Rust (376 files) | Binary 18 MB | MSRV 1.87 | 309 .fj examples
+Modules:   42 pub mods at lib.rs root | 40 [x], 0 [sim]/[f]/[s] (was 54 pre-EOS-37; -14 deletions, ~15.6K LOC reclaim)
+CLI:       39 subcommands (all production) | CI: 7 workflows | Features: 19 flags (smt removed in Path C; was 11 pre-historical-update)
            --strict-ownership flag (existing) now triggers SE024 on `[T]` use-after-move
 Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.79% pub-doc | 100% stdlib_v3 doc
            Heap-leak classes closed: R15 string-arena + _FjArr realloc + [T] use-after-move (opt-in)
@@ -101,6 +102,7 @@ Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 
 | Version | Date | Highlight |
 |---|---|---|
+| **EOS-29..37 session** (untagged, engineering-only) | 2026-05-12 | 🪓 Compass §5.1 freeze closures: dep-types FULL (-3 modules: tensor_shapes + arrays + patterns), GPU non-PTX (-2: metal + hlsl; spirv frozen), verify/ SMT-freeze Path A+B+C (-10 modules: device_proofs + 6 zero-consumer + certification + pipeline + smt). Plus Option A (Layer reconciliation B-δ), Option B (parser annotation grammar Phase 1). **22 commits, ~-15.6K LOC reclaim, ~-422 lib tests.** No tag/release (no user-visible feature). Gates @ HEAD `967cdbcd`: 7,211 lib + 91/91 stage1_full + 4/4 phase17 byte-equality + 149/149 context_safety + clippy/fmt clean. → 10 B0 findings docs + 8 decision files in `docs/{,decisions/}`. |
 | **v35.6.0** "@safe default" | 2026-05-10 | 🛡️ Compass §4.4 closed at context dimension. `fn` without annotation = `@safe` (microkernel-isolated). D-α: `@safe` is ergonomic bridge — CAN call `@kernel` / `@device` (SE021/SE022 removed). 28 sites annotated. `str_byte_at`/`str_len` carved out of `safe_blocked_builtins` (pure-functional). Stage 2 byte-equality preserved. → KERNEL_MODE_PHASE_A_B0_FINDINGS + decisions/2026-05-10-default-safe-bridge. |
 | **v35.5.0** "FJARR_LEAK D-FULL" | 2026-05-10 | 🔐 Compass §4.4 closed at type-system dimension (affine semantics default-on). All non-primitive types Move; reuse → `.clone()`. COW `_FjArr` (rc+grow) prevents OOM at chain bootstrap. → FJARR_LEAK_PHASE_2_D_FULL_FINDINGS. |
 | **v35.4.1** "parser_ast cascade" | 2026-05-09 | ⚡ Closes v35.4.0 Phase 2 deferral. B0 #9: str_byte_at already existed in interpreter+analyzer+LLVM; only chain codegen wiring missing. Phase A wires _fj_str_byte_at into stdlib/codegen.fj; Phase B migrates 94 substring + 110 ASCII compares + 4 helpers in parser_ast.fj. 10-20× chain-bootstrap parse perf. → V35_4_1_BYTE_AT_B0_FINDINGS. |
@@ -537,13 +539,15 @@ Key: **SE024** UseAfterMoveArray (always-on for `[T]`) | **ME001** UseAfterMove 
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: 18,136 tests (7,633 lib + 10,489 integ in 72 files + 14 doc + 1 ignored)
+### 9.1 Test Suite: ~17,381 tests (7,211 lib + 10,136 integ in 78 files + 14 doc + 1 ignored)
 
-> Numbers re-verified 2026-05-12 via `cargo test --lib` (7,633), `cargo test --tests`
-> (10,489 across 72 integ files), `cargo test --doc` (14). Stress test (V26 A1.4) runs
+> Numbers re-verified 2026-05-12 EOS-37 via `cargo test --lib` (7,211),
+> `cargo test --tests --no-fail-fast` (10,136 across 78 integ files),
+> `cargo test --doc` (14). Stress test (V26 A1.4) runs
 > `cargo test --lib -- --test-threads=64 × 5` per push (5/5 PASS audit-day).
-> Prior v33.2.0 numbers (~10,138, 7,626 + 2,498) were stale: integ count was
-> measured under shell-glob mistake (`--test '*'` only ran 1 target).
+> Pre-EOS-37 numbers (7,633 lib / 10,489 integ / 72 files / 18,156 total) reflected
+> v35.6.0 state; 2026-05-12 session removed -422 lib + -353 integ tests via
+> dead-code reclaim (Compass §5.1 dep-types + GPU + SMT-verification freezes).
 
 ### 9.2 Test Naming Convention
 
@@ -624,8 +628,8 @@ Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (p
 ```bash
 # Build & test (mandatory before commit)
 cargo build [--release]
-cargo test --lib                                 # 7,633 lib tests
-cargo test --tests                               # 10,489 integ tests across 72 files
+cargo test --lib                                 # 7,211 lib tests (post-EOS-37)
+cargo test --tests                               # 10,136 integ tests across 78 files
                                                  # NOTE: do NOT use --test '*' (shell glob runs only 1 target)
 cargo test --lib -- --test-threads=64            # stress (V26 §6.7 rule)
 cargo clippy --lib -- -D warnings                # MUST pass
@@ -704,5 +708,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 35.6 — v35.6.0 closes Compass §4.4 at context dimension (`fn` = `@safe` default; D-α bridge). Quality gates @ HEAD: 7,633 lib + 86/86 stage1_full + 4/4 phase17 byte-equality + full integ 0 failures + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/decisions/2026-05-10-default-safe-bridge.md` + `docs/FJARR_LEAK_PHASE_2_D_FULL_FINDINGS.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md`. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-10*
+*CLAUDE.md Version: 35.6 + EOS-37 stats refresh — base release v35.6.0 (Compass §4.4 context-dimension closure). EOS-29..37 session (2026-05-12, engineering-only) executed Compass §5.1 freeze closures across dep-types, GPU non-PTX, and full SMT-verification surface; -15.6K LOC across 14 deleted modules. Quality gates @ HEAD `967cdbcd`: **7,211 lib** + 91/91 stage1_full + 4/4 phase17 byte-equality + 10,136 integ (78 files) + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/decisions/2026-05-12-*-deletion.md` + B0 audits `docs/{TENSOR_SHAPES,ARRAYS_PATTERNS,DEVICE_PROOFS,VERIFY_PATH_C}_LOAD_BEARING_B0_FINDINGS.md` + v35.6.0 base docs. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-12*
