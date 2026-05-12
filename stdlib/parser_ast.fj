@@ -1270,6 +1270,36 @@ pub fn parse_const_ast(src: str, pos: i64, ast: [str]) -> ParseResult {
     pr_ok(a, p_after)
 }
 
+// v35.7 D1.A: skip zero or more `@<word>` annotations, each optionally
+// followed by a paren-balanced `(<args>)`. Returns the new position. The
+// self-host parser is intentionally annotation-blind — the Rust analyzer
+// running before this chain is authoritative on context safety, so this
+// path just consumes-and-ignores the tokens.
+fn skip_at_annotations(src: str, pos: i64, n: i64) -> i64 {
+    let mut p = pos
+    p = skip_ws(src, p)
+    while p < n && str_byte_at(src, p) == 64 {
+        p = p + 1
+        let word_end = read_word(src, p)
+        if word_end == p { break }
+        p = word_end
+        p = skip_ws(src, p)
+        if p < n && str_byte_at(src, p) == 40 {
+            let mut depth = 1
+            let mut q = p + 1
+            while q < n && depth > 0 {
+                let cc = str_byte_at(src, q)
+                if cc == 40 { depth = depth + 1 }
+                else if cc == 41 { depth = depth - 1 }
+                q = q + 1
+            }
+            p = q
+        }
+        p = skip_ws(src, p)
+    }
+    p
+}
+
 pub fn parse_to_ast(src: str) -> [str] {
     let mut a: [str] = []
     let mut p: i64 = 0
@@ -1277,11 +1307,21 @@ pub fn parse_to_ast(src: str) -> [str] {
     while p < n {
         p = skip_ws(src, p)
         if p >= n { break }
+        // v35.7 D1.A: skip optional @-annotations on top-level decls (skip-only
+        // — the Rust analyzer running before this chain is authoritative on
+        // context safety). Accept both `@safe pub fn …` and `pub @safe fn …`,
+        // matching the Rust parser's tolerance. Multiple annotations stack
+        // (e.g. `@inline @cold fn foo()`).
+        p = skip_at_annotations(src, p, n)
+        if p >= n { break }
         // Phase 17.0: skip optional `pub` modifier (visibility annotation
         // is informational at codegen level — emitted fns are extern by
         // default in C). Applies before fn / struct / enum / const.
         let after_pub = expect_str(src, p, "pub")
         if after_pub > 0 { p = skip_ws(src, after_pub) }
+        if p >= n { break }
+        // v35.7 D1.A: also accept annotations between `pub` and the keyword.
+        p = skip_at_annotations(src, p, n)
         if p >= n { break }
         // Dispatch on top-level keyword
         if expect_str(src, p, "struct") > 0 {

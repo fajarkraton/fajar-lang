@@ -1126,3 +1126,48 @@ fn full_p86_call_index_push_into_str_array() {
     );
     assert_eq!(r.status.code(), Some(2));
 }
+
+// ── v35.7 D1.A: parser_ast.fj @-annotation skip ──
+// Exercises stdlib/parser_ast.fj::skip_at_annotations + parse_to_ast's two
+// skip sites (before and after the optional `pub` modifier). All four tests
+// pass the source through the self-host parse_to_ast → emit_program chain,
+// which is the actual unit-under-test for D1.A. See
+// docs/V35_7_PARSER_ANNOTATION_GRAMMAR_B0_FINDINGS.md.
+
+#[test]
+fn full_p87_at_safe_on_main() {
+    let r = compile_subset_program("full_p87", "@safe fn main() -> i64 { return 42 }");
+    assert_eq!(r.status.code(), Some(42));
+}
+
+#[test]
+fn full_p88_at_inline_on_helper_then_main() {
+    let r = compile_subset_program(
+        "full_p88",
+        "@inline fn helper() -> i64 { return 7 } fn main() -> i64 { return helper() + 3 }",
+    );
+    assert_eq!(r.status.code(), Some(10));
+}
+
+#[test]
+fn full_p89_pub_then_at_annotation_then_fn() {
+    // Annotation BETWEEN `pub` and the keyword — second skip site.
+    let r = compile_subset_program("full_p89", "pub @safe fn main() -> i64 { return 5 }");
+    assert_eq!(r.status.code(), Some(5));
+}
+
+#[test]
+fn full_p90_at_annotation_with_paren_arg() {
+    // Parametrized annotation `@device("net")` — exercises paren-balanced
+    // arg consumption.
+    let r = compile_subset_program("full_p90", "@device(\"net\") fn main() -> i64 { return 9 }");
+    assert_eq!(r.status.code(), Some(9));
+}
+
+#[test]
+fn full_p91_stacked_annotations() {
+    // Multiple annotations stack — the while-loop in skip_at_annotations
+    // must consume both.
+    let r = compile_subset_program("full_p91", "@inline @cold fn main() -> i64 { return 11 }");
+    assert_eq!(r.status.code(), Some(11));
+}
