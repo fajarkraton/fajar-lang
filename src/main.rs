@@ -1946,6 +1946,17 @@ fn cmd_run_native(path: &PathBuf) -> ExitCode {
         }
     };
 
+    // Analyze (type check + context safety). v35.6.x B-δ: previously this path
+    // bypassed the analyzer, leaving Cranelift's H4 hook as the only context
+    // check — and that hook has drifted from the analyzer's canonical lists.
+    // See docs/V35_6_LAYER_RECONCILIATION_B0_FINDINGS.md.
+    if let Err(errors) = analyze(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
+
     // Compile to native code via Cranelift JIT
     let mut compiler = match fajar_lang::codegen::cranelift::CraneliftCompiler::new() {
         Ok(c) => c,
@@ -2021,6 +2032,17 @@ fn cmd_run_llvm(path: &PathBuf) -> ExitCode {
             return ExitCode::from(EXIT_COMPILE);
         }
     };
+
+    // Analyze (type check + context safety). v35.6.x B-δ: LLVM codegen has no
+    // context-violation check of its own, so without this pre-pass `fj run --llvm`
+    // would silently compile @kernel programs containing tensor ops.
+    // See docs/V35_6_LAYER_RECONCILIATION_B0_FINDINGS.md §3.2.
+    if let Err(errors) = analyze(&program) {
+        for e in &errors {
+            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
+        }
+        return ExitCode::from(EXIT_COMPILE);
+    }
 
     // Initialize LLVM native target
     if let Err(e) = fajar_lang::codegen::llvm::LlvmCompiler::init_native_target() {
