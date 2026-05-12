@@ -60,9 +60,6 @@ enum Command {
         /// Enable strict ownership: String/Array/Struct are Move types (use-after-move errors).
         #[arg(long)]
         strict_ownership: bool,
-        /// Run in distributed cluster mode (Raft consensus + task scheduler).
-        #[arg(long)]
-        cluster: bool,
         /// Use tiered JIT compilation (interpreter → baseline → optimizing).
         #[arg(long)]
         jit: bool,
@@ -429,7 +426,6 @@ fn main_inner() -> ExitCode {
             profile,
             profile_output,
             strict_ownership,
-            cluster,
             jit,
             check_only,
             effect_stats,
@@ -446,8 +442,6 @@ fn main_inner() -> ExitCode {
             };
             if check_only {
                 cmd_check(&path)
-            } else if cluster {
-                cmd_run_cluster(&path)
             } else if llvm {
                 cmd_run_llvm(&path)
             } else if native {
@@ -5811,118 +5805,21 @@ fn cmd_verify(path: &PathBuf, format: &str, verbose: bool, _strict: bool) -> Exi
 }
 
 /// V14: `fj run --cluster` — run in distributed cluster mode.
-fn cmd_run_cluster(path: &PathBuf) -> ExitCode {
-    use fajar_lang::distributed::raft::{self, RaftNode, RaftNodeId, RequestVoteReply};
-    use fajar_lang::distributed::scheduler::{
-        DistributedTask, PlacementStrategy, TaskId, TaskLoadBalancer, TaskResources, WorkerId,
-        WorkerNode,
-    };
-
-    let source = match read_source(path) {
-        Ok(s) => s,
-        Err(code) => return code,
-    };
-    let filename = path.display().to_string();
-
-    // Parse and analyze
-    let tokens = match tokenize(&source) {
-        Ok(t) => t,
-        Err(errors) => {
-            for e in &errors {
-                FjDiagnostic::from_lex_error(e, &filename, &source).eprint();
-            }
-            return ExitCode::from(EXIT_COMPILE);
-        }
-    };
-    let program = match parse(tokens) {
-        Ok(p) => p,
-        Err(errors) => {
-            for e in &errors {
-                FjDiagnostic::from_parse_error(e, &filename, &source).eprint();
-            }
-            return ExitCode::from(EXIT_COMPILE);
-        }
-    };
-    if let Err(errors) = analyze(&program) {
-        for e in &errors {
-            FjDiagnostic::from_semantic_error(e, &filename, &source).eprint();
-        }
-        return ExitCode::from(EXIT_COMPILE);
-    }
-
-    // Initialize a simulated 3-node Raft cluster
-    let node_ids: Vec<RaftNodeId> = (0..3).map(RaftNodeId).collect();
-    let mut leader = RaftNode::new(node_ids[0], node_ids[1..].to_vec());
-
-    // Elect leader via free functions
-    raft::start_election(&mut leader);
-    for &peer in &node_ids[1..] {
-        let reply = RequestVoteReply {
-            term: leader.current_term,
-            vote_granted: true,
-        };
-        raft::receive_vote(&mut leader, peer, &reply);
-    }
-
-    // Create worker nodes for scheduler
-    let workers: Vec<WorkerNode> = node_ids
-        .iter()
-        .enumerate()
-        .map(|(i, _)| WorkerNode {
-            id: WorkerId(i as u64),
-            cpu_cores: 4,
-            gpu_count: if i == 0 { 1 } else { 0 },
-            memory_mb: 8192,
-            current_tasks: 0,
-            weight: 1,
-            online: true,
-        })
-        .collect();
-
-    // Submit the program as a distributed task
-    let task = DistributedTask::new(
-        TaskId(1),
-        &filename,
-        TaskResources {
-            cpu_cores: 1,
-            gpu_count: 0,
-            memory_mb: 512,
-        },
-    );
-
-    let mut balancer = TaskLoadBalancer::new(PlacementStrategy::LeastLoaded);
-    let assigned = balancer
-        .select(&task, &workers)
-        .map(|wid| format!("node-{}", wid.0))
-        .unwrap_or_else(|| "local".to_string());
-
-    println!("=== Fajar Lang Distributed Execution ===");
-    println!("File: {filename}");
-    println!("Cluster: {} nodes", node_ids.len());
-    println!("Leader: node-0 (term {})", leader.current_term);
-    println!("Task assigned to: {assigned}");
-    println!();
-
-    // Execute the program via interpreter
-    let mut interp = Interpreter::new();
-    match interp.eval_source(&source) {
-        Ok(val) => {
-            println!("Result: {val}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            ExitCode::from(EXIT_RUNTIME)
-        }
-    }
-}
-
 /// V14: `fj build --target wasm32-wasi-p2` — build WASI P2 component.
 fn cmd_build_wasi_p2(path: &PathBuf, output: Option<&std::path::Path>, verbose: bool) -> ExitCode {
     use fajar_lang::wasi_p2::component::{
         ComponentBuilder, ComponentFuncType, ComponentTypeKind, ComponentValType, ExportKind,
         validate_component,
     };
+
+    // Compass §5.1 — WASI Preview 2 has been extracted to a standalone crate
+    // (fajarkraton/fajar-wasi-p2). Per D-0.2 Option γ, fajar-lang continues to
+    // route `fj build --target wasm32-wasi-p2` through this path in v36.x as a
+    // deprecation grace window. The next major version (v37) will turn this
+    // into a hard error; the version after will remove it entirely.
+    eprintln!(
+        "warning: `fj build --target wasm32-wasi-p2` is deprecated and will be removed in v37.\n         Migrate to the standalone crate: https://github.com/fajarkraton/fajar-wasi-p2\n         Compass §5.1 verdict: \"Bekukan. Tidak relevan untuk niche embedded.\""
+    );
 
     let source = match read_source(path) {
         Ok(s) => s,
