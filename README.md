@@ -5,7 +5,7 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two dogfood operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang as project-internal validators (not production OSes; no userspace ecosystem).
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v35.0.0](https://img.shields.io/badge/release-v35.0.0_STAGE_2_SELF--HOST_TRIPLE--TEST-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.0.0)
+[![Release v35.6.0](https://img.shields.io/badge/release-v35.6.0_COMPASS_%C2%A74.4_CONTEXT--DIMENSION_CLOSED-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.6.0)
 [![Tests](https://img.shields.io/badge/tests-18K%2B_CI_green-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Stress](https://img.shields.io/badge/stress-5x_at_threads%3D64_PASS-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()
@@ -521,9 +521,9 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Release | **v35.0.0 "Stage 2 Self-Host Triple-Test"** (2026-05-06, MAJOR) — fjc Stage 1 native binary (140KB ELF) compiles its own combined fj source byte-identical to the chain output (md5 `1d6c52a...`); cross-stage equivalence on third-party input (md5 `d47fb8a...`). Self-compile speed 38s (interpreter) → 0.66s (native), ~57×. Source: `docs/SELFHOST_FJ_PHASE_{16,17}_FINDINGS.md`. **Note**: this is internal-engineering proof of fixed-point self-hosting; it is not a production-deployment milestone. |
+| Release | **v35.6.0 "@safe Default — Compass §4.4 Context-Dimension Closed"** (2026-05-10) — `fn` without annotation now = `@safe` (microkernel-isolated) by default; D-α decision makes `@safe` the ergonomic bridge layer that CAN call `@kernel`/`@device` directly per Compass §5.4 (SE021/SE022 emission removed). Combined with v35.5.0 type-system D-FULL (affine semantics default-on), Compass §4.4 is now closed at both dimensions. Predecessor v35.0.0 (2026-05-06): Stage 2 self-host triple-test — fjc Stage 1 native binary (140KB ELF) compiles its own fj source byte-identical (md5 `1d6c52a...`); ~57× speedup. Sources: `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/decisions/2026-05-10-default-safe-bridge.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md`. **Note**: internal-engineering closure of the design Compass; not a production-deployment milestone. |
 | Compiler LOC | ~450,000 Rust across 391 files in src/ |
-| Tests | **7,629 lib** + 10,489 integ (in 72 files) + 14 doc + 1 ignored = **18,132 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~1,345 tests (8,974 PASS at `--features llvm,native`). Verified 2026-05-07 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
+| Tests | **7,633 lib** + 10,489 integ (in 72 files) + 14 doc + 1 ignored = **18,136 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~1,345 tests (8,974 PASS at `--features llvm,native`). Verified 2026-05-12 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
 | Doc coverage | **95.79% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
 | Error-code coverage | **gap=0** — 135 cataloged, 125 covered + 12 forward-compat (per §6.6 R6); `python3 scripts/audit_error_codes.py --strict` enforces |
 | Tutorial | `docs/TUTORIAL.md` 10 chapters, basics → robot control loop |
