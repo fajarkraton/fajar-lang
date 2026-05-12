@@ -32,16 +32,15 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.6.0 baseline, 2026-05-10 — Compass §4.4 context-dimension closure; **engineering-only changes through EOS-37 2026-05-12**)
+### Completion Status (v35.6.0 baseline, 2026-05-10; engineering-only changes through EOS-37 2026-05-12)
 
-**40 modules: 40 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 39 CLI subcommands.
-*Module count dropped from 54 → 40 in the 2026-05-12 session via Compass §5.1 freeze: full dep-types (-3: tensor_shapes + arrays + patterns) + GPU non-PTX (-2: metal + hlsl; spirv frozen) + verify/ SMT-freeze Path A+B+C (-10: device_proofs + 6 zero-consumer + certification + pipeline + smt). Reclaim: ~15.6K LOC. Only `dependent::nat` + `verify::{spec,symbolic,tensor_verify}` survive as production load-bearing.*
+**40 modules: 40 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 39 CLI subcommands. Module count dropped 54 → 40 in 2026-05-12 session via Compass §5.1 freeze (~15.6K LOC reclaim).
 
-- **COMPASS §4.4 FULLY CLOSED.** v35.5.0 closed type-system dimension (affine D-FULL); v35.6.0 closes context dimension (`fn` without annotation = `@safe`, microkernel-isolated). D-α: `@safe` is the ergonomic bridge — CAN call `@kernel`/`@device` (SE021/SE022 removed). 28 sites annotated; Stage 2 byte-equality preserved.
-- **FJARR_LEAK Phase 1+2 closed** (v35.1.0..v35.5.0): arena migration → 2.73 MB → 0 bytes lost; affine semantics default-on; COW `_FjArr`; 19 Q6A examples + 13 integ + 5 lib migrated.
-- **Self-host Phases 16+17+18 closed** (v35.0.0..v34.x, 2026-05-06..07): fjc 140KB ELF compiles own source byte-identical (md5 `1d6c52a...`); Stage 2 == Stage 1 (md5 `d47fb8a...`); ~57× speedup; CALL_INDEX silent-miscompile (`f()[i]`) resolved.
+- **COMPASS §4.4 FULLY CLOSED.** v35.5.0 closed type-system (affine D-FULL); v35.6.0 closes context (`fn` = `@safe` by default). D-α: `@safe` is ergonomic bridge — CAN call `@kernel`/`@device` (SE021/SE022 removed).
+- **FJARR_LEAK Phase 1+2 closed** (v35.1.0..v35.5.0): arena migration → 0 bytes lost; affine semantics default-on; COW `_FjArr`.
+- **Self-host Phases 16+17+18 closed** (v35.0.0..v34.x): fjc compiles own source byte-identical; ~57× speedup; CALL_INDEX miscompile resolved.
 - **FAJAROS_100PCT_FJ_PLAN TERMINAL COMPLETE** (2026-05-05): ZERO non-fj LOC in fajaros kernel; 9/9 LLVM compiler gaps closed.
-- **FAJARQUANT_RUST_TO_FJ_PLAN closed** (2026-05-05): 7 algorithm modules (~2,649 LOC Rust) ported to `stdlib/fajarquant.fj` (986 LOC, 39 fns); 70+ I/O pairs bit-exact.
+- **FAJARQUANT_RUST_TO_FJ_PLAN closed** (2026-05-05): 7 algorithms ported (~2,649 LOC Rust → 986 LOC fj); 70+ I/O pairs bit-exact.
 - **Perfection Plan P0-P9 closed engineering-side; 22/25 work-items PASS**.
 
 > **Source of truth:** `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/FJARR_LEAK_PHASE_{1,2}_FINDINGS.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` + `docs/HONEST_AUDIT_V33.md`. Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
@@ -102,16 +101,13 @@ Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 
 | Version | Date | Highlight |
 |---|---|---|
-| **EOS-29..37 session** (untagged, engineering-only) | 2026-05-12 | 🪓 Compass §5.1 freeze closures: dep-types FULL (-3 modules: tensor_shapes + arrays + patterns), GPU non-PTX (-2: metal + hlsl; spirv frozen), verify/ SMT-freeze Path A+B+C (-10 modules: device_proofs + 6 zero-consumer + certification + pipeline + smt). Plus Option A (Layer reconciliation B-δ), Option B (parser annotation grammar Phase 1). **22 commits, ~-15.6K LOC reclaim, ~-422 lib tests.** No tag/release (no user-visible feature). Gates @ HEAD `967cdbcd`: 7,211 lib + 91/91 stage1_full + 4/4 phase17 byte-equality + 149/149 context_safety + clippy/fmt clean. → 10 B0 findings docs + 8 decision files in `docs/{,decisions/}`. |
-| **v35.6.0** "@safe default" | 2026-05-10 | 🛡️ Compass §4.4 closed at context dimension. `fn` without annotation = `@safe` (microkernel-isolated). D-α: `@safe` is ergonomic bridge — CAN call `@kernel` / `@device` (SE021/SE022 removed). 28 sites annotated. `str_byte_at`/`str_len` carved out of `safe_blocked_builtins` (pure-functional). Stage 2 byte-equality preserved. → KERNEL_MODE_PHASE_A_B0_FINDINGS + decisions/2026-05-10-default-safe-bridge. |
-| **v35.5.0** "FJARR_LEAK D-FULL" | 2026-05-10 | 🔐 Compass §4.4 closed at type-system dimension (affine semantics default-on). All non-primitive types Move; reuse → `.clone()`. COW `_FjArr` (rc+grow) prevents OOM at chain bootstrap. → FJARR_LEAK_PHASE_2_D_FULL_FINDINGS. |
-| **v35.4.1** "parser_ast cascade" | 2026-05-09 | ⚡ Closes v35.4.0 Phase 2 deferral. B0 #9: str_byte_at already existed in interpreter+analyzer+LLVM; only chain codegen wiring missing. Phase A wires _fj_str_byte_at into stdlib/codegen.fj; Phase B migrates 94 substring + 110 ASCII compares + 4 helpers in parser_ast.fj. 10-20× chain-bootstrap parse perf. → V35_4_1_BYTE_AT_B0_FINDINGS. |
-| **v35.4.0** "lexer cascade" | 2026-05-09 | ⚡ stdlib/lexer.fj → char_at + char literals (43 substring + 165 compares + 3 helpers; 5-10× ASCII perf). Phase 2 parser_ast.fj DEFERRED (char_at is codepoint-idx; parser uses byte-idx; needs byte_at). → V35_4_0_LEXER_PERF_B0_FINDINGS. |
-| **v35.2.3..v35.3.2** | 2026-05-09 | 🔐 Full crypto exposure (31 fns + RSA + Ed25519) + X25519-dalek fix + char_at analyzer Type::Char fix + TQ12.2 SQLite + lib cleanup. → V35_3_* + CQ1_4_RSA_B0_FINDINGS. |
-| **v35.1.0..v35.2.0** "FJARR_LEAK" | 2026-05-08 | `_FjArr` realloc-leak CLOSED (88B/array→0; arena copy-grow). `[T]` affine via opt-in `--strict-ownership` + SE024. → FJARR_LEAK_PHASE_{1,2}_FINDINGS. |
-| **v35.0.0** "STAGE 2 SELF-HOST TRIPLE-TEST" | 2026-05-06 | Fixed point: fjc 140KB ELF compiles own source byte-identical (md5 1d6c52a); Stage 2 == Stage 1 (md5 d47fb8a); ~57× speedup. → SELFHOST_FJ_PHASE_17. Phase 18 CALL_INDEX (silent miscompile `f()[i]` / `obj.m()[i]`) closed 2026-05-07 commit 9c9ff2a8. |
-| **v34.x..v32.x** | 2026-05-02..06 | R14 dyn arrays; Self-host build-up; FAJAROS_100PCT TERMINAL; Perfection P0-P9; @naked; asm `$$`; HONEST_AUDIT_V32. |
-| **V30.x / V29 / V27 / V26** | 2026-04-11..20 | FajarOS Nova ext2/FAT32 + Gemma 3; NX triple closure; @noinline/@inline/@cold; AI scheduler + @interrupt + Cap<T>; V26 "Final" (§6.7). |
+| **EOS-29..37 session** (untagged) | 2026-05-12 | 🪓 Compass §5.1 freeze: dep-types (-3), GPU non-PTX (-2), verify/ SMT (-10). Plus Option A (B-δ), Option B (Phase 1). **22 commits, ~-15.6K LOC, ~-422 lib tests.** Gates @ `967cdbcd`: 7,211 lib + 91/91 stage1_full + 4/4 phase17 + clippy/fmt clean. |
+| **v35.6.0** "@safe default" | 2026-05-10 | 🛡️ Compass §4.4 context dimension closed. `fn` = `@safe` default (microkernel-isolated). D-α: `@safe` bridges `@kernel`/`@device` (SE021/SE022 removed). |
+| **v35.5.0** "FJARR_LEAK D-FULL" | 2026-05-10 | 🔐 Compass §4.4 type-system dimension closed. Affine default-on; non-primitives Move; reuse → `.clone()`. COW `_FjArr`. |
+| **v35.4.x** "lexer/parser_ast cascade" | 2026-05-09 | ⚡ char_at + byte_at builtins; 94+43 substring sites migrated; 10-20× chain-bootstrap parse perf. |
+| **v35.2.3..v35.3.2** | 2026-05-09 | 🔐 Full crypto (31 fns + RSA + Ed25519) + X25519-dalek fix + char_at analyzer + TQ12.2 SQLite. |
+| **v35.0.0..v35.2.0** | 2026-05-06..08 | Stage 2 self-host triple-test byte-identical; FJARR_LEAK Phase 1+2; CALL_INDEX miscompile. |
+| **v34.x..v26.x** (older) | 2026-04..05 | See `CHANGELOG.md` for full history: R14 dyn arrays; FAJAROS_100PCT TERMINAL; Perfection P0-P9; @naked; FajarOS Nova; NX triple; AI scheduler. |
 
 ### Platforms
 - **FajarOS v3.0 "Surya"** (ARM64): Verified on Radxa Dragon Q6A. 65+ commands.
