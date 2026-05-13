@@ -32,9 +32,9 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
 
-### Completion Status (v35.6.0 baseline, 2026-05-10; engineering-only changes through EOS-37 2026-05-12)
+### Completion Status (v35.6.0 baseline, 2026-05-10; engineering-only changes through EOS-40 2026-05-13)
 
-**40 modules: 40 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 39 CLI subcommands. Module count dropped 54 → 40 in 2026-05-12 session via Compass §5.1 freeze (~15.6K LOC reclaim).
+**40 modules: 40 [x] / 0 [sim] / 0 [f] / 0 [s].** Zero framework, zero stubs. 38 CLI subcommands. Module count dropped 54 → 42 (EOS-37 §5.1 freezes, ~15.6K LOC) → 40 (EOS-40 §5 Path E + F extraction, ~29.6K LOC).
 
 - **COMPASS §4.4 FULLY CLOSED.** v35.5.0 closed type-system (affine D-FULL); v35.6.0 closes context (`fn` = `@safe` by default). D-α: `@safe` is ergonomic bridge — CAN call `@kernel`/`@device` (SE021/SE022 removed).
 - **FJARR_LEAK Phase 1+2 closed** (v35.1.0..v35.5.0): arena migration → 0 bytes lost; affine semantics default-on; COW `_FjArr`.
@@ -76,21 +76,21 @@ detailed entries.
 - v0.2: Codegen type system ✅ | v0.3: 739 tasks (concurrency, GPU, ML, self-hosting) ✅
 - v0.4: 40 tasks (generic enums, RAII, async) ✅ | v0.5: 80 tasks (test framework, iterators, f-strings) ✅
 
-### Current Totals (post-EOS-37, 2026-05-12 — Compass §5.1 SMT-freeze + dep-types + GPU non-PTX closure)
+### Current Totals (post-EOS-40, 2026-05-13 — Compass §5 Path E + F extraction closure)
 
 ```
-Tests:     7,211 lib + 10,136 integ (78 files) + 14 doc + 1 fjarr_leak + 11 SE024 + 7 branch_merge + 1 ignored = ~17,381
-           (0 fail, 0 flake; phase17 4/4 byte-equality preserved through SMT-freeze cascade)
+Tests:     6,591 lib + 9,516 integ (80 files; 1 ignored) + 14 doc = 16,121 total
+           (0 fail, 0 flake; phase17 4/4 byte-equality preserved through Path E + F extraction)
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
-LOC:       ~437,000 Rust (376 files) | Binary 18 MB | MSRV 1.87 | 309 .fj examples
-Modules:   42 pub mods at lib.rs root | 40 [x], 0 [sim]/[f]/[s] (was 54 pre-EOS-37; -14 deletions, ~15.6K LOC reclaim)
-CLI:       39 subcommands (all production) | CI: 7 workflows | Features: 19 flags (smt removed in Path C; was 11 pre-historical-update)
-           --strict-ownership flag (existing) now triggers SE024 on `[T]` use-after-move
+LOC:       ~407,744 Rust (348 files) | Binary 18 MB | MSRV 1.87 | 309 .fj examples
+Modules:   40 pub mods at lib.rs root | 40 [x], 0 [sim]/[f]/[s] (was 42 pre-EOS-40 / 54 pre-EOS-37; Path E + F extraction reclaimed ~29.6K LOC across 28 source files; EOS-37 freezes reclaimed ~15.6K across 14 modules)
+CLI:       38 subcommands (run-cluster removed at F.4 per Compass §5.1 Option α) | CI: 7 workflows | Features: 19 flags (smt removed in Path C)
+           --strict-ownership flag (existing) triggers SE024 on `[T]` use-after-move
 Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.79% pub-doc | 100% stdlib_v3 doc
            Heap-leak classes closed: R15 string-arena + _FjArr realloc + [T] use-after-move (opt-in)
            Per-fjc-self-compile leak: 2.73 MB → 0 bytes definitely+indirectly lost ✅
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, 3× speedup)
-Tags:      v32.1.0 → v33.x → v34.x → v35.0.0..v35.6.0 (see Version History table + CHANGELOG.md)
+Tags:      v32.1.0 → v33.x → v34.x → v35.0.0..v35.6.0 (Path E + F closure tag v36.0.0 deferred to Phase G remainder; see CHANGELOG.md [Unreleased])
 
 Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 ```
@@ -535,15 +535,18 @@ Key: **SE024** UseAfterMoveArray (always-on for `[T]`) | **ME001** UseAfterMove 
 
 ## 9. Testing Strategy
 
-### 9.1 Test Suite: ~17,381 tests (7,211 lib + 10,136 integ in 78 files + 14 doc + 1 ignored)
+### 9.1 Test Suite: 16,121 tests (6,591 lib + 9,516 integ in 80 files + 14 doc + 1 ignored)
 
-> Numbers re-verified 2026-05-12 EOS-37 via `cargo test --lib` (7,211),
-> `cargo test --tests --no-fail-fast` (10,136 across 78 integ files),
-> `cargo test --doc` (14). Stress test (V26 A1.4) runs
+> Numbers re-verified 2026-05-13 EOS-40 via `cargo test --lib` (6,591),
+> `cargo test --tests --no-fail-fast` (9,516 across 80 integ files; 1
+> ignored), `cargo test --doc` (14). Stress test (V26 A1.4) runs
 > `cargo test --lib -- --test-threads=64 × 5` per push (5/5 PASS audit-day).
-> Pre-EOS-37 numbers (7,633 lib / 10,489 integ / 72 files / 18,156 total) reflected
-> v35.6.0 state; 2026-05-12 session removed -422 lib + -353 integ tests via
-> dead-code reclaim (Compass §5.1 dep-types + GPU + SMT-verification freezes).
+> Path E + F extraction (EOS-29..40) removed -620 lib + -620 integ
+> (≈-1,240 net) — wasi_p2 + distributed lib tests now live in their
+> extracted crates (`fajar-wasi-p2` ~244 + `fajar-distributed` ~332);
+> in-fajar-lang surface kept as 12 integ smoke tests
+> (`tests/{wasi_p2,distributed}_integration.rs`).
+> Pre-EOS-37 baseline: 7,633 lib / 10,489 integ / 72 files / 18,156 total.
 
 ### 9.2 Test Naming Convention
 
@@ -624,8 +627,8 @@ Interpreter: tree-walking + bytecode VM. Codegen: Cranelift (embedded) + LLVM (p
 ```bash
 # Build & test (mandatory before commit)
 cargo build [--release]
-cargo test --lib                                 # 7,211 lib tests (post-EOS-37)
-cargo test --tests                               # 10,136 integ tests across 78 files
+cargo test --lib                                 # 6,591 lib tests (post-EOS-40 / Path E + F closure)
+cargo test --tests                               # 9,516 integ tests across 80 files
                                                  # NOTE: do NOT use --test '*' (shell glob runs only 1 target)
 cargo test --lib -- --test-threads=64            # stress (V26 §6.7 rule)
 cargo clippy --lib -- -D warnings                # MUST pass
@@ -704,5 +707,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 35.6 + EOS-37 stats refresh — base release v35.6.0 (Compass §4.4 context-dimension closure). EOS-29..37 session (2026-05-12, engineering-only) executed Compass §5.1 freeze closures across dep-types, GPU non-PTX, and full SMT-verification surface; -15.6K LOC across 14 deleted modules. Quality gates @ HEAD `967cdbcd`: **7,211 lib** + 91/91 stage1_full + 4/4 phase17 byte-equality + 10,136 integ (78 files) + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/decisions/2026-05-12-*-deletion.md` + B0 audits `docs/{TENSOR_SHAPES,ARRAYS_PATTERNS,DEVICE_PROOFS,VERIFY_PATH_C}_LOAD_BEARING_B0_FINDINGS.md` + v35.6.0 base docs. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-12*
+*CLAUDE.md Version: 35.6 + EOS-40 stats refresh — base release v35.6.0 (Compass §4.4 context-dimension closure). EOS-29..40 session arc (2026-05-12..13, engineering-only) executed Compass §5.1 freeze closures (dep-types + GPU non-PTX + SMT-verification, -15.6K LOC across 14 modules at EOS-37) and Compass §5 Path E + F extraction (wasi_p2 + distributed re-homed to standalone crates, -29.6K LOC across 28 modules at EOS-29..40). Quality gates @ HEAD post-Path-E+F: **6,591 lib** + 91/91 stage1_full + 4/4 phase17 byte-equality + 9,516 integ (80 files; 12 new smoke tests) + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md` + `docs/decisions/2026-05-12-*.md` + B0 audits `docs/{TENSOR_SHAPES,ARRAYS_PATTERNS,DEVICE_PROOFS,VERIFY_PATH_C,PATH_E_WASI_P2,PATH_F_DISTRIBUTED}_*_B0_FINDINGS.md` + v35.6.0 base docs. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
+*Last Updated: 2026-05-13*
