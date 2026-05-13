@@ -26,10 +26,8 @@ fn branch_always_terminates(e: &Expr) -> bool {
                     Stmt::Return { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {
                         return true;
                     }
-                    Stmt::Expr { expr, .. } => {
-                        if branch_always_terminates(expr) {
-                            return true;
-                        }
+                    Stmt::Expr { expr, .. } if branch_always_terminates(expr) => {
+                        return true;
                     }
                     _ => {}
                 }

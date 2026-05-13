@@ -508,7 +508,7 @@ impl Interpreter {
                 }
                 Ok(Value::Tensor(t.clone()))
             }
-            (v, "clone") if !arg_vals.is_empty() => Err(RuntimeError::ArityMismatch {
+            (_, "clone") if !arg_vals.is_empty() => Err(RuntimeError::ArityMismatch {
                 expected: 0,
                 got: arg_vals.len(),
             }
