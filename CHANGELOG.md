@@ -2,7 +2,7 @@
 
 All notable changes to Fajar Lang are documented here.
 
-## [Unreleased] — Compass §5 Path E + F extraction (EOS-29..40, 2026-05-12..13)
+## [v36.0.0] — 2026-05-13 🪓 Compass §5 closure — wasi_p2 + distributed extracted — major
 
 Long-tail subsystems `src/wasi_p2/` and `src/distributed/` extracted
 to standalone Apache-2.0 crates per Compass §5.1 ("Bekukan. Tidak

@@ -1362,7 +1362,7 @@ dependencies = [
 
 [[package]]
 name = "fajar-lang"
-version = "35.0.0"
+version = "36.0.0"
 dependencies = [
  "aes",
  "aes-gcm",
