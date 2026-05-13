@@ -2,6 +2,79 @@
 
 All notable changes to Fajar Lang are documented here.
 
+## [Unreleased] — Compass §5 Path E + F extraction (EOS-29..40, 2026-05-12..13)
+
+Long-tail subsystems `src/wasi_p2/` and `src/distributed/` extracted
+to standalone Apache-2.0 crates per Compass §5.1 ("Bekukan. Tidak
+relevan untuk niche embedded."). Fajar-lang now depends on them
+through rev-pinned Cargo git deps; the local source directories
+are gone.
+
+### Removed
+
+- `src/wasi_p2/` (12 files, −13,791 LOC, 244 lib tests) — extracted
+  to [`fajarkraton/fajar-wasi-p2`](https://github.com/fajarkraton/fajar-wasi-p2)
+  (Phase E.5, commit `62f81f64`).
+- `src/distributed/` (16 files, −15,343 LOC, 332 lib tests) —
+  extracted to [`fajarkraton/fajar-distributed`](https://github.com/fajarkraton/fajar-distributed)
+  (Phase F.5, commit `252359b9`).
+- `fj run-cluster` CLI subcommand (`cmd_run_cluster`) — Compass §5.1
+  Option α per `docs/decisions/2026-05-12-path-e-f-prep.md` D-0.2.
+  CLI subcommand count: 40 → 39.
+- 22 Sprint N3 (distributed) + 19 Sprint N7 (wasi_p2) lib tests in
+  `src/interpreter/eval/mod.rs` (−593 LOC). 10 `v14_n3_*` +
+  1 `v14_w2_3_*` + 1 `v14_n6_2_*` cascade tests in `tests/*.rs`.
+
+### Changed
+
+- `fj build --target wasm32-wasi-p2 …` now emits a deprecation
+  warning naming the extracted crate URL and the v37 hard-removal
+  target (Compass §5.1 Option γ per D-0.2-wasi). The CLI still
+  produces a valid component via the extracted `ComponentBuilder`.
+- `Cargo.toml` adds `fajar-wasi-p2` (rev `d57d3b21`) + `fajar-distributed`
+  (rev `4011a3d5`) as git deps.
+- `src/main.rs::cmd_build_wasi_p2` switches the import from
+  `fajar_lang::wasi_p2::component::*` to `fajar_wasi_p2::component::*`.
+
+### Added
+
+- `tests/wasi_p2_integration.rs` (Phase E.6, commit `681cae3b`) —
+  6 round-trip smoke tests pinning the public-API contract of
+  `fajar-wasi-p2` v0.1.0 used by `cmd_build_wasi_p2`.
+- `tests/distributed_integration.rs` (Phase F.6, commit `5e871965`) —
+  6 smoke tests for the Raft/cluster/discovery surface that the
+  deleted N3 sprint tests historically exercised.
+- `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md` — closure findings
+  doc with per-phase log, LOC reclaim breakdown, surprises, and
+  Phase G prerequisites.
+- `docs/COMPASS_5_PATH_E_F_EXTRACTION_PLAN.md` (commit `8cdbad97`).
+- `docs/decisions/2026-05-12-path-e-f-prep.md` (commit `b5b6a67b`).
+- `docs/PATH_{E,F}_*_B0_FINDINGS.md` pre-flight audits (commit
+  `5caed58d`).
+
+### Stats deltas
+
+- Lib tests: **7,211 → 6,591** (−620 = −263 wasi_p2 + −357 distributed).
+- LOC: ≈ **−29,580** net Rust (after −593 cascade and +245 new
+  integ tests).
+- Module count: 42 → **40** root `pub mod`s in `src/lib.rs`.
+- Self-host stage1_full + Phase17 byte-equality: unchanged (91/91
+  + 4/4); both extractions are surface-only to fajar-lang's compiler.
+
+### Combined wall-clock
+
+**~2.8h actual** across both Path E + F (E.0..E.6 + F.0..F.6) vs
+**~35-46h plan estimate**. **−92% under estimate**, dominated by
+the agent-parallel Phase E.0/F.0 B0 audits (−97%) and Option α
+on F.4 (no replacement CLI surface to design).
+
+### Phase G (deferred)
+
+- CLAUDE.md §3 stats refresh (test counts, LOC, module counts).
+- README.md "embedded ML companion crates" mention with links.
+- Optional `v36.0.0` tag — MAJOR bump justified by `fj run-cluster`
+  removal.
+
 ## [v35.6.0] — 2026-05-10 🛡️ Compass §4.4 context-dimension closure — @safe sebagai default — minor
 
 **The strategic compass §4.4 promise "@safe sebagai default" is now fully
