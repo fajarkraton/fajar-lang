@@ -480,7 +480,6 @@ fajar-lang/
     formatter/          Code formatter
     package/            Package manager, registry, signing, SBOM
     profiler/           Function profiling (interpreter + Cranelift native)
-    distributed/        TCP RPC, clustering, tensor allreduce
     concurrency_v2/     Async actors (tokio::spawn + mpsc)
     stdlib_v3/          Crypto, networking, database, formats, regex
     bsp/                Board support packages (STM32, ESP32, Q6A)
@@ -496,6 +495,24 @@ fajar-lang/
   playground/           Browser-based playground (Monaco + WASM)
   docs/                 55+ reference documents
 ```
+
+### Companion crates
+
+Long-tail subsystems live in standalone Apache-2.0 crates and are
+wired into `fajar-lang` through rev-pinned Cargo git deps. Each
+companion repo owns its own lib-test surface; fajar-lang keeps
+public-API smoke tests in `tests/{wasi_p2,distributed}_integration.rs`
+to catch upstream drift.
+
+| Crate | Repo | Purpose | Used by |
+|---|---|---|---|
+| `fajar-wasi-p2` | [`fajarkraton/fajar-wasi-p2`](https://github.com/fajarkraton/fajar-wasi-p2) | WASI Preview 2 component build path | `fj build --target wasm32-wasi-p2` (deprecation grace window through v36.x; hard-removed in v37) |
+| `fajar-distributed` | [`fajarkraton/fajar-distributed`](https://github.com/fajarkraton/fajar-distributed) | Raft + cluster + RPC + distributed tensors | Standalone — `cmd_run_cluster` removed per Compass §5.1 Option α; consumers depend on the crate directly |
+| `fajarquant` | [`fajarkraton/fajarquant`](https://github.com/fajarkraton/fajarquant) | Quantization research algorithms + Phase D IntLLM training | Wired via path dep + re-export shim; 16 integ tests pin wire-up |
+
+These crates were extracted to keep the core embedded ML focus
+sharp — see `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md` (and
+the `1/STRATEGIC_COMPASS.md` for the §5.1 verdict text).
 
 ---
 
