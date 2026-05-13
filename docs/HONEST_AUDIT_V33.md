@@ -10,11 +10,19 @@
 
 **FAJAR_LANG_PERFECTION_PLAN P0-P9 closed engineering-side.**
 
-22 of 25 work-items reach PASS. 3 items (F1, F3, A1) have engineering-
-side closure shipped but require founder external action for full
-closure (binaries on GitHub Releases, fajarquant repo coordination,
-LLVM upstream filing). All three have prevention-layer scripts/tests
-that surface regressions.
+**Update 2026-05-13:** 23 of 25 work-items reach PASS post-v36.0.0.
+F1 closed via release.yml auto-upload on v36.0.0 tag push (5 platform
+binaries + SHA256SUMS now live at github.com/fajarkraton/fajar-lang/
+releases/tag/v36.0.0). F3 + A1 remain engineering-side closed pending
+founder action (crates.io publish chain + LLVM upstream filing) —
+see docs/PATH_A_FOUNDER_ACTION_BURST.md for the sequenced execution
+checklist.
+
+22 of 25 work-items reach PASS at original 2026-05-03 audit. 3 items
+(F1, F3, A1) had engineering-side closure shipped but required
+founder external action for full closure (binaries on GitHub
+Releases, fajarquant repo coordination, LLVM upstream filing). All
+three have prevention-layer scripts/tests that surface regressions.
 
 Cumulative effort: **~14h actual** vs ~218-336h plan estimate
 (**~95% under**). The headline finding: most plan items had existing
@@ -89,7 +97,7 @@ implementation.
 
 | # | Item | Status | Verify |
 |---|---|---|---|
-| F1 | Binary distribution | ✅ engineering-side | `cargo test --release --test release_workflow` (8 PASS) — v32.1.0 binaries pending GitHub Actions runtime |
+| F1 | Binary distribution | ✅ CLOSED v36.0.0 (2026-05-13) | `gh release view v36.0.0` shows 5 platform binaries (Linux x86_64/aarch64, macOS x86_64/arm64, Windows MSVC) + SHA256SUMS.txt; auto-uploaded by `.github/workflows/release.yml` on tag push |
 | F2 | License consistency | ✅ CLOSED | P1 closeout — Apache-2.0 in LICENSE + Cargo.toml + README badge |
 | F3 | crates.io publish blocker | ✅ engineering-side | `bash scripts/check_publish_ready.sh` reports 2 documented blockers + `docs/CRATES_IO_PUBLISH_PLAN.md` closure sequence; cross-repo coordination required for full closure |
 | F4 | Real benchmarks vs Rust/Go/C | ✅ CLOSED | 5 standard benchmarks in `benches/baselines/` (fibonacci, bubble_sort, sum_loop, matrix_multiply, mandelbrot) × 4 langs each + `run_baselines.sh` runner |
