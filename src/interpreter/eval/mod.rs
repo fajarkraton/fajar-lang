@@ -7378,136 +7378,6 @@ let y = x",
 
     // Sprint N3: Distributed Kernel Services
 
-    #[test]
-    fn n3_1_raft_node_creation() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(
-            RaftNodeId(1),
-            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4)],
-        );
-        assert_eq!(node.cluster_size(), 4); // self + 3 peers
-        assert_eq!(node.quorum(), 3);
-    }
-
-    #[test]
-    fn n3_2_raft_log_index() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3)]);
-        assert_eq!(node.last_log_index(), 0);
-        assert_eq!(node.last_log_term(), 0);
-    }
-
-    #[test]
-    fn n3_3_discovery_registry() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "scheduler".into(),
-            instance_id: "sched-1".into(),
-            address: "10.0.0.1:8080".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        assert_eq!(reg.total_count(), 1);
-    }
-
-    #[test]
-    fn n3_4_discovery_resolve() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "kernel-rpc".into(),
-            instance_id: "rpc-1".into(),
-            address: "10.0.0.1:9090".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        let instances = reg.resolve("kernel-rpc");
-        assert_eq!(instances.len(), 1);
-    }
-
-    #[test]
-    fn n3_5_discovery_unhealthy() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "fs".into(),
-            instance_id: "fs-1".into(),
-            address: "10.0.0.2:2049".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        reg.mark_unhealthy("fs-1");
-        let healthy = reg.resolve("fs");
-        assert!(healthy.is_empty());
-    }
-
-    #[test]
-    fn n3_6_discovery_deregister() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "dns".into(),
-            instance_id: "dns-1".into(),
-            address: "10.0.0.3:53".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        reg.deregister("dns-1");
-        assert_eq!(reg.total_count(), 0);
-    }
-
-    #[test]
-    fn n3_7_failure_detector() {
-        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
-        use std::time::Duration;
-        let mut fd = FailureDetector::new(Duration::from_millis(5000));
-        fd.heartbeat(ClusterNodeId(1), 1000);
-        fd.heartbeat(ClusterNodeId(2), 1000);
-        assert!(fd.is_healthy(ClusterNodeId(1), 3000));
-        let failed = fd.check(7000);
-        assert_eq!(failed.len(), 2); // both timed out
-    }
-
-    #[test]
-    fn n3_8_work_queue() {
-        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
-        let mut q = WorkQueue::new(ClusterNodeId(1));
-        q.push(100);
-        q.push(200);
-        q.push(300);
-        assert_eq!(q.len(), 3);
-        assert_eq!(q.pop(), Some(100)); // front
-        assert_eq!(q.steal(), Some(300)); // back
-    }
-
-    #[test]
-    fn n3_9_work_queue_empty() {
-        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
-        let mut q = WorkQueue::new(ClusterNodeId(1));
-        assert!(q.is_empty());
-        assert_eq!(q.pop(), None);
-        assert_eq!(q.steal(), None);
-    }
-
-    #[test]
-    fn n3_10_raft_quorum_sizes() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        // 3-node cluster: quorum = 2
-        let n3 = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3)]);
-        assert_eq!(n3.quorum(), 2);
-        // 5-node cluster: quorum = 3
-        let n5 = RaftNode::new(
-            RaftNodeId(1),
-            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)],
-        );
-        assert_eq!(n5.quorum(), 3);
-    }
-
     // Sprint N4: AI-Integrated Kernel
 
     #[test]
@@ -7666,43 +7536,6 @@ let y = x",
     }
 
     #[test]
-    fn n5_4_raft_five_node() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(
-            RaftNodeId(1),
-            vec![RaftNodeId(2), RaftNodeId(3), RaftNodeId(4), RaftNodeId(5)],
-        );
-        assert_eq!(node.cluster_size(), 5);
-        assert_eq!(node.quorum(), 3);
-    }
-
-    #[test]
-    fn n5_5_discovery_multiple_services() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        for i in 0..5 {
-            reg.register(ServiceInstance {
-                service_name: "usb-driver".into(),
-                instance_id: format!("usb-{i}"),
-                address: format!("10.0.0.{i}:5000"),
-                healthy: true,
-                tags: HashMap::new(),
-            });
-        }
-        assert_eq!(reg.resolve("usb-driver").len(), 5);
-    }
-
-    #[test]
-    fn n5_6_failure_detector_healthy() {
-        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
-        use std::time::Duration;
-        let mut fd = FailureDetector::new(Duration::from_millis(10000));
-        fd.heartbeat(ClusterNodeId(1), 5000);
-        assert!(fd.is_healthy(ClusterNodeId(1), 8000));
-    }
-
-    #[test]
     fn n5_7_spirv_type_vector() {
         use crate::gpu_codegen::spirv::SpirVType;
         let vec4 = SpirVType::Vector {
@@ -7742,48 +7575,6 @@ let y = x",
                 .unwrap();
         }
         assert_eq!(table.syscall_count(), 34);
-    }
-
-    #[test]
-    fn n6_2_discovery_all_instances() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "tcp".into(),
-            instance_id: "tcp-1".into(),
-            address: "10.0.0.1:80".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        reg.register(ServiceInstance {
-            service_name: "tcp".into(),
-            instance_id: "tcp-2".into(),
-            address: "10.0.0.2:80".into(),
-            healthy: false,
-            tags: HashMap::new(),
-        });
-        assert_eq!(reg.all_instances("tcp").len(), 2);
-        assert_eq!(reg.resolve("tcp").len(), 1); // only healthy
-    }
-
-    #[test]
-    fn n6_3_work_queue_ordering() {
-        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
-        let mut q = WorkQueue::new(ClusterNodeId(1));
-        for i in 0..5 {
-            q.push(i);
-        }
-        assert_eq!(q.pop(), Some(0)); // FIFO
-        assert_eq!(q.steal(), Some(4)); // LIFO steal
-    }
-
-    #[test]
-    fn n6_4_raft_single_node() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let node = RaftNode::new(RaftNodeId(1), vec![]);
-        assert_eq!(node.cluster_size(), 1);
-        assert_eq!(node.quorum(), 1);
     }
 
     // 2026-05-12 Path C SMT-freeze: n6_5 (smt) removed.
@@ -7877,36 +7668,6 @@ let y = x",
         use crate::gpu_codegen::spirv::BuiltIn;
         assert_eq!(BuiltIn::GlobalInvocationId.value(), 28);
         assert_eq!(BuiltIn::WorkGroupId.value(), 26);
-    }
-
-    #[test]
-    fn n8_5_discovery_tags() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        let mut tags = HashMap::new();
-        tags.insert("version".into(), "2.0".into());
-        reg.register(ServiceInstance {
-            service_name: "gui".into(),
-            instance_id: "gui-1".into(),
-            address: "10.0.0.1:3000".into(),
-            healthy: true,
-            tags,
-        });
-        let instances = reg.resolve("gui");
-        assert_eq!(instances[0].tags.get("version").unwrap(), "2.0");
-    }
-
-    #[test]
-    fn n8_6_work_queue_steal_all() {
-        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
-        let mut q = WorkQueue::new(ClusterNodeId(1));
-        q.push(1);
-        q.push(2);
-        q.push(3);
-        let stolen: Vec<_> = std::iter::from_fn(|| q.steal()).collect();
-        assert_eq!(stolen, vec![3, 2, 1]);
-        assert!(q.is_empty());
     }
 
     #[test]
@@ -8083,19 +7844,6 @@ let y = x",
         let mut reg = Registry::new();
         let result = reg.yank("no-pkg", &SemVer::new(1, 0, 0));
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn n10_5_discovery_mode_variants() {
-        use crate::distributed::discovery::DiscoveryMode;
-        let modes = [
-            DiscoveryMode::Mdns,
-            DiscoveryMode::Seed,
-            DiscoveryMode::Dns,
-            DiscoveryMode::Gossip,
-            DiscoveryMode::Static,
-        ];
-        assert_eq!(modes.len(), 5);
     }
 
     #[test]
@@ -8340,49 +8088,6 @@ len(data)"#,
             "let layer = Dense(4, 2)\nlet x = ones(1, 4)\nlet y = forward(layer, x)\nshape(y)",
         );
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn w3_4_work_queue_parallel() {
-        use crate::distributed::cluster::{ClusterNodeId, WorkQueue};
-        let mut queues: Vec<WorkQueue> = (0..4).map(|i| WorkQueue::new(ClusterNodeId(i))).collect();
-        for (i, q) in queues.iter_mut().enumerate() {
-            for j in 0..10 {
-                q.push((i * 10 + j) as u64);
-            }
-        }
-        let total: usize = queues.iter().map(|q| q.len()).sum();
-        assert_eq!(total, 40);
-    }
-
-    #[test]
-    fn w3_5_failure_detector_multi_node() {
-        use crate::distributed::cluster::{ClusterNodeId, FailureDetector};
-        use std::time::Duration;
-        let mut fd = FailureDetector::new(Duration::from_millis(3000));
-        for i in 0..4 {
-            fd.heartbeat(ClusterNodeId(i), 1000);
-        }
-        assert_eq!(fd.check(2000).len(), 0); // all healthy
-        assert_eq!(fd.check(5000).len(), 4); // all failed
-    }
-
-    #[test]
-    fn w3_6_raft_cluster_sizes() {
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        let n7 = RaftNode::new(
-            RaftNodeId(1),
-            vec![
-                RaftNodeId(2),
-                RaftNodeId(3),
-                RaftNodeId(4),
-                RaftNodeId(5),
-                RaftNodeId(6),
-                RaftNodeId(7),
-            ],
-        );
-        assert_eq!(n7.cluster_size(), 7);
-        assert_eq!(n7.quorum(), 4);
     }
 
     // 2026-05-12 Path C SMT-freeze: w3_7 (smt) removed.
@@ -8645,25 +8350,6 @@ len(data)"#,
         assert_eq!(Capability::Int8.value(), 39);
     }
 
-    #[test]
-    fn w5_8_discovery_service_with_tags() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        let mut tags = HashMap::new();
-        tags.insert("arch".into(), "aarch64".into());
-        tags.insert("board".into(), "dragon-q6a".into());
-        reg.register(ServiceInstance {
-            service_name: "ml-inference".into(),
-            instance_id: "dragon-1".into(),
-            address: "192.168.1.100:8080".into(),
-            healthy: true,
-            tags,
-        });
-        let inst = reg.resolve("ml-inference");
-        assert_eq!(inst[0].tags.get("board").unwrap(), "dragon-q6a");
-    }
-
     // 2026-05-12 Path C SMT-freeze: w5_9 (smt) removed.
 
     #[test]
@@ -8781,29 +8467,6 @@ r"#,
         let mut interp = Interpreter::new();
         let result = interp.eval_source("fn double(x: i32) -> i32 { x * 2 }\ndouble(21)");
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn w7_5_discovery_multiple_services_types() {
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use std::collections::HashMap;
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "ws".into(),
-            instance_id: "ws-1".into(),
-            address: "10.0.0.1:8080".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        reg.register(ServiceInstance {
-            service_name: "http".into(),
-            instance_id: "http-1".into(),
-            address: "10.0.0.2:80".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        assert_eq!(reg.resolve("ws").len(), 1);
-        assert_eq!(reg.resolve("http").len(), 1);
     }
 
     #[test]
@@ -9116,31 +8779,6 @@ results
     }
 
     // 2026-05-12 Path C SMT-freeze: w10_7 (smt) removed.
-
-    #[test]
-    fn w10_8_distributed_full() {
-        use crate::distributed::cluster::{ClusterNodeId, FailureDetector, WorkQueue};
-        use crate::distributed::discovery::{DiscoveryRegistry, ServiceInstance};
-        use crate::distributed::raft::{RaftNode, RaftNodeId};
-        use std::collections::HashMap;
-        use std::time::Duration;
-        let _node = RaftNode::new(RaftNodeId(1), vec![RaftNodeId(2), RaftNodeId(3)]);
-        let mut reg = DiscoveryRegistry::new();
-        reg.register(ServiceInstance {
-            service_name: "app".into(),
-            instance_id: "app-1".into(),
-            address: "10.0.0.1:80".into(),
-            healthy: true,
-            tags: HashMap::new(),
-        });
-        let mut fd = FailureDetector::new(Duration::from_millis(5000));
-        fd.heartbeat(ClusterNodeId(1), 1000);
-        let mut q = WorkQueue::new(ClusterNodeId(1));
-        q.push(1);
-        assert_eq!(reg.resolve("app").len(), 1);
-        assert!(fd.is_healthy(ClusterNodeId(1), 3000));
-        assert_eq!(q.pop(), Some(1));
-    }
 
     #[test]
     fn w10_9_interpreter_ml_pipeline() {

@@ -42,7 +42,7 @@ pub mod debugger;
 pub mod debugger_v2;
 pub mod dependent;
 pub mod deployment;
-pub mod distributed;
+// distributed extracted to fajarkraton/fajar-distributed at Phase F.5 (Compass §5.1).
 pub mod docgen;
 pub mod ffi_v2;
 pub mod formatter;
