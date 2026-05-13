@@ -26,7 +26,7 @@ BLOCKERS=()
 
 # 1. git deps in [dependencies] / [dev-dependencies].
 # Match lines like `name = { git = "..." }` outside comment context.
-GIT_DEPS=$(grep -nE '^[a-zA-Z_-]+\s*=\s*\{[^}]*\bgit\s*=' "$CARGO" || true)
+GIT_DEPS=$(grep -nE '^[a-zA-Z0-9_-]+\s*=\s*\{[^}]*\bgit\s*=' "$CARGO" || true)
 if [ -n "$GIT_DEPS" ]; then
     BLOCKERS+=("git deps (crates.io rejects these):")
     while IFS= read -r line; do
