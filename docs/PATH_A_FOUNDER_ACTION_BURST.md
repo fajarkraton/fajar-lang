@@ -88,11 +88,27 @@ deprecation warning (Option γ; hard-removed in v37).
 Stats: -29.6K LOC Rust net (across 28 source files); 7,211 → 6,591
 lib tests; 39 → 38 CLI subcommands; 42 → 40 root pub mods.
 
+Full release notes: docs/V36_0_0_RELEASE_NOTES.md.
 Details: CHANGELOG.md [Unreleased] block; full closure findings in
 docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md.
 EOF
 )"
 git push origin v36.0.0
+```
+
+### Step 1.4b — Replace auto-generated release notes with curated draft
+
+`release.yml` uses `generate_release_notes: true` which produces a
+commit-list-based body. Replace with the curated v36.0.0 notes
+(mirrors v35.6.0 release pattern):
+
+```bash
+# After release.yml workflow finishes + creates the v36.0.0 release:
+gh release edit v36.0.0 \
+  --repo fajarkraton/fajar-lang \
+  --notes-file docs/V36_0_0_RELEASE_NOTES.md
+# Verify:
+gh release view v36.0.0 --repo fajarkraton/fajar-lang | head -50
 ```
 
 ### Step 1.5 — Verify CI
