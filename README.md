@@ -5,15 +5,15 @@
 Fajar Lang (`fj`) is a statically-typed systems programming language designed for embedded machine learning and operating system development. Built with a Rust-based compiler featuring native tensor operations, bare-metal support, and compile-time context isolation, Fajar Lang targets ARM64, x86_64, RISC-V, and WebAssembly. Two dogfood operating systems — FajarOS Nova (x86_64) and FajarOS Surya (ARM64) — are written entirely in Fajar Lang as project-internal validators (not production OSes; no userspace ecosystem).
 
 [![CI](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
-[![Release v35.6.0](https://img.shields.io/badge/release-v35.6.0_COMPASS_%C2%A74.4_CONTEXT--DIMENSION_CLOSED-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.6.0)
-[![Tests](https://img.shields.io/badge/tests-18K%2B_CI_green-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
+[![Release v36.0.0](https://img.shields.io/badge/release-v36.0.0_COMPASS_%C2%A75_CLOSURE-brightgreen)](https://github.com/fajarkraton/fajar-lang/releases/tag/v36.0.0)
+[![Tests](https://img.shields.io/badge/tests-16K%2B_CI_green-brightgreen)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Stress](https://img.shields.io/badge/stress-5x_at_threads%3D64_PASS-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()
 [![Doc Warnings](https://img.shields.io/badge/cargo_doc-0_warnings-success)]()
 [![Doc Coverage](https://img.shields.io/badge/pub--item_docs-95.79%25-success)]()
 [![Error Codes](https://img.shields.io/badge/error--code_coverage-gap_0-success)]()
-[![Modules](https://img.shields.io/badge/modules-54_%5Bx%5D_%2F_0_%5Bf%5D_%2F_0_%5Bs%5D-success)]()
-[![LOC](https://img.shields.io/badge/LOC-449K_Rust-informational)]()
+[![Modules](https://img.shields.io/badge/modules-40_%5Bx%5D_%2F_0_%5Bf%5D_%2F_0_%5Bs%5D-success)]()
+[![LOC](https://img.shields.io/badge/LOC-408K_Rust-informational)]()
 [![FajarOS](https://img.shields.io/badge/FajarOS-Nova_v4.0.0_FAJAROS__100PCT__COMPLETE-success)]()
 [![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
 [![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_GPU_compute-76b900)]()
@@ -138,7 +138,6 @@ cargo build --release --features llvm
 
 ```bash
 cargo build --features gui          # Real OS windowing (winit + softbuffer)
-cargo build --features smt          # Z3 SMT solver (needs libz3-dev)
 cargo build --features cpp-ffi      # C++ FFI via libclang (needs libclang-dev)
 cargo build --features python-ffi   # Python interop via pyo3 (needs python3-dev)
 cargo build --features llvm         # LLVM backend (needs llvm-18-dev)
@@ -448,7 +447,6 @@ ARM64 benchmarks on Radxa Dragon Q6A (Qualcomm QCS6490, 8-core Kryo 670):
 | `fj gui <file.fj>` | Launch GUI window (`--features gui`) |
 | `fj debug <file.fj>` | Start DAP debugger session |
 | `fj profile <file.fj>` | Profile function call timings |
-| `fj verify <file.fj>` | Formal verification (`--features smt`) |
 | `fj dump-tokens <file.fj>` | Inspect lexer output |
 | `fj dump-ast <file.fj>` | Inspect parser AST |
 | `fj install <package>` | Install package from registry |
@@ -486,8 +484,8 @@ fajar-lang/
     plugin/             Compiler plugin system (AST-phase)
     playground/         WASM playground (wasm-bindgen)
   stdlib/               Fajar Lang standard library (.fj source)
-  examples/             241 .fj programs (96.7% pass via `fj run`); 4 forward-looking in examples/aspirational/
-  tests/                Integration tests (eval, ML, OS, safety, property)
+  examples/             242 .fj programs; 4 forward-looking in examples/aspirational/
+  tests/                Integration tests (80 files — eval, ML, OS, safety, property)
   benches/              Criterion benchmarks
   packages/             37 standard packages
   editors/vscode/       VS Code extension
@@ -538,13 +536,13 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Metric | Value |
 |--------|-------|
-| Release | **v35.6.0 "@safe Default — Compass §4.4 Context-Dimension Closed"** (2026-05-10) — `fn` without annotation now = `@safe` (microkernel-isolated) by default; D-α decision makes `@safe` the ergonomic bridge layer that CAN call `@kernel`/`@device` directly per Compass §5.4 (SE021/SE022 emission removed). Combined with v35.5.0 type-system D-FULL (affine semantics default-on), Compass §4.4 is now closed at both dimensions. Predecessor v35.0.0 (2026-05-06): Stage 2 self-host triple-test — fjc Stage 1 native binary (140KB ELF) compiles its own fj source byte-identical (md5 `1d6c52a...`); ~57× speedup. Sources: `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/decisions/2026-05-10-default-safe-bridge.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md`. **Note**: internal-engineering closure of the design Compass; not a production-deployment milestone. |
-| Compiler LOC | ~450,000 Rust across 391 files in src/ |
-| Tests | **7,633 lib** + 10,489 integ (in 72 files) + 14 doc + 1 ignored = **18,136 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~1,345 tests (8,974 PASS at `--features llvm,native`). Verified 2026-05-12 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
+| Release | **v36.0.0 "Compass §5 Closure"** (2026-05-13) — Compass §5 Path E + F extraction: `wasi_p2` and `distributed` modules re-homed to standalone crates ([fajar-wasi-p2](https://github.com/fajarkraton/fajar-wasi-p2), [fajar-distributed](https://github.com/fajarkraton/fajar-distributed)); `run-cluster` CLI removed. Combined with v35.6.0 (context-dimension `@safe` default) and v35.5.0 (type-system D-FULL), Compass §4.4 + §5 are fully closed. Sources: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md`. **Note**: internal-engineering closure of the design Compass; not a production-deployment milestone. |
+| Compiler LOC | ~407,744 Rust across 348 files in src/ |
+| Tests | **6,591 lib** + 9,516 integ (in 80 files) + 14 doc + 1 ignored = **16,121 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~162 tests at `--features llvm,native`. Verified 2026-05-13 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
 | Doc coverage | **95.79% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
 | Error-code coverage | **gap=0** — 135 cataloged, 125 covered + 12 forward-compat (per §6.6 R6); `python3 scripts/audit_error_codes.py --strict` enforces |
 | Tutorial | `docs/TUTORIAL.md` 10 chapters, basics → robot control loop |
-| Examples | 241 `.fj` programs + 4 forward-looking in `examples/aspirational/` (annotation/syntax not yet implemented; see [aspirational README](examples/aspirational/README.md)) + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). **Full sweep**: 233/241 (~96.7%) pass via `fj run` (15s timeout); 4 require harness concatenation (selfhost test programs), 1 was real bug now fixed (`actor_demo.fj`), 3 are documented long-runners (mnist_real, rest_api_crud, vecmat repro). See `docs/EXAMPLES_SWEEP_2026_05_07.md`. |
+| Examples | 242 `.fj` programs + 4 forward-looking in `examples/aspirational/` (annotation/syntax not yet implemented; see [aspirational README](examples/aspirational/README.md)) + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). See `docs/EXAMPLES_SWEEP_2026_05_07.md`. |
 | Benchmarks | 5 vs C/Rust/Go (fibonacci, bubble_sort, sum_loop, matrix_multiply, mandelbrot) — `bash benches/baselines/run_baselines.sh` |
 | FajarQuant | Algorithm research repo at `fajarkraton/fajarquant`. Earlier "49-86% lower MSE vs TurboQuant" claim was a protocol artifact (post-hoc cache mutation); under canonical R-α.1 model surgery the result reverses. See `memory/feedback_research_integrity.md` and CLAUDE.md §6.9. Current FjQ Phase E in flight; published claims gated by `verify_paper_tables.py --strict`. |
 | JIT | Cranelift native compilation (see Performance Benchmarks for actual numbers; "76× on fib(30)" was an early demo, current Cranelift JIT shows 12× over C — see `benches/baselines/RESULTS.md`) |
@@ -566,13 +564,12 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
 | Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |
 | Documentation | 55+ docs, 14 tutorials, 26 references, 15 guides |
-| FajarOS Nova (x86_64) | **v3.7.0 "FS Roundtrip"** — 108K LOC, 183 .fj files, 35 kernel tests, **SMEP+SMAP+NX security triple closed** (V29.P3.P6 6-invariant gate), ASLR, VFS write (RamFS+FAT32+ext2 — V30.TRACK4 9-invariant disk roundtrip), Ring 3 user mode, NVMe, FajarQuant kernel-native, 14 LLM shell commands (SmolLM-135M v5/v6 E2E), Gemma 3 1B foundation audit-complete via Path D (V30.GEMMA3) |
+| FajarOS Nova (x86_64) | **v4.0.0** — 100% Fajar Lang (ZERO non-fj LOC since v33.2.0), 108K+ LOC, 183 .fj files, 35 kernel tests, **SMEP+SMAP+NX security triple closed**, ASLR, VFS write (RamFS+FAT32+ext2), Ring 3 user mode, NVMe, FajarQuant kernel-native, 14 LLM shell commands, Gemma 3 1B foundation audit-complete |
 | FajarOS Surya (ARM64) | Cross-compiled to aarch64 ELF (82 KB), Q6A BSP (73 tests) |
 | Hardware verified | Intel i9-14900HX, NVIDIA RTX 4090, Qualcomm QCS6490 |
 | FFI v2 | C++ templates/STL/smart-ptr, Python async/NumPy, Rust traits, `fj bindgen` |
-| Verification | SMT symbolic execution scaffolding (experimental, `--features smt`), `@kernel`/`@device` context-isolation enforcement at compile time. **Not certified** to DO-178C / ISO-26262 — those standards require multi-year third-party audit and Fajar Lang has not undergone certification. |
+| Verification | `@kernel`/`@device` context-isolation enforcement at compile time. **Not certified** to DO-178C / ISO-26262 — those standards require multi-year third-party audit and Fajar Lang has not undergone certification. |
 | Effects | Algebraic effects + handlers — **experimental**, partial. Surface-level features work in examples; not yet stable for production. |
-| Dependent types | Pi/Sigma/refinement types — **experimental, research-grade**. Subset works in tests; not a complete dependent type theory implementation. |
 | GPU codegen | SPIR-V (Vulkan), PTX (CUDA), kernel fusion, auto-dispatch — Cranelift+LLVM-mediated; CUDA verified on RTX 4090. Embedded NPU paths (STM32N6 Neural-ART, Qualcomm Hexagon) not yet wired. |
 | Maturity status | **Pre-1.0, research-grade, experimental.** Engineering quality gates green locally (tests, clippy, fmt, doc coverage). No external production users yet. Targeted niche per `docs/1/STRATEGIC_COMPASS.md`: embedded AI safety. |
 | V27.5 additions | AI scheduler builtins, `@interrupt` ARM64+x86_64 wrappers, `@app`+`@host` annotations, `Cap<T>` linear type, refinement param checks, `fb_set_base`/`fb_scroll`, IPC stub generator |
@@ -584,6 +581,14 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 
 | Version | Codename | Highlights |
 |---------|----------|------------|
+| [**v36.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v36.0.0) | **Compass §5 Closure** | **MAJOR version bump (2026-05-13).** Compass §5 Path E + F extraction: `src/wasi_p2/` (12 files, ~13.8K LOC) and `src/distributed/` (16 files, ~15.3K LOC) re-homed to standalone crates [`fajar-wasi-p2`](https://github.com/fajarkraton/fajar-wasi-p2) and [`fajar-distributed`](https://github.com/fajarkraton/fajar-distributed). `run-cluster` CLI subcommand removed. Compass §5.1 freezes removed dep-types, GPU non-PTX, and SMT-verification dead modules (~15.6K LOC across 14 modules). Net LOC: ~437K → ~408K (-29.6K). Module count: 54 → 40. 5 platform binaries (Linux x86_64/aarch64, macOS x86_64/arm64, Windows MSVC). Source: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md`. |
+| [**v35.6.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.6.0) | **@safe Default** | **Compass §4.4 context-dimension closed (2026-05-10).** `fn` without annotation = `@safe` (microkernel-isolated) by default. D-α decision: `@safe` is the ergonomic bridge layer, CAN call `@kernel`/`@device` directly (SE021/SE022 emission removed). 28 sites annotated across 8 files. Source: `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/decisions/2026-05-10-default-safe-bridge.md`. |
+| [**v35.5.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.5.0) | **FJARR_LEAK D-FULL** | **Compass §4.4 type-system dimension closed (2026-05-10).** Affine semantics default-on; non-primitive types Move by default; reuse → explicit `.clone()`. COW `_FjArr` (rc+grow). Phase17 self-compile byte-equality preserved. Source: `docs/FJARR_LEAK_PHASE_2_D_FULL_FINDINGS.md`. |
+| [**v35.4.1**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.4.1) | **parser_ast byte_at cascade** | char_at + byte_at builtins; 94+43 substring sites migrated in parser_ast.fj; 10-20× chain-bootstrap parse performance. |
+| [**v35.3.2**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.3.2) | **char_at analyzer fix** | Analyzer: `char_at` returns `Type::Char` (was `Str`). |
+| [**v35.3.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.3.0) | **Full crypto** | All 31 crypto.rs fns reachable from .fj source + RSA + Ed25519 + X25519-dalek fix. |
+| [**v35.2.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.2.0) | **FJARR_LEAK Phase 1+2 D-LITE** | Stage 2 self-host triple-test byte-identical; FJARR_LEAK arena migration (0 bytes lost); CALL_INDEX miscompile resolved; SE024 UseAfterMoveArray (opt-in via `--strict-ownership`). |
+| [**v35.1.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v35.1.0) | **FJARR_LEAK Phase 1** | `_FjArr` realloc-leak class closed (88 bytes/array → 0); arena migration; 102 self-host tests; Stage 2 byte-equality preserved. |
 | [**v34.0.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v34.0.0) | **Stage 2 Lite reproducibility** | **MAJOR version bump (2026-05-05).** v33.x was the Stage-1-Full self-host arc; v34.0.0 begins the Stage 2 arc with "Stage 2 Lite" — fj-source compiler chain proven deterministic, full self-host driver pipeline working in pure fj. NEW core builtin `run_command(cmd: str) -> i64` shells out via `/bin/sh -c` (Unix) or `cmd /C` (Windows), wired in interpreter dispatch + analyzer signature + stdlib allowlist. NEW `examples/selfhost_compiler.fj` chains read_file → parse_to_ast → emit_program → write_file → run_command(gcc) → run_command(binary), all in fj-source. NEW `tests/selfhost_stage2_reproducibility.rs` ships 6 tests (P1-P6) each compiling target via chain TWICE, asserts generated C source bytes are byte-identical + gcc-compiled binary returns expected exit code: P1 binop chain, P2 if-else (RC=111), P3 for-loop sum 0..10 (RC=45), P4 struct lit + field access (RC=30), P5 match enum variants (RC=200), P6 cross-fn + while factorial (RC=120). **6/6 PASS in 0.12s.** Honest scope (CLAUDE.md §6.6 R3): this is NOT a full Stage 2 triple-test. Standard triple-test (Rust/GCC/Go/Zig) requires Stage 1 binary compiles target compiler's OWN source → Stage 2 binary; verify Stage 1 == Stage 2 byte-identical. fj-source compiler can't compile its own source yet because codegen.fj doesn't lower interpreter-builtin features (`arr.push`, `len`, `concat!`, `substring`, struct method calls). R14 NEW (codegen enrichment for self-compile) tracked as genuine separate scope, ~3-7d realistic. Binary BYTE equality also NOT tested — gcc/linker embed path-dependent strings + timestamps that vary between runs (gcc/linker concern, not fj-source compiler concern). v34.0.0 ships maximally-honest intermediate milestone: **deterministic chain + full self-host driver plumbing**. Cumulative effort across v33.4.0..v34.0.0: ~9h Claude time, **14 self-host phases CLOSED**. Source: `docs/SELFHOST_FJ_PHASE_{0..12}_FINDINGS.md`. |
 | [**v33.8.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v33.8.0) | **match expression** | **Closes borderline case from v33.7.x deferred list (2026-05-05).** `match` was the only "honest deferred" item that survived perfection-rule self-check ("would reasonable user be surprised?" → YES, fundamental control flow). Adds `match subject { pat => body, _ => default }` covering: enum variant patterns (`Color::Red => 100`), integer literal patterns (`1 => 10, 2 => 20`), wildcard `_` for default, full composability as expression atom (let-rhs, return-arg, inside arithmetic — P31 `match{...} + 5 = 25` proves it). Codegen via GCC statement expression: `({ int64_t _match_<pos>; if((s == p1)) _match_<pos> = b1; else if(...); else _match_<pos> = 0; _match_<pos>; })`. Position-based tmp naming guarantees uniqueness across nested matches; defensive `else = 0` avoids UB when no wildcard arm. Phase 11 closed in ~30min vs 1-2h estimate (gcc statement-expression was the leverage). 5 NEW integration tests (P27-P31): match enum variants → 200; match int literals → 30; match wildcard fallback → 77; match in return position → 1; match in arithmetic → 25. **31/31 PASS in 0.21s** (incl. v33.7.x: P23 mut field write, P24-P26 else-if + comments). Honest still-deferred (genuine separate scope): match payload extraction `Some(x) => use x` (Stage-1-Subset enums excluded payloads by design), guard clauses `x if x > 5`, nested patterns, inclusive ranges `..=`, generics/closures/async/lifetimes (Subset-excluded), Stage 2 triple-test. Cumulative effort across v33.4.0..v33.8.0: ~8h Claude time, **13 self-host phases CLOSED**. Source: `docs/SELFHOST_FJ_PHASE_{0..11}_FINDINGS.md`. |
 | [**v33.7.0**](https://github.com/fajarkraton/fajar-lang/releases/tag/v33.7.0) | **Stage-1 Use-Site Closure** | **Closes "struct/enum DECL hollow" gap from v33.6.0 (2026-05-05).** Adds struct literal construction `Point{x:10,y:20}` (PascalCase ident + `{` triggers C99 designated init `(Point){.x=10,.y=20}`), struct field access `p.x` (postfix `.<ident>` chain, chainable `p.a.b`), enum variant access `Color::Green` → `Color_Green` (matches enum DECL output), `for x in start..end { body }` with new `BEGIN_FOR <var> <start> FOR_RANGE_TO <end>` AST → C `for (int64_t x = start; x < end; x++)`. emit_let now infers struct type from `BEGIN_STRUCT_LIT` first-atom (was defaulting to int64_t). REAL BUG FIXED: parse_expr_emit binop RHS detection only checked INT/IDENT/BEGIN_CALL — missed FLOAT/BOOL/STR/ENUM_VARIANT/BEGIN_STRUCT_LIT (caused P22 `m == Mode::On` to silently drop BINOP); fixed via new is_atom_start helper covering all 8 atom-start tags. 5 NEW integration tests (P18-P22): struct literal + field access (P18=30); enum variant use (P19=1); for loop sum 0..5 (P20=10); composability accumulator-with-struct-literal-in-for-loop (P21=15); enum variant in if-condition (P22=100). **22/22 PASS in 0.10s.** Honest still-deferred (genuine separate scope): match (R9 — pattern compilation ~100+ LOC; if-elif over variants covers 90%), mutable struct field write `p.x = 5` (R10 NEW, ~15 LOC ext), inclusive/step ranges, generics/closures/async/lifetimes (Subset-excluded), Stage 2 triple-test. Cumulative effort across v33.4.0..v33.7.0: ~7h Claude time, **11 self-host phases CLOSED**. Source: `docs/SELFHOST_FJ_PHASE_{0..10}_FINDINGS.md`. |
@@ -652,9 +657,9 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full gu
 # Build
 cargo build
 
-# Test (18,132 total: 7,629 lib + 10,489 integ + 14 doc, verified 2026-05-07)
+# Test (16,121 total: 6,591 lib + 9,516 integ + 14 doc, verified 2026-05-13)
 cargo test --lib              # lib only
-cargo test --tests            # all 72 integration test files
+cargo test --tests            # all 80 integration test files
 cargo test --features native  # adds Cranelift native codegen tests
 
 # Lint
