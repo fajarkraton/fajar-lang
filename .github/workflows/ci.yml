@@ -106,7 +106,7 @@ jobs:
           done
           echo "All 5 stress runs passed"
 
-  # Feature-gated tests: LLVM, SMT (Z3), C++ FFI (libclang), Python FFI (pyo3)
+  # Feature-gated tests: LLVM, C++ FFI (libclang), Python FFI (pyo3)
   features:
     name: Feature Tests (${{ matrix.feature }})
     runs-on: ubuntu-24.04
@@ -117,9 +117,6 @@ jobs:
           # Features that need apt/pip system dependencies.
           - feature: llvm
             apt: llvm-18-dev libpolly-18-dev libzstd-dev
-            pip: ""
-          - feature: smt
-            apt: libz3-dev
             pip: ""
           - feature: cpp-ffi
             apt: libclang-dev
@@ -260,12 +257,16 @@ jobs:
         #   RUSTSEC-2026-0098: name constraints for URI names accepted
         #   RUSTSEC-2026-0099: name constraints for wildcard names accepted
         #   RUSTSEC-2026-0104: reachable panic in CRL parsing
+        #   RUSTSEC-2023-0071: rsa 0.9.x Marvin Attack timing sidechannel;
+        #     no stable fix (0.10.0 still RC as of 2026-05-25). Remove when
+        #     rsa 0.10.0 stable lands and Cargo.toml is bumped.
         run: |
           cargo audit \
             --ignore RUSTSEC-2026-0049 \
             --ignore RUSTSEC-2026-0098 \
             --ignore RUSTSEC-2026-0099 \
-            --ignore RUSTSEC-2026-0104
+            --ignore RUSTSEC-2026-0104 \
+            --ignore RUSTSEC-2023-0071
 
   benchmarks:
     name: Performance Benchmarks
