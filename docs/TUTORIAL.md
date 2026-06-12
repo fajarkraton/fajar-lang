@@ -278,29 +278,40 @@ catalog.
 
 ## Chapter 8 — Tensors and ML
 
-Tensors are **first-class** in the type system, with shape checked at
-compile time when shapes are known constants.
+Tensors are **first-class** in the type system, with shapes checked at
+compile time whenever they are statically known. Constructors with
+literal arguments produce concrete shapes that propagate through
+`matmul`, `reshape`, `transpose`, element-wise ops, and activations:
+
+```fajar
+let a = zeros(2, 3)
+let b = zeros(4, 5)
+let c = matmul(a, b)   // ✗ fj check: TE001 — matmul: [2, 3] × [4, 5]
+```
+
+Annotations use `Tensor<element>[dims]`; each dim slot takes a literal
+size, a `*` wildcard (dynamic), or an **uppercase symbolic dim** that is
+unified per call site — the same symbol must bind the same size:
 
 ```fajar
 @device
-fn relu_layer(x: Tensor<f32, [128]>) -> Tensor<f32, [128]> {
-    relu(x)
+fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O] {
+    matmul(x, w)
 }
 
-@device
-fn forward(input: Tensor<f32, [784]>) -> Tensor<f32, [10]> {
-    input
-        |> linear::<784, 128>()
-        |> relu_layer()
-        |> linear::<128, 10>()
-        |> softmax()
-}
+let r = dense(zeros(4, 10), zeros(10, 2))   // ✓ r: Tensor<f64>[4, 2]
+let s = dense(zeros(4, 10), zeros(11, 2))   // ✗ TE011: I bound to 10,
+                                            //   but argument 2 requires I = 11
 ```
+
+Shapes only known at runtime stay dynamic (`zeros(n, 3)`) and are never
+falsely rejected — the static layer is gradual, and runtime shape checks
+remain active as a second line of defense.
 
 The `@device` annotation gates this code into the **device context**
 where tensor ops are allowed but raw pointers and `@kernel` syscalls
 are forbidden (`DE001`, `DE002`). Compile-time shape mismatches fire
-as `TE002` / `TE003`.
+as `TE001` (shape/matmul/reshape) and `TE011` (symbolic dim conflict).
 
 For full-pipeline MNIST inference (load weights, infer, evaluate),
 see `docs/tutorials/mnist.md`.

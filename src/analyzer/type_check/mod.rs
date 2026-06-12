@@ -1277,6 +1277,21 @@ impl SemanticError {
     /// actionable suggestions (e.g., "consider cloning the value").
     pub fn hint(&self) -> Option<String> {
         match self {
+            // P4 (Compass §6.3): domain hints for compile-time shape errors.
+            SemanticError::TensorShapeMismatch { .. } => Some(
+                "help: tensor shapes are inferred from constructor literals (`zeros(2, 3)`) \
+                 and annotations (`Tensor<f64>[2, 3]`), and propagate through \
+                 matmul/reshape/transpose/elementwise. Trace each operand back to its \
+                 constructor or annotation; use non-literal dims or `Tensor<f64>[*, n]` \
+                 for shapes only known at runtime"
+                    .to_string(),
+            ),
+            SemanticError::SymbolicDimMismatch { symbol, .. } => Some(format!(
+                "help: every occurrence of `{symbol}` in one call must bind the same size \
+                 (symbolic dims are fn-signature-scoped, unified per call site). Fix the \
+                 mismatched argument, or replace `{symbol}` with `*` in the signature if \
+                 the dims are genuinely unrelated"
+            )),
             SemanticError::UseAfterMove {
                 name, move_span, ..
             } => Some(format!(

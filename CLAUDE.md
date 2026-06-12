@@ -19,7 +19,7 @@
 1. **Explicitness over magic** — no hidden allocation or hidden cost
 2. **Dual-context safety** — @kernel disables heap+tensor; @device disables raw pointers. Compiler enforces isolation
 3. **Rust-inspired but simpler** — ownership lite without lifetime annotations
-4. **Native tensor types** — Tensor is a first-class citizen in the type system, shape checked at compile time
+4. **Native tensor types** — Tensor is a first-class citizen in the type system; shapes are checked at compile time whenever statically known (gradual: literal-arg constructors propagate concrete dims through matmul/reshape/elementwise; `Tensor<f64>[B, I]` symbolic dims unify per call site → TE011; dynamic dims never falsely rejected). Closed Compass §6.3 P1-P4, 2026-06-12 — `docs/TENSOR_SHAPE_CT_PLAN.md`
 
 **Target Audience:** Embedded AI engineers (drone, robot, IoT), OS research teams (AI-integrated kernels), Safety-critical ML systems (automotive, aerospace, medical)
 
@@ -80,8 +80,11 @@ detailed entries.
 ### Current Totals (post-EOS-40, 2026-05-13 — Compass §5 Path E + F extraction closure)
 
 ```
-Tests:     6,591 lib + 9,516 integ (80 files; 1 ignored) + 14 doc = 16,121 total
-           (0 fail, 0 flake; phase17 4/4 byte-equality preserved through Path E + F extraction)
+Tests:     6,616 lib · 9,560 via `cargo test --tests` (81 integ files; 1 ignored;
+           NOTE 2026-06-12: the --tests figure has always included the lib unittest
+           binary — integ-only = 2,944; see TENSOR_SHAPE_CT_FINDINGS.md discovery #4)
+           · 14 doc (0 fail, 0 flake; phase17 4/4 byte-equality preserved through
+           Path E + F extraction AND the Compass §6.3 shape-checking track)
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
 LOC:       ~407,744 Rust (348 files) | Binary 18 MB | MSRV 1.87 | 309 .fj examples
 Modules:   40 pub mods at lib.rs root | 40 [x], 0 [sim]/[f]/[s] (was 42 pre-EOS-40 / 54 pre-EOS-37; Path E + F extraction reclaimed ~29.6K LOC across 28 source files; EOS-37 freezes reclaimed ~15.6K across 14 modules)
@@ -680,6 +683,7 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 | **Phase 18 CALL_INDEX CLOSED (2026-05-07, commit 9c9ff2a8)** | **`docs/SELFHOST_FJ_PHASE_18_FINDINGS.md`** + plan `docs/CALL_INDEX_PLAN.md` + B0 `docs/CALL_INDEX_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-call-index-shape.md` (D1.A + D2.A + D3.B). Silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved; 6 new P-tests (P81..P86) + pre-push regression hook. |
 | **T4 dup-fn detection CLOSED (commit 38e23f56)** | **`docs/T4_DUP_FN_PLAN.md`** — closed independently from FJARR_LEAK / CALL_INDEX. |
 | **FAJAROS_100PCT_FJ_PLAN (TERMINAL COMPLETE 2026-05-05)** | **`docs/FAJAROS_100PCT_FJ_PLAN.md`** + per-phase findings `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md`. 9/9 fj-lang LLVM compiler gaps closed (G-A through G-N); ZERO non-fj LOC in fajaros kernel build path. v33.2.0 caps the plan. |
+| **Compass §6.3 tensor shape compile-time (CLOSED 2026-06-12)** | **`docs/TENSOR_SHAPE_CT_FINDINGS.md`** — P1-P4 closure: shape-aware builtins, return-stmt soundness fix, symbolic dims `Tensor<f64>[B, I]` + TE011, 18-probe CI corpus. Plan + B0 + decision D1a/D2a/D3a alongside |
 | **Latest audit (V36) — full re-audit at v36.0.0** | **`docs/HONEST_AUDIT_V36.md`** — every CLAUDE.md/README claim re-verified 2026-06-12; all headline numbers reproduced exactly; findings F1-F9 + G1-G3 with remediation log |
 | **Audit predecessor (V33) — perfection plan** | `docs/HONEST_AUDIT_V33.md` — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 module classification (still authoritative; V33 added no demotions) |

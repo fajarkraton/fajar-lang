@@ -166,7 +166,7 @@ fj repl
 - **Generators** — `yield` keyword, `gen fn`, `GeneratorIter` (for-in compatible), `AsyncStream`, coroutines
 - **Pipeline operator** — `x |> f |> g` for clean functional data flow
 - **String interpolation** — `f"Hello {name}, result is {1 + 2}"`
-- **Compile-time evaluation** — `const fn`, `comptime {}` blocks, partial tensor shape verification (compile-time shape checking is core to the embedded-AI niche; see `docs/1/STRATEGIC_COMPASS.md` §6.3 for known gaps)
+- **Compile-time evaluation** — `const fn`, `comptime {}` blocks, gradual compile-time tensor shape checking (Compass §6.3 closed 2026-06-12: literal-arg constructors propagate concrete shapes through matmul/reshape/elementwise; `fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O]` symbolic dims unify per call site, conflicts → `TE011`; dynamic shapes stay gradual — `tests/tensor_shape_ct.rs` is the 18-probe regression corpus)
 - **Async/await** — real tokio I/O, async traits, streams, channels, spawn/join/select
 
 ### Compilation
