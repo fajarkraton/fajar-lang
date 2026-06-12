@@ -7,6 +7,72 @@ use crate::parser::ast::*;
 
 use super::*;
 
+// ═══ P1 (Compass §6.3): shape-aware tensor builtins — pure helpers ═══
+// See docs/TENSOR_SHAPE_CT_PLAN.md §1 + docs/TENSOR_SHAPE_CT_B0_FINDINGS.md.
+
+/// Extracts a positive integer literal usable as a tensor dimension.
+fn int_literal_dim(e: &Expr) -> Option<u64> {
+    match e {
+        Expr::Literal {
+            kind: LiteralKind::Int(v),
+            ..
+        } if *v > 0 => Some(*v as u64),
+        _ => None,
+    }
+}
+
+/// All call args are positive int literals → concrete dims (≥1 arg).
+fn literal_args_dims(args: &[CallArg]) -> Option<Vec<Option<u64>>> {
+    if args.is_empty() {
+        return None;
+    }
+    args.iter()
+        .map(|a| int_literal_dim(&a.value).map(Some))
+        .collect()
+}
+
+/// `[2, 3]`-style array literal of positive int literals → concrete dims.
+fn array_literal_dims(e: &Expr) -> Option<Vec<Option<u64>>> {
+    if let Expr::Array { elements, .. } = e {
+        if elements.is_empty() {
+            return None;
+        }
+        elements
+            .iter()
+            .map(|el| int_literal_dim(el).map(Some))
+            .collect()
+    } else {
+        None
+    }
+}
+
+/// Concrete f64 tensor type (constructors default to f64 at runtime).
+fn concrete_f64_tensor(dims: Vec<Option<u64>>) -> Type {
+    Type::Tensor {
+        element: Box::new(Type::F64),
+        dims,
+    }
+}
+
+/// Fully-known dims of a tensor type (`None` for dynamic/non-tensor).
+fn concrete_dims(ty: &Type) -> Option<Vec<u64>> {
+    if let Type::Tensor { dims, .. } = ty {
+        if !dims.is_empty() && dims.iter().all(|d| d.is_some()) {
+            return Some(dims.iter().filter_map(|d| *d).collect());
+        }
+    }
+    None
+}
+
+/// Renders dims as `[2, 3]` for diagnostics.
+fn dims_display(dims: &[Option<u64>]) -> String {
+    let inner: Vec<String> = dims
+        .iter()
+        .map(|d| d.map_or("*".to_string(), |v| v.to_string()))
+        .collect();
+    format!("[{}]", inner.join(", "))
+}
+
 /// Returns true if every code path through `e` ends with a control-flow
 /// terminator (`return`, `break`, `continue`) — i.e., execution does not
 /// fall through past `e`. Used by branch-merge analysis (FJARR_LEAK
@@ -1713,6 +1779,25 @@ impl TypeChecker {
             _ => None,
         };
 
+        // P1 (Compass §6.3): shape-aware tensor builtins — refine the
+        // registered dynamic_tensor() return when shapes are statically
+        // known, surfacing mismatches at check time instead of runtime.
+        // Guard: only fire on a Function whose registered return is the
+        // dynamic tensor, so a user fn shadowing a builtin name with a
+        // concrete signature is never hijacked.
+        if let Some(name) = callee_name {
+            let ret_is_dyn_tensor = matches!(
+                &callee_ty,
+                Type::Function { ret, .. }
+                    if matches!(ret.as_ref(), Type::Tensor { dims, .. } if dims.is_empty())
+            );
+            if ret_is_dyn_tensor {
+                if let Some(ty) = self.shape_aware_builtin_return(name, args, &arg_types, span) {
+                    return ty;
+                }
+            }
+        }
+
         match callee_ty {
             Type::Function { params, ret } => {
                 // Check arity (skip for variadic builtins with Unknown params)
@@ -1834,6 +1919,157 @@ impl TypeChecker {
                     suggestion,
                 });
                 Type::Unknown
+            }
+        }
+    }
+
+    /// P1 (Compass §6.3): shape-aware tensor builtin returns.
+    ///
+    /// When a tensor builtin is called with statically-known shapes, this
+    /// refines its registered `dynamic_tensor()` return type and surfaces
+    /// shape mismatches at check time (previously runtime-only — B0 P1).
+    /// Returns `None` to fall back to the registered signature whenever a
+    /// shape is not statically known: gradual by design, dims=[] keeps
+    /// unifying with everything.
+    fn shape_aware_builtin_return(
+        &mut self,
+        name: &str,
+        args: &[CallArg],
+        arg_types: &[Type],
+        span: Span,
+    ) -> Option<Type> {
+        match name {
+            "zeros" | "ones" | "randn" | "tensor_zeros" | "tensor_ones" | "tensor_randn"
+            | "tensor_rand" => literal_args_dims(args).map(concrete_f64_tensor),
+            "eye" | "tensor_eye" => {
+                let n = int_literal_dim(&args.first()?.value)?;
+                Some(concrete_f64_tensor(vec![Some(n), Some(n)]))
+            }
+            "tensor_full" => array_literal_dims(&args.first()?.value).map(concrete_f64_tensor),
+            "matmul" | "tensor_matmul" => self.matmul_call_shape(arg_types, span),
+            "transpose" | "tensor_transpose" => {
+                let t = arg_types.first()?;
+                let d = concrete_dims(t)?;
+                if d.len() != 2 {
+                    return None;
+                }
+                if let Type::Tensor { element, .. } = t {
+                    Some(Type::Tensor {
+                        element: element.clone(),
+                        dims: vec![Some(d[1]), Some(d[0])],
+                    })
+                } else {
+                    None
+                }
+            }
+            "reshape" | "tensor_reshape" => self.reshape_call_shape(args, arg_types, span),
+            "tensor_add" | "tensor_sub" | "tensor_mul" | "tensor_div" => {
+                self.elementwise_call_shape(arg_types, span)
+            }
+            // Shape-preserving unary ops: output keeps the input's shape.
+            "relu" | "sigmoid" | "softmax" | "sign" | "tensor_relu" | "tensor_sigmoid"
+            | "tensor_tanh" | "tensor_softmax" | "tensor_gelu" | "tensor_leaky_relu"
+            | "tensor_neg" | "exp_tensor" | "log_tensor" | "sqrt_tensor" | "abs_tensor" => {
+                let t = arg_types.first()?;
+                concrete_dims(t)?;
+                Some(t.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// `matmul(a, b)` call form: same static check as the `@` operator
+    /// (check.rs BinOp::MatMul branch), incl. tensor_verify rich messages.
+    fn matmul_call_shape(&mut self, arg_types: &[Type], span: Span) -> Option<Type> {
+        if arg_types.len() != 2 {
+            return None;
+        }
+        let (lt, rt) = (&arg_types[0], &arg_types[1]);
+        let ls = concrete_dims(lt)?;
+        let rs = concrete_dims(rt)?;
+        use crate::verify::tensor_verify::{ShapeCheckStatus, SymbolicShape, verify_matmul};
+        let lsu: Vec<usize> = ls.iter().map(|v| *v as usize).collect();
+        let rsu: Vec<usize> = rs.iter().map(|v| *v as usize).collect();
+        let constraint = verify_matmul(
+            &SymbolicShape::concrete(&lsu),
+            &SymbolicShape::concrete(&rsu),
+        );
+        if matches!(constraint.status, ShapeCheckStatus::Invalid(_)) {
+            self.errors.push(SemanticError::TensorShapeMismatch {
+                detail: constraint.description,
+                span,
+            });
+            return Some(Type::dynamic_tensor());
+        }
+        match lt.matmul_shape(rt) {
+            Some(result) => Some(result),
+            None => {
+                self.errors.push(SemanticError::TensorShapeMismatch {
+                    detail: format!("matmul: {} @ {}", lt.display_name(), rt.display_name()),
+                    span,
+                });
+                Some(Type::dynamic_tensor())
+            }
+        }
+    }
+
+    /// `reshape(t, [dims])`: result takes the literal target shape; when the
+    /// source shape is also known, element counts must match (TE003-class).
+    fn reshape_call_shape(
+        &mut self,
+        args: &[CallArg],
+        arg_types: &[Type],
+        span: Span,
+    ) -> Option<Type> {
+        if args.len() != 2 || arg_types.len() != 2 {
+            return None;
+        }
+        let element = if let Type::Tensor { element, .. } = &arg_types[0] {
+            element.clone()
+        } else {
+            return None;
+        };
+        let target = array_literal_dims(&args[1].value)?;
+        if let Some(src_dims) = concrete_dims(&arg_types[0]) {
+            let src_n: u64 = src_dims.iter().product();
+            let dst_n: u64 = target.iter().filter_map(|d| *d).product();
+            if src_n != dst_n {
+                self.errors.push(SemanticError::TensorShapeMismatch {
+                    detail: format!(
+                        "reshape: {src_n} elements cannot reshape into {} = {dst_n} elements",
+                        dims_display(&target)
+                    ),
+                    span,
+                });
+                return Some(Type::dynamic_tensor());
+            }
+        }
+        Some(Type::Tensor {
+            element,
+            dims: target,
+        })
+    }
+
+    /// `tensor_add/sub/mul/div(a, b)`: shapes must match when both known.
+    fn elementwise_call_shape(&mut self, arg_types: &[Type], span: Span) -> Option<Type> {
+        if arg_types.len() != 2 {
+            return None;
+        }
+        let (lt, rt) = (&arg_types[0], &arg_types[1]);
+        concrete_dims(lt)?;
+        concrete_dims(rt)?;
+        match lt.elementwise_shape(rt) {
+            Some(result) => Some(result),
+            None => {
+                self.errors.push(SemanticError::TensorShapeMismatch {
+                    detail: format!(
+                        "elementwise: {} vs {}",
+                        lt.display_name(),
+                        rt.display_name()
+                    ),
+                    span,
+                });
+                Some(Type::dynamic_tensor())
             }
         }
     }

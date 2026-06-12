@@ -4319,13 +4319,25 @@ mod tests {
 
     #[test]
     fn b4_elementwise_dynamic_bypass() {
-        // tensor + tensor from builtins (dynamic) → no shape error
+        // P1 (Compass §6.3) update: constructors with literal args are now
+        // concrete, so [3,4] + [5,6] errors at check time (was the dynamic
+        // bypass pre-P1). The bypass still holds for non-literal dims.
         let src = r#"
             let a = tensor_zeros(3, 4)
             let b = tensor_zeros(5, 6)
             let c = a + b
         "#;
-        assert!(check(src).is_ok());
+        assert!(has_shape_mismatch(&check_errors(src)));
+
+        let dynamic = r#"
+            fn f(n: i64) -> void {
+                let a = tensor_zeros(n, 4)
+                let b = tensor_zeros(5, 6)
+                let c = a + b
+                println(c)
+            }
+        "#;
+        assert!(check(dynamic).is_ok());
     }
 
     #[test]
@@ -4378,6 +4390,142 @@ mod tests {
         } else {
             panic!("expected Tensor type");
         }
+    }
+
+    // ── P1 (Compass §6.3): shape-aware tensor builtins ──
+    // See docs/TENSOR_SHAPE_CT_PLAN.md §1 + TENSOR_SHAPE_CT_B0_FINDINGS.md.
+    // Constructors with literal args produce concrete dims; matmul/reshape/
+    // elementwise call forms check + propagate shapes at compile time.
+
+    fn has_shape_mismatch(errors: &[SemanticError]) -> bool {
+        errors
+            .iter()
+            .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. }))
+    }
+
+    #[test]
+    fn p1_matmul_call_mismatch_errors_at_check() {
+        // B0 probe P1: previously passed `fj check`, died at runtime.
+        let src = r#"
+            let a = zeros(2, 3)
+            let b = zeros(4, 5)
+            let c = matmul(a, b)
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_matmul_call_matching_ok() {
+        let src = r#"
+            let a = zeros(2, 3)
+            let b = zeros(3, 5)
+            let c = matmul(a, b)
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn p1_matmul_result_propagates_through_chain() {
+        // matmul result [2,4]; second matmul inner 4 != 5 must error.
+        let src = r#"
+            let c = matmul(zeros(2, 3), zeros(3, 4))
+            let d = matmul(c, zeros(5, 6))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_at_operator_unannotated_mismatch_errors() {
+        // B0 P5 required manual annotations; constructors now feed the @ path.
+        let src = r#"
+            let c = zeros(2, 3) @ zeros(4, 5)
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_eye_is_square() {
+        let src = r#"
+            let c = matmul(eye(3), zeros(4, 5))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_transpose_swaps_dims_ok_and_err() {
+        let ok = r#"
+            let c = matmul(transpose(zeros(3, 2)), zeros(3, 7))
+        "#;
+        assert!(check(ok).is_ok());
+        let err = r#"
+            let c = matmul(transpose(zeros(3, 2)), zeros(2, 7))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(err)));
+    }
+
+    #[test]
+    fn p1_reshape_element_count_mismatch_errors() {
+        let src = r#"
+            let r = reshape(zeros(2, 3), [4, 2])
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_reshape_result_shape_is_concrete() {
+        // reshape → [3,2]; matmul inner 2 != 5 proves concreteness.
+        let src = r#"
+            let r = reshape(zeros(2, 3), [3, 2])
+            let c = matmul(r, zeros(5, 5))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_elementwise_mismatch_errors() {
+        let src = r#"
+            let c = tensor_add(zeros(2, 3), zeros(2, 4))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_activation_preserves_shape() {
+        // relu output keeps [2,3]; matmul inner 3 != 4 must error.
+        let src = r#"
+            let c = matmul(relu(zeros(2, 3)), zeros(4, 5))
+        "#;
+        assert!(has_shape_mismatch(&check_errors(src)));
+    }
+
+    #[test]
+    fn p1_dynamic_args_stay_gradual_ok() {
+        // Non-literal dims → dynamic tensor → no false positives.
+        let src = r#"
+            fn f(n: i64) -> void {
+                let a = zeros(n, 3)
+                let c = matmul(a, zeros(9, 9))
+                println(c)
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn p1_param_boundary_concrete_mismatch_errors() {
+        // B0 probe P4: zeros(2,2) into Tensor<f64>[3,3] param must fail.
+        let src = r#"
+            fn take(t: Tensor<f64>[3, 3]) -> void {
+                println(t)
+            }
+            take(zeros(2, 2))
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
     }
 
     // ── F.4: Missing builtin registration tests ──
