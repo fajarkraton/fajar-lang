@@ -27,8 +27,9 @@ fajarquant = { git = "https://github.com/fajarkraton/fajarquant", rev = "b05ecf1
 # Path E + F, EOS-38 2026-05-12). Same git+rev pattern as fajarquant.
 # Local dev iteration may temporarily switch to { path = "../fajar-{wasi-p2,distributed}" }
 # but DO NOT commit the path form — breaks CI.
-# Currently dormant: src/wasi_p2/ + src/distributed/ are still local-authoritative.
-# Re-export shim + local removal land at Phase E.5 + F.5.
+# src/wasi_p2/ + src/distributed/ were removed at Phase E.5 + F.5 (v36.0.0);
+# these crates are the authoritative homes. fajar-lang keeps 12 integ smoke
+# tests (tests/{wasi_p2,distributed}_integration.rs) against their public API.
 fajar-wasi-p2 = { git = "https://github.com/fajarkraton/fajar-wasi-p2", rev = "d57d3b2100268438d2f48fa7473d481212144e18" }
 fajar-distributed = { git = "https://github.com/fajarkraton/fajar-distributed", rev = "4011a3d582cd87f20b64c78ee4b1798790d472a7" }
 

@@ -3129,7 +3129,11 @@ Non-fj LOC in fajaros kernel build path: 2,195 (Phase 0) → **642**
 (after Phase 6.6, vecmat_v8.c remains pending Phase 4.D-F G-M debug).
 71% reduction.
 
-## [Unreleased] — 2026-05-04 CI rehab + FAJAROS_100PCT_FJ_PLAN
+## [untagged, folded into v33.x] — 2026-05-04 CI rehab + FAJAROS_100PCT_FJ_PLAN
+
+> Heading retitled 2026-06-12 (HONEST_AUDIT_V36 F6): this block predates
+> v33.1.0 and was never re-labeled when its work shipped; an `[Unreleased]`
+> section buried mid-history violates keep-a-changelog ordering.
 
 ### Fixed (CI rehab — main CI green restored after 10+ red run streak)
 

@@ -10,7 +10,7 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 [![Stress](https://img.shields.io/badge/stress-5x_at_threads%3D64_PASS-success)](https://github.com/fajarkraton/fajar-lang/actions/workflows/ci.yml)
 [![Unwrap](https://img.shields.io/badge/production_unwrap-0-success)]()
 [![Doc Warnings](https://img.shields.io/badge/cargo_doc-0_warnings-success)]()
-[![Doc Coverage](https://img.shields.io/badge/pub--item_docs-95.79%25-success)]()
+[![Doc Coverage](https://img.shields.io/badge/pub--item_docs-95.93%25-success)]()
 [![Error Codes](https://img.shields.io/badge/error--code_coverage-gap_0-success)]()
 [![Modules](https://img.shields.io/badge/modules-40_%5Bx%5D_%2F_0_%5Bf%5D_%2F_0_%5Bs%5D-success)]()
 [![LOC](https://img.shields.io/badge/LOC-408K_Rust-informational)]()
@@ -18,7 +18,7 @@ Fajar Lang (`fj`) is a statically-typed systems programming language designed fo
 [![Ring 3](https://img.shields.io/badge/Ring_3-user_mode_works-success)]()
 [![CUDA](https://img.shields.io/badge/CUDA-RTX_4090_GPU_compute-76b900)]()
 [![FajarQuant](https://img.shields.io/badge/FajarQuant-Phase_D_IntLLM_Base_PASS_PPL_54.1-orange)](https://github.com/fajarkraton/fajarquant)
-[![JIT](https://img.shields.io/badge/JIT-76x_speedup-purple)]()
+[![JIT](https://img.shields.io/badge/JIT-128x_vs_interpreter-purple)]()
 [![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=primecore.fajar-lang)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](LICENSE)
 [![Made in Indonesia](https://img.shields.io/badge/Made_in-Indonesia-red)]()
@@ -538,8 +538,8 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 |--------|-------|
 | Release | **v36.0.0 "Compass §5 Closure"** (2026-05-13) — Compass §5 Path E + F extraction: `wasi_p2` and `distributed` modules re-homed to standalone crates ([fajar-wasi-p2](https://github.com/fajarkraton/fajar-wasi-p2), [fajar-distributed](https://github.com/fajarkraton/fajar-distributed)); `run-cluster` CLI removed. Combined with v35.6.0 (context-dimension `@safe` default) and v35.5.0 (type-system D-FULL), Compass §4.4 + §5 are fully closed. Sources: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md`. **Note**: internal-engineering closure of the design Compass; not a production-deployment milestone. |
 | Compiler LOC | ~407,744 Rust across 348 files in src/ |
-| Tests | **6,591 lib** + 9,516 integ (in 80 files) + 14 doc + 1 ignored = **16,121 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~162 tests at `--features llvm,native`. Verified 2026-05-13 via `cargo test --lib && cargo test --tests && cargo test --doc`. |
-| Doc coverage | **95.79% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
+| Tests | **6,591 lib** + 9,516 integ (in 80 files) + 14 doc + 1 ignored = **16,121 total** — 0 failures, 0 flakes locally, 0 clippy, 0 rustdoc warnings (incl. `--document-private-items`); LLVM feature build adds ~162 tests at `--features llvm,native`. Re-verified 2026-06-12 (`docs/HONEST_AUDIT_V36.md`) via `cargo test --lib && cargo test --tests && cargo test --doc`. |
+| Doc coverage | **95.93% pub-item** + **100% stdlib_v3** — strict-mode rustdoc passes; `scripts/check_doc_coverage.sh` + `scripts/check_stdlib_docs.sh` enforce |
 | Error-code coverage | **gap=0** — 135 cataloged, 125 covered + 12 forward-compat (per §6.6 R6); `python3 scripts/audit_error_codes.py --strict` enforces |
 | Tutorial | `docs/TUTORIAL.md` 10 chapters, basics → robot control loop |
 | Examples | 242 `.fj` programs + 4 forward-looking in `examples/aspirational/` (annotation/syntax not yet implemented; see [aspirational README](examples/aspirational/README.md)) + 6 multi-file real-project folders (`calculator-cli`, `tcp-echo-server`, `embedded-mnist`, `package_demo`, `nova`, `surya`). See `docs/EXAMPLES_SWEEP_2026_05_07.md`. |
@@ -548,7 +548,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | JIT | Cranelift native compilation (see Performance Benchmarks for actual numbers; "76× on fib(30)" was an early demo, current Cranelift JIT shows 12× over C — see `benches/baselines/RESULTS.md`) |
 | GPU | Real CUDA detection (RTX 4090: 9,728 cores, 16 GB VRAM) |
 | Error codes | 80+ across 10 categories |
-| Standard packages | 39 (math, nn, hal, http, json, crypto, mqtt, db, ...) |
+| Standard packages | 37 (math, nn, hal, http, json, crypto, mqtt, db, ...) — `ls packages/` |
 | Built-in macros | 14 (`vec!`, `format!`, `matches!`, `println!`, `assert_eq!`, `cfg!`, `dbg!`, `todo!`, `env!`, `stringify!`, `concat!`, `assert!`, `include_str!`, `line!`) |
 | Codegen backends | 3 (Cranelift JIT/AOT, LLVM O0-O3+LTO+PGO, WebAssembly+WASI) |
 | LLVM optimizations | O0-O3, Os, Oz, thin/full LTO, PGO generate/use, native CPU targeting |
@@ -559,7 +559,7 @@ Fibonacci(35) single execution — Intel i9-14900HX, Ubuntu 25.10:
 | Generators | `yield` keyword, `gen fn`, `GeneratorIter`, `AsyncStream`, `Coroutine` |
 | LSP features | 22 (semantic tokens, inlay hints, type-driven completion, scope-aware rename, workspace symbols, 11 code actions) |
 | Macro system | Token trees, pattern matching (`$x:expr`), repetition (`$()*`), expansion, derive (7 traits) |
-| WASI | P1 (8 syscalls) + P2 (WIT parser, component model, filesystem, streams, HTTP, sockets) |
+| WASI | P1 (8 syscalls) in-core; P2 (WIT parser, component model, filesystem, streams, HTTP, sockets) via the extracted [`fajar-wasi-p2`](https://github.com/fajarkraton/fajar-wasi-p2) crate — `fj build --target wasm32-wasi-p2` is deprecated, hard-removal at v37 (see Companion crates) |
 | GUI | winit + softbuffer, bitmap font, button interaction, flex layout |
 | HTTP framework | Router + middleware + handler dispatch + HTTPS (native-tls) |
 | Security | Stack canary, bounds check, overflow check, linter (20 rules), taint analysis |

@@ -27,7 +27,7 @@
 
 ## 2. Mandatory Session Protocol
 
-Every session: **READ** `CLAUDE.md` + `docs/HONEST_AUDIT_V33.md` → **ORIENT**
+Every session: **READ** `CLAUDE.md` + `docs/HONEST_AUDIT_V36.md` → **ORIENT**
 on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIFY**
 `cargo test --lib && cargo clippy -- -D warnings && cargo fmt -- --check` →
 **UPDATE** task to `[x]` only if E2E works (use `[f]` for framework-only).
@@ -43,7 +43,7 @@ on what user wants vs what's real → **ACT** per TDD workflow (§8) → **VERIF
 - **FAJARQUANT_RUST_TO_FJ_PLAN closed** (2026-05-05): 7 algorithms ported (~2,649 LOC Rust → 986 LOC fj); 70+ I/O pairs bit-exact.
 - **Perfection Plan P0-P9 closed engineering-side; 22/25 work-items PASS**.
 
-> **Source of truth:** `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/FJARR_LEAK_PHASE_{1,2}_FINDINGS.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` + `docs/HONEST_AUDIT_V33.md`. Predecessors: `HONEST_AUDIT_V{32,26,17}.md`, `HONEST_STATUS_V26.md`.
+> **Source of truth:** `docs/KERNEL_MODE_PHASE_A_B0_FINDINGS.md` + `docs/FJARR_LEAK_PHASE_{1,2}_FINDINGS.md` + `docs/SELFHOST_FJ_PHASE_{16,17,18}_FINDINGS.md` + `docs/FAJAROS_100PCT_FJ_PHASE_*_FINDINGS.md` + `docs/HONEST_AUDIT_V36.md`. Predecessors: `HONEST_AUDIT_V{33,32,26,17}.md`, `HONEST_STATUS_V26.md`.
 
 **Core compiler (v1.0 → v0.5):** ALL COMPLETE — 506 + 739 + 40 + 80 + 130 tasks across
 lexer, parser, analyzer, Cranelift, ML runtime, concurrency, OS runtime, generic enums,
@@ -58,6 +58,7 @@ detailed entries.
 
 - **`docs/FAJAROS_100PCT_FJ_PLAN.md`** — 9-phase plan, **TERMINAL COMPLETE 2026-05-05**. ZERO non-fj LOC in fajaros kernel; 9/9 compiler gaps closed.
 - **`docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md` series** — per-phase findings docs (closure proofs)
+- **`docs/HONEST_AUDIT_V36.md`** — full re-audit at v36.0.0+3 (2026-06-12): all headline numbers reproduced; F1-F9 + G1-G3 remediated same-day
 - **`docs/HONEST_AUDIT_V33.md`** — perfection-plan exit scorecard (2026-05-03, predecessor)
 - **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan (CLOSED engineering-side)
 - **`docs/HONEST_AUDIT_V32.md`** — V32 deep re-audit (2026-05-02)
@@ -84,13 +85,13 @@ Tests:     6,591 lib + 9,516 integ (80 files; 1 ignored) + 14 doc = 16,121 total
            Stress: 5/5 at --test-threads=64 | LLVM: 162+ under --features llvm,native
 LOC:       ~407,744 Rust (348 files) | Binary 18 MB | MSRV 1.87 | 309 .fj examples
 Modules:   40 pub mods at lib.rs root | 40 [x], 0 [sim]/[f]/[s] (was 42 pre-EOS-40 / 54 pre-EOS-37; Path E + F extraction reclaimed ~29.6K LOC across 28 source files; EOS-37 freezes reclaimed ~15.6K across 14 modules)
-CLI:       38 subcommands (run-cluster removed at F.4 per Compass §5.1 Option α) | CI: 7 workflows | Features: 19 flags (smt removed in Path C)
+CLI:       38 subcommands (run-cluster removed at F.4 per Compass §5.1 Option α) | CI: 6 workflows | Features: 19 flags (smt removed in Path C)
            --strict-ownership flag (existing) triggers SE024 on `[T]` use-after-move
-Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.79% pub-doc | 100% stdlib_v3 doc
+Quality:   0 clippy/fmt/rustdoc/unwrap warnings | 95.93% pub-doc | 100% stdlib_v3 doc
            Heap-leak classes closed: R15 string-arena + _FjArr realloc + [T] use-after-move (opt-in)
            Per-fjc-self-compile leak: 2.73 MB → 0 bytes definitely+indirectly lost ✅
 GPU:       RTX 4090 CUDA (9 PTX kernels, tiled matmul, 3× speedup)
-Tags:      v32.1.0 → v33.x → v34.x → v35.0.0..v35.6.0 (Path E + F closure tag v36.0.0 deferred to Phase G remainder; see CHANGELOG.md [Unreleased])
+Tags:      v32.1.0 → v33.x → v34.x → v35.0.0..v35.6.0 → v36.0.0 (2026-05-13, Compass §5 closure; 5 platform binaries + SHA256SUMS live on GitHub Releases)
 
 Labels: [x]=production · [sim]=NONE · [f]=framework · [s]=stub
 ```
@@ -266,14 +267,27 @@ Error codes:         PREFIX + NUMBER -> SE004, KE001, CE003
 
 ### 6.4 Safety Rules
 
-- **ZERO** `unsafe {}` blocks outside `src/codegen/` and `src/runtime/os/`
-- Every `unsafe` block MUST have `// SAFETY:` comment
+> Rewritten 2026-06-12 per HONEST_AUDIT_V36 F7: the old "ZERO unsafe
+> outside src/codegen/ + src/runtime/os/" text predated the GPU/NPU/FFI/
+> BSP modules and was structurally stale (719 legitimate production sites).
+
+- `unsafe` is permitted ONLY on the FFI/hardware surface enumerated in the
+  `ALLOWED` list of `scripts/audit_unsafe.py` (codegen, runtime/{os,gpu},
+  runtime/ml/{npu,ops SIMD}, ffi_v2, bsp, hw, jit, plugin loader,
+  interpreter FFI, stdlib_v3 {system,crypto}, main.rs). Adding `unsafe` to
+  any new file requires extending that allowlist in the same commit with a
+  one-line justification — the gate fails otherwise.
+- Every `unsafe` block/fn/impl MUST have a `// SAFETY:` comment (one
+  comment may cover an adjacent cluster) or, for `unsafe fn`, a
+  `/// # Safety` doc section.
+- **Gate:** `python3 scripts/audit_unsafe.py --strict` must exit 0
+  (enforced in CI alongside `audit_error_codes.py`).
 - No raw pointer dereference outside `@kernel`/`@unsafe` context
 
 ### 6.5 Code Review Checklist (Before Marking Task Done)
 
 - [ ] No `.unwrap()` in `src/` (only in tests)
-- [ ] No `unsafe` without `// SAFETY:` comment
+- [ ] No `unsafe` without `// SAFETY:` comment (`python3 scripts/audit_unsafe.py --strict` exit 0)
 - [ ] No wall-clock `assert!(elapsed < threshold)` in unit tests (see §6.7)
 - [ ] All `pub` items have doc comments
 - [ ] `cargo test` — all pass
@@ -652,7 +666,7 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ## 17. Repository Structure
 
-`src/`: lexer, parser, analyzer, interpreter, vm, codegen/{cranelift,llvm}, runtime/{os,ml}, gpu_codegen, dependent, verify, lsp, package, distributed, wasi_p2, ffi_v2, formatter, selfhost, const_*, gui (gated). **Glob discovery preferred** — use `Glob "src/**/mod.rs"` rather than reading this map. Companion dirs: `tests/` (46 files), `examples/` (231 .fj), `docs/` (157), `benches/`, `fuzz/`, `audit/`, `scripts/`, `.github/workflows/`.
+`src/`: lexer, parser, analyzer, interpreter, vm, codegen/{cranelift,llvm}, runtime/{os,ml}, gpu_codegen, dependent, verify, lsp, package, ffi_v2, formatter, selfhost, const_*, gui (gated). (distributed + wasi_p2 extracted to standalone crates at v36.0.0.) **Glob discovery preferred** — use `Glob "src/**/mod.rs"` rather than reading this map. Companion dirs: `tests/` (80 files), `examples/` (309 .fj incl. project folders), `docs/` (282 top-level .md), `benches/`, `fuzz/`, `audit/`, `scripts/`, `.github/workflows/`.
 
 ---
 
@@ -666,7 +680,8 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 | **Phase 18 CALL_INDEX CLOSED (2026-05-07, commit 9c9ff2a8)** | **`docs/SELFHOST_FJ_PHASE_18_FINDINGS.md`** + plan `docs/CALL_INDEX_PLAN.md` + B0 `docs/CALL_INDEX_B0_FINDINGS.md` + decision `docs/decisions/2026-05-07-call-index-shape.md` (D1.A + D2.A + D3.B). Silent-miscompile class for `f()[i]` / `obj.m()[i]` resolved; 6 new P-tests (P81..P86) + pre-push regression hook. |
 | **T4 dup-fn detection CLOSED (commit 38e23f56)** | **`docs/T4_DUP_FN_PLAN.md`** — closed independently from FJARR_LEAK / CALL_INDEX. |
 | **FAJAROS_100PCT_FJ_PLAN (TERMINAL COMPLETE 2026-05-05)** | **`docs/FAJAROS_100PCT_FJ_PLAN.md`** + per-phase findings `docs/FAJAROS_100PCT_FJ_PHASE_{0..7,4D,6_6}_FINDINGS.md`. 9/9 fj-lang LLVM compiler gaps closed (G-A through G-N); ZERO non-fj LOC in fajaros kernel build path. v33.2.0 caps the plan. |
-| **Latest audit (V33) — perfection plan** | **`docs/HONEST_AUDIT_V33.md`** — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
+| **Latest audit (V36) — full re-audit at v36.0.0** | **`docs/HONEST_AUDIT_V36.md`** — every CLAUDE.md/README claim re-verified 2026-06-12; all headline numbers reproduced exactly; findings F1-F9 + G1-G3 with remediation log |
+| **Audit predecessor (V33) — perfection plan** | `docs/HONEST_AUDIT_V33.md` — exit scorecard for all 25 perfection-plan work-items (2026-05-03) |
 | **Current per-module status** | **`docs/HONEST_STATUS_V26.md`** — V26 module classification (still authoritative; V33 added no demotions) |
 | **Perfection plan (CLOSED engineering-side)** | **`docs/FAJAR_LANG_PERFECTION_PLAN.md`** — 25-item / 10-phase plan; per-phase findings in `docs/FAJAR_LANG_PERFECTION_PHASE_{1..8}_FINDINGS.md` |
 | **Tutorial / book** | **`docs/TUTORIAL.md`** — 10 chapters basics → robot control loop (P6.E3) |
@@ -707,5 +722,5 @@ cargo run -- new <name> | build | fmt | lsp | doc | demo | watch
 
 ---
 
-*CLAUDE.md Version: 36.0 (Compass §5 closure release) — base release v35.6.0 (Compass §4.4 context-dimension closure). EOS-29..40 session arc (2026-05-12..13, engineering-only) executed Compass §5.1 freeze closures (dep-types + GPU non-PTX + SMT-verification, -15.6K LOC across 14 modules at EOS-37) and Compass §5 Path E + F extraction (wasi_p2 + distributed re-homed to standalone crates, -29.6K LOC across 28 modules at EOS-29..40). Quality gates @ HEAD post-Path-E+F: **6,591 lib** + 91/91 stage1_full + 4/4 phase17 byte-equality + 9,516 integ (80 files; 12 new smoke tests) + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md` + `docs/decisions/2026-05-12-*.md` + B0 audits `docs/{TENSOR_SHAPES,ARRAYS_PATTERNS,DEVICE_PROOFS,VERIFY_PATH_C,PATH_E_WASI_P2,PATH_F_DISTRIBUTED}_*_B0_FINDINGS.md` + v35.6.0 base docs. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11.*
-*Last Updated: 2026-05-13*
+*CLAUDE.md Version: 36.0 (Compass §5 closure release) — base release v35.6.0 (Compass §4.4 context-dimension closure). EOS-29..40 session arc (2026-05-12..13, engineering-only) executed Compass §5.1 freeze closures (dep-types + GPU non-PTX + SMT-verification, -15.6K LOC across 14 modules at EOS-37) and Compass §5 Path E + F extraction (wasi_p2 + distributed re-homed to standalone crates, -29.6K LOC across 28 modules at EOS-29..40). Quality gates @ HEAD post-Path-E+F: **6,591 lib** + 91/91 stage1_full + 4/4 phase17 byte-equality + 9,516 integ (80 files; 12 new smoke tests) + 149/149 context_safety + clippy/fmt clean. Source of truth: `docs/COMPASS_5_PATH_E_F_EXTRACTION_FINDINGS.md` + `docs/decisions/2026-05-12-*.md` + B0 audits `docs/{TENSOR_SHAPES,ARRAYS_PATTERNS,DEVICE_PROOFS,VERIFY_PATH_C,PATH_E_WASI_P2,PATH_F_DISTRIBUTED}_*_B0_FINDINGS.md` + v35.6.0 base docs. Detail → `CHANGELOG.md` + `MEMORY.md`. Active rules: §6.1–§6.11. Re-audit 2026-06-12 (`docs/HONEST_AUDIT_V36.md`): all headline gates reproduced at HEAD; §6.4 rewritten + `scripts/audit_unsafe.py` gate added; 10 stale doc items synced (F2-F6, F8, G1-G3); benches clippy fixed (F1).*
+*Last Updated: 2026-06-12*
