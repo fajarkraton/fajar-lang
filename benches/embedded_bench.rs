@@ -73,8 +73,11 @@ fn bench_stack_inference_pipeline(c: &mut Criterion) {
 }
 
 fn bench_fixed_point_q16_16(c: &mut Criterion) {
-    let a = Q16_16::from_f64(3.14);
-    let b = Q16_16::from_f64(2.71);
+    // Arbitrary operands chosen as exact binary fractions (representable
+    // without rounding in Q16.16) — NOT approximations of π/e, which would
+    // trip clippy::approx_constant.
+    let a = Q16_16::from_f64(3.25);
+    let b = Q16_16::from_f64(2.75);
 
     c.bench_function("fixed_point_q16_16_mul", |bench| {
         bench.iter(|| {

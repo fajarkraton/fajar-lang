@@ -46,12 +46,14 @@ jobs:
       - name: Clippy lints
         run: cargo clippy -- -D warnings
 
-      - name: Clippy lints (tests)
+      - name: Clippy lints (all targets)
         # Per FAJAR_LANG_PERFECTION_PLAN P1.A3 (commit landed 2026-05-02):
-        # explicit --tests scope catches lint regressions in tests/*.rs +
+        # explicit non-lib scope catches lint regressions in tests/*.rs +
         # src/ #[cfg(test)] mods that the default `cargo clippy -- -D warnings`
-        # silently passes. Closes a long-standing test-file lint backlog.
-        run: cargo clippy --tests -- -D warnings
+        # silently passes. Widened --tests → --all-targets per
+        # HONEST_AUDIT_V36 F1 (2026-06-12): benches/ were never
+        # clippy-compiled and accumulated a deny-by-default violation.
+        run: cargo clippy --all-targets -- -D warnings
 
       # NEW-1 fix (re-audit 2026-05-07, extension to ci.yml): the phase17
       # self-host tests in tests/selfhost_phase17_self_compile.rs::fj_binary()
@@ -74,6 +76,10 @@ jobs:
       - name: Error-code coverage audit (P4.C2)
         if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
         run: python3 scripts/audit_error_codes.py --strict
+
+      - name: Unsafe-hygiene audit (HONEST_AUDIT_V36 F7)
+        if: matrix.os == 'ubuntu-24.04' && matrix.rust == 'stable'
+        run: python3 scripts/audit_unsafe.py --strict
 
   # Stress test: run lib tests under thread oversubscription to catch
   # wall-clock timing flakes early. V26 A1.4 prevention measure.
