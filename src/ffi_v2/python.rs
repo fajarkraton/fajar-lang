@@ -462,7 +462,7 @@ pub fn generate_python_wrapper(
 #[cfg(feature = "python-ffi")]
 pub fn py_eval_result(code: &str) -> Result<String, String> {
     let ccode = std::ffi::CString::new(code).map_err(|e| format!("invalid code string: {e}"))?;
-    pyo3::Python::with_gil(|py| {
+    pyo3::Python::attach(|py| {
         use pyo3::types::PyAnyMethods;
         match py.eval(&ccode, None, None) {
             Ok(val) => {
@@ -484,7 +484,7 @@ pub fn py_eval_result(code: &str) -> Result<String, String> {
 /// PQ4.3: Convert Rust types to Python and back.
 #[cfg(feature = "python-ffi")]
 pub fn py_type_roundtrip(value: &PyValue) -> Result<PyValue, String> {
-    pyo3::Python::with_gil(|py| {
+    pyo3::Python::attach(|py| {
         use pyo3::IntoPyObject;
         use pyo3::types::PyAnyMethods;
         match value {
@@ -516,7 +516,7 @@ pub fn py_type_roundtrip(value: &PyValue) -> Result<PyValue, String> {
 /// PQ4.4: List functions in a Python module.
 #[cfg(feature = "python-ffi")]
 pub fn py_list_module_attrs(module_name: &str) -> Result<Vec<String>, String> {
-    pyo3::Python::with_gil(|py| {
+    pyo3::Python::attach(|py| {
         use pyo3::types::PyAnyMethods;
         let dir_code = std::ffi::CString::new(format!(
             "[x for x in dir(__import__('{module_name}')) if not x.startswith('_')]"
@@ -542,7 +542,7 @@ pub fn python_available() -> Result<String, String> {
     if cfg!(feature = "python-ffi") {
         #[cfg(feature = "python-ffi")]
         {
-            pyo3::Python::with_gil(|py| {
+            pyo3::Python::attach(|py| {
                 use pyo3::types::PyAnyMethods;
                 let ccode = std::ffi::CString::new("str(__import__('sys').version_info.major) + '.' + str(__import__('sys').version_info.minor) + '.' + str(__import__('sys').version_info.micro)")
                     .expect("CString::new for Python version query code");
@@ -665,7 +665,7 @@ impl NumpyBuffer {
 pub fn numpy_to_buffer(code: &str) -> Result<NumpyBuffer, String> {
     use pyo3::prelude::*;
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         // Evaluate the expression to get a numpy array, convert to flat list
         let data_code = format!("list(({code}).flatten())");
         let shape_code = format!("list(({code}).shape)");
@@ -924,18 +924,18 @@ mod tests {
     use pyo3::types::PyModule;
 
     #[cfg(feature = "python-ffi")]
-    fn py_eval<'py, T: pyo3::FromPyObject<'py>>(
+    fn py_eval<'py, T: for<'a> pyo3::FromPyObject<'a, 'py>>(
         py: pyo3::Python<'py>,
         code: &str,
     ) -> pyo3::PyResult<T> {
         let ccode = std::ffi::CString::new(code).unwrap();
-        py.eval(&ccode, None, None)?.extract()
+        py.eval(&ccode, None, None)?.extract().map_err(Into::into)
     }
 
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_eval_expression() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let result: i64 = py_eval(py, "2 + 3").unwrap();
             assert_eq!(result, 5);
         });
@@ -944,7 +944,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_call_builtin() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let result: i64 = py_eval(py, "abs(-42)").unwrap();
             assert_eq!(result, 42);
         });
@@ -953,7 +953,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_import_math() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let pi: f64 = py_eval(py, "__import__('math').pi").unwrap();
             assert!((pi - std::f64::consts::PI).abs() < 1e-10);
             let sqrt: f64 = py_eval(py, "__import__('math').sqrt(16.0)").unwrap();
@@ -964,7 +964,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_list_sort() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let result: Vec<i64> = py_eval(py, "sorted([3, 1, 4, 1, 5, 9, 2, 6])").unwrap();
             assert_eq!(result, vec![1, 1, 2, 3, 4, 5, 6, 9]);
         });
@@ -973,7 +973,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_string_ops() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let result: String = py_eval(py, "'Fajar Lang'.lower().replace(' ', '_')").unwrap();
             assert_eq!(result, "fajar_lang");
         });
@@ -982,7 +982,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_exception() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let ccode = std::ffi::CString::new("1/0").unwrap();
             let result = py.eval(&ccode, None, None);
             assert!(result.is_err());
@@ -992,7 +992,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_numpy_array() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let arr: Vec<f64> =
                 py_eval(py, "__import__('numpy').array([1.0, 2.0, 3.0]).tolist()").unwrap();
             assert_eq!(arr, vec![1.0, 2.0, 3.0]);
@@ -1008,7 +1008,7 @@ mod tests {
     #[cfg(feature = "python-ffi")]
     #[test]
     fn gc2_python_define_function() {
-        pyo3::Python::with_gil(|py| {
+        pyo3::Python::attach(|py| {
             let code = std::ffi::CString::new(
                 "def fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a"
             ).unwrap();

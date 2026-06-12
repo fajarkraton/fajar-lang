@@ -66,7 +66,7 @@ webpki-roots = { version = "0.26", optional = true }
 
 # V8 GC2: Real FFI (C++ via libclang, Python via pyo3)
 clang-sys = { version = "1.8", optional = true, features = ["clang_18_0", "runtime"] }
-pyo3 = { version = "0.24", optional = true, features = ["auto-initialize"] }
+pyo3 = { version = "0.29", optional = true, features = ["auto-initialize"] }
 
 # GUI windowing (feature-gated)
 winit = { version = "0.30", optional = true }

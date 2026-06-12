@@ -277,6 +277,28 @@ Lesson recorded: the NEW-1 prevention landed in ci.yml only — a
 fix-one-workflow-miss-the-sibling class. When patching a workflow step,
 grep the other `.github/workflows/*.yml` for the same pattern.
 
+F10 verification: manual `gh workflow run Nightly` at the fixed commit →
+**all 4 jobs SUCCESS** (ubuntu, macos, windows, extended fuzz) — first
+green Nightly after ≥10 consecutive red.
+
+### F11 — found post-push: CI Security Audit red on 2 fresh pyo3 advisories
+
+The first CI run after the V36 push failed ONLY in the Security Audit
+job: RUSTSEC-2026-0176 (OOB read in `nth`/`nth_back` of PyList/PyTuple
+iterators) + RUSTSEC-2026-0177 (missing `Sync` bound on
+`PyCFunction::new_closure`), both against pyo3 0.24.2, both published
+**2026-06-11** — the day before this audit; unrelated to the audit
+commits. Every other job was green, including the first run of the new
+clippy `--all-targets` + `audit_unsafe.py` gates.
+
+Remediated by real upgrade (not ignore): pyo3 0.24 → 0.29 (advisory
+fix version; MSRV 1.83 < repo MSRV 1.87). Migration was mechanical —
+`Python::with_gil` → `Python::attach` (13 sites in src/ffi_v2/python.rs)
+plus the test helper's `FromPyObject` gaining the 0.29 two-lifetime +
+associated-`Error` form. Verified: clippy `--all-targets` w/ python-ffi
+exit 0; 349 ffi_v2 lib tests PASS (real CPython via auto-initialize);
+6,591 lib tests PASS; `cargo audit` with the CI ignore set exit 0.
+
 ---
 
 *HONEST_AUDIT_V36 — written 2026-06-12 as a standalone re-audit; no plan
