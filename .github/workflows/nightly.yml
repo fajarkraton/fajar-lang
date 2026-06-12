@@ -39,6 +39,14 @@ jobs:
       - name: Clippy (nightly)
         run: cargo clippy -- -D warnings
 
+      # NEW-1 class (re-audit 2026-05-07, found missing here by
+      # HONEST_AUDIT_V36 follow-up 2026-06-12 after ≥10 consecutive red
+      # nightlies): tests/selfhost_phase17_self_compile.rs::fj_binary()
+      # hardcodes target/release/fj, but `cargo test` below builds dev
+      # profile only — all 4 phase17 tests panic NotFound without this.
+      - name: Build release fj binary (required by phase17 self-host tests)
+        run: cargo build --release --bin fj
+
       - name: Run all tests
         run: cargo test --lib --bins --tests --examples
 

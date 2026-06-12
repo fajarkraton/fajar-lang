@@ -261,6 +261,22 @@ debt dissolved under manual verification (see F7 correction).
 Also updated: CLAUDE.md §2 session protocol + §18 index now point at this
 doc as the latest audit; §6.5 checklist gained the audit_unsafe gate.
 
+### F10 — found post-push while monitoring CI (2026-06-12)
+
+The scheduled **Nightly workflow had been red ≥10 consecutive nights**
+(every run in visible history, ubuntu-24.04 + macos-14; windows green).
+Cause: all 4 `selfhost_phase17_self_compile` tests panic
+`fj run: NotFound` — `nightly.yml` never received the NEW-1 fix
+(re-audit 2026-05-07) that `ci.yml` carries: tests hardcode
+`target/release/fj` but the workflow only built the dev profile. Fixed by
+adding the `cargo build --release --bin fj` step before "Run all tests",
+mirroring `ci.yml`. Verification: next scheduled nightly run green (or
+`gh workflow run Nightly` manual dispatch).
+
+Lesson recorded: the NEW-1 prevention landed in ci.yml only — a
+fix-one-workflow-miss-the-sibling class. When patching a workflow step,
+grep the other `.github/workflows/*.yml` for the same pattern.
+
 ---
 
 *HONEST_AUDIT_V36 — written 2026-06-12 as a standalone re-audit; no plan
