@@ -292,13 +292,19 @@ impl TypeChecker {
         let outer_nll = self.nll_info.take();
         self.nll_info = Some(crate::analyzer::cfg::NllInfo::analyze(&fndef.body));
 
-        let body_type = self.check_expr(&fndef.body);
-
         let declared_ret = fndef
             .return_type
             .as_ref()
             .map(|t| self.resolve_type(t))
             .unwrap_or(Type::Void);
+
+        // P2 (Compass §6.3): expose the declared return type to the body
+        // walk so explicit `return` statements are checked (previously only
+        // the body tail type was). Save/restore for nested fn items.
+        let outer_fn_return = self.current_fn_return.take();
+        self.current_fn_return = Some(declared_ret.clone());
+        let body_type = self.check_expr(&fndef.body);
+        self.current_fn_return = outer_fn_return;
 
         // Check return type compatibility
         if !declared_ret.is_compatible(&body_type)
@@ -832,11 +838,30 @@ impl TypeChecker {
                     self.errors
                         .push(SemanticError::ReturnOutsideFunction { span: *span });
                 }
-                if let Some(v) = value {
+                let val_ty = if let Some(v) = value {
                     self.check_expr(v)
                 } else {
                     Type::Void
+                };
+                // P2 (Compass §6.3): explicit `return` must match the
+                // declared return type. Same exemptions as the body-tail
+                // check above (Void declared, Never/Void value).
+                if let Some(declared) = self.current_fn_return.clone() {
+                    if !declared.is_compatible(&val_ty)
+                        && !matches!(declared, Type::Void)
+                        && !matches!(val_ty, Type::Void | Type::Never)
+                    {
+                        let hint =
+                            type_mismatch_hint(&declared.display_name(), &val_ty.display_name());
+                        self.errors.push(SemanticError::TypeMismatch {
+                            expected: declared.display_name(),
+                            found: val_ty.display_name(),
+                            span: *span,
+                            hint,
+                        });
+                    }
                 }
+                val_ty
             }
             Stmt::Break {
                 label: _,
@@ -1028,7 +1053,12 @@ impl TypeChecker {
                         ty
                     })
                     .collect();
+                // P2 (Compass §6.3): a closure's return type is inferred,
+                // not declared — suspend the enclosing fn's declared type
+                // so `return` inside the closure isn't checked against it.
+                let outer_fn_return = self.current_fn_return.take();
                 let ret_type = self.check_expr(body);
+                self.current_fn_return = outer_fn_return;
                 self.symbols.pop_scope();
                 Type::Function {
                     params: param_types,

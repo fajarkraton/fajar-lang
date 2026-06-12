@@ -1402,6 +1402,10 @@ pub struct TypeChecker {
     current_handler_resume_type: Option<Type>,
     /// V14: Current function name being checked (for effect inference).
     current_fn_name: Option<String>,
+    /// P2 (Compass §6.3): declared return type of the function whose body
+    /// is being checked, so explicit `return` statements can be verified.
+    /// `None` inside closures (their return type is inferred, not declared).
+    current_fn_return: Option<Type>,
     /// V14: Effects inferred from the current function body.
     current_fn_inferred_effects: std::collections::BTreeSet<String>,
     /// V14: Effects handled by enclosing handle blocks (don't require `with`).
@@ -1931,6 +1935,7 @@ impl TypeChecker {
             in_handle_expr: false,
             current_handler_resume_type: None,
             current_fn_name: None,
+            current_fn_return: None,
             current_fn_inferred_effects: std::collections::BTreeSet::new(),
             handled_effects_in_scope: std::collections::BTreeSet::new(),
             strict_ownership: false,
@@ -4526,6 +4531,156 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
         );
+    }
+
+    // ── P2 (Compass §6.3): boundary + return-position enforcement ──
+    // See docs/TENSOR_SHAPE_CT_PLAN.md §2.
+
+    #[test]
+    fn p2_tensor_compat_matrix() {
+        // P2.1 — table-driven codification of the Tensor is_compatible
+        // matrix: known×known equal, known×dyn gradual, rank mismatch.
+        let t = |dims: Vec<Option<u64>>| Type::Tensor {
+            element: Box::new(Type::F64),
+            dims,
+        };
+        let known = t(vec![Some(2), Some(3)]);
+        let known_other = t(vec![Some(4), Some(5)]);
+        let rank3 = t(vec![Some(2), Some(3), Some(4)]);
+        let dyn_rank = t(vec![]);
+        let partial = t(vec![None, Some(3)]);
+        let partial_conflict = t(vec![None, Some(4)]);
+        let f32_known = Type::Tensor {
+            element: Box::new(Type::F32),
+            dims: vec![Some(2), Some(3)],
+        };
+
+        assert!(known.is_compatible(&known)); // 1: same known
+        assert!(!known.is_compatible(&known_other)); // 2: dim conflict
+        assert!(!known.is_compatible(&rank3)); // 3: rank mismatch
+        assert!(known.is_compatible(&dyn_rank)); // 4a: known×dyn gradual
+        assert!(dyn_rank.is_compatible(&known)); // 4b: dyn×known gradual
+        assert!(partial.is_compatible(&known)); // 5: wildcard dim matches
+        assert!(!partial.is_compatible(&partial_conflict)); // 6: Some(3)×Some(4) at dim 1 conflicts
+        assert!(dyn_rank.is_compatible(&dyn_rank)); // 7: dyn×dyn
+        assert!(!known.is_compatible(&f32_known)); // 8: element mismatch
+        assert!(!partial.is_compatible(&rank3)); // 9: partial×rank mismatch
+    }
+
+    #[test]
+    fn p2_return_tail_shape_mismatch_errors() {
+        // Already enforced pre-P2 (body-type path) — kept as regression.
+        let src = r#"
+            fn f() -> Tensor<f64>[2, 3] {
+                zeros(3, 2)
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
+    }
+
+    #[test]
+    fn p2_return_stmt_shape_mismatch_errors() {
+        // B0-class gap: explicit `return` was never checked against the
+        // declared return type.
+        let src = r#"
+            fn f() -> Tensor<f64>[2, 3] {
+                return zeros(9, 9)
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
+    }
+
+    #[test]
+    fn p2_return_stmt_scalar_mismatch_errors() {
+        // The gap was general, not tensor-specific: `return "hello"` from
+        // a -> i64 fn passed `fj check` before P2.
+        let src = r#"
+            fn f() -> i64 {
+                return "hello"
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
+    }
+
+    #[test]
+    fn p2_return_stmt_branch_mismatch_errors() {
+        let src = r#"
+            fn f(x: i64) -> Tensor<f64>[2, 3] {
+                if x > 0 {
+                    return zeros(9, 9)
+                }
+                zeros(2, 3)
+            }
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. }))
+        );
+    }
+
+    #[test]
+    fn p2_return_stmt_matching_ok() {
+        let src = r#"
+            fn f(x: i64) -> Tensor<f64>[2, 3] {
+                if x > 0 {
+                    return zeros(2, 3)
+                }
+                zeros(2, 3)
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn p2_return_stmt_dynamic_shape_gradual_ok() {
+        // Non-literal dims stay dynamic → compatible with declared shape.
+        let src = r#"
+            fn f(n: i64) -> Tensor<f64>[2, 3] {
+                return zeros(n, 3)
+            }
+        "#;
+        assert!(check(src).is_ok());
+    }
+
+    #[test]
+    fn p2_return_in_closure_isolated_from_outer_fn() {
+        // A `return` inside a closure must not be compared against the
+        // enclosing fn's declared return type.
+        let src = r#"
+            fn f() -> i64 {
+                let g = |x: i64| {
+                    return "s"
+                }
+                println(g(1))
+                return 42
+            }
+        "#;
+        let result = check(src);
+        if let Err(errors) = result {
+            assert!(
+                !errors
+                    .iter()
+                    .any(|e| matches!(e, SemanticError::TypeMismatch { .. })),
+                "closure return wrongly checked against outer fn: {errors:?}"
+            );
+        }
     }
 
     // ── F.4: Missing builtin registration tests ──
