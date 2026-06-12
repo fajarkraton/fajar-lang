@@ -6608,18 +6608,47 @@ struct ClosureHandle {
     captures: Vec<i64>,
 }
 
+/// S2.6 pointer tag: closure handles carry this HIGH bit set so fn-ptr
+/// call sites (`__closure_call_dyn_N`) can distinguish them from raw
+/// function addresses at runtime.
+///
+/// Why a high bit and not bit 0: Cranelift JIT does NOT align function
+/// entry points on x86-64 (observed odd code addresses in
+/// native_closure_as_arg_no_capture during S2.6 bring-up), so low-bit
+/// tagging collides. Bit 62 is never set in canonical userspace virtual
+/// addresses on x86-64 (≤57-bit VA) or aarch64 (≤52-bit VA), for heap and
+/// code alike. On 32-bit targets bit 30 is used (Cortex-M peripheral
+/// space — never heap/code). `fj_rt_closure_new` debug-asserts the raw
+/// pointer doesn't collide.
+#[cfg(target_pointer_width = "64")]
+const CLOSURE_TAG: usize = 1 << 62;
+#[cfg(target_pointer_width = "32")]
+const CLOSURE_TAG: usize = 1 << 30;
+
+fn untag(ptr: *mut u8) -> *mut u8 {
+    (ptr as usize & !CLOSURE_TAG) as *mut u8
+}
+
 /// Allocates a closure handle with the given function pointer and capture count.
 /// Caller must then store captured values via `fj_rt_closure_set_capture`.
+/// The returned pointer is TAGGED (bit 0 set); every `fj_rt_closure_*`
+/// helper untags on entry, so the tagged value is the canonical handle.
 ///
 /// # Safety
 ///
-/// Returns a valid pointer that must be freed with `fj_rt_closure_free`.
+/// Returns a valid (tagged) pointer that must be freed with `fj_rt_closure_free`.
 pub extern "C" fn fj_rt_closure_new(fn_ptr: i64, capture_count: i64) -> *mut u8 {
     let handle = Box::new(ClosureHandle {
         fn_ptr,
         captures: vec![0i64; capture_count as usize],
     });
-    Box::into_raw(handle) as *mut u8
+    let raw = Box::into_raw(handle) as usize;
+    debug_assert_eq!(
+        raw & CLOSURE_TAG,
+        0,
+        "heap address collides with CLOSURE_TAG"
+    );
+    (raw | CLOSURE_TAG) as *mut u8
 }
 
 /// Sets a captured value in the closure handle at the given index.
@@ -6628,6 +6657,7 @@ pub extern "C" fn fj_rt_closure_new(fn_ptr: i64, capture_count: i64) -> *mut u8 
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_set_capture(ptr: *mut u8, index: i64, value: i64) {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return;
     }
@@ -6644,6 +6674,7 @@ pub extern "C" fn fj_rt_closure_set_capture(ptr: *mut u8, index: i64, value: i64
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_get_fn(ptr: *mut u8) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6658,6 +6689,7 @@ pub extern "C" fn fj_rt_closure_get_fn(ptr: *mut u8) -> i64 {
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_get_capture(ptr: *mut u8, index: i64) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6672,6 +6704,7 @@ pub extern "C" fn fj_rt_closure_get_capture(ptr: *mut u8, index: i64) -> i64 {
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_capture_count(ptr: *mut u8) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6688,6 +6721,7 @@ pub extern "C" fn fj_rt_closure_capture_count(ptr: *mut u8) -> i64 {
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 /// The underlying function must accept (captures..., arg) → i64.
 pub extern "C" fn fj_rt_closure_call_1(ptr: *mut u8, arg: i64) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6730,6 +6764,7 @@ pub extern "C" fn fj_rt_closure_call_1(ptr: *mut u8, arg: i64) -> i64 {
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_call_0(ptr: *mut u8) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6763,6 +6798,7 @@ pub extern "C" fn fj_rt_closure_call_0(ptr: *mut u8) -> i64 {
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_call_2(ptr: *mut u8, arg1: i64, arg2: i64) -> i64 {
+    let ptr = untag(ptr);
     if ptr.is_null() {
         return 0;
     }
@@ -6791,12 +6827,72 @@ pub extern "C" fn fj_rt_closure_call_2(ptr: *mut u8, arg1: i64, arg2: i64) -> i6
     }
 }
 
+/// S2.6 dynamic dispatch: calls `target` with 0 user args, where `target`
+/// is EITHER a tagged ClosureHandle (bit 0 set → unpack captures and call
+/// the body) OR a raw function address (bit 0 clear → call directly).
+/// This is what fn-ptr-typed call sites (`f()` inside a higher-order fn)
+/// compile to, so plain fns and capturing closures share one call site.
+///
+/// # Safety
+///
+/// `target` must be a tagged handle from `fj_rt_closure_new` or a function
+/// address with signature `() -> i64`.
+pub extern "C" fn fj_rt_closure_call_dyn_0(target: i64) -> i64 {
+    if target == 0 {
+        return 0;
+    }
+    if (target as usize) & CLOSURE_TAG != 0 {
+        fj_rt_closure_call_0(target as *mut u8)
+    } else {
+        // SAFETY: untagged target is a raw () -> i64 function address.
+        let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(target) };
+        f()
+    }
+}
+
+/// S2.6 dynamic dispatch with 1 user arg — see `fj_rt_closure_call_dyn_0`.
+///
+/// # Safety
+///
+/// `target` must be a tagged handle or a raw `(i64) -> i64` fn address.
+pub extern "C" fn fj_rt_closure_call_dyn_1(target: i64, arg: i64) -> i64 {
+    if target == 0 {
+        return 0;
+    }
+    if (target as usize) & CLOSURE_TAG != 0 {
+        fj_rt_closure_call_1(target as *mut u8, arg)
+    } else {
+        // SAFETY: untagged target is a raw (i64) -> i64 function address.
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(target) };
+        f(arg)
+    }
+}
+
+/// S2.6 dynamic dispatch with 2 user args — see `fj_rt_closure_call_dyn_0`.
+///
+/// # Safety
+///
+/// `target` must be a tagged handle or a raw `(i64, i64) -> i64` fn address.
+pub extern "C" fn fj_rt_closure_call_dyn_2(target: i64, arg1: i64, arg2: i64) -> i64 {
+    if target == 0 {
+        return 0;
+    }
+    if (target as usize) & CLOSURE_TAG != 0 {
+        fj_rt_closure_call_2(target as *mut u8, arg1, arg2)
+    } else {
+        // SAFETY: untagged target is a raw (i64, i64) -> i64 function address.
+        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(target) };
+        f(arg1, arg2)
+    }
+}
+
 /// Frees a closure handle.
 ///
 /// # Safety
 ///
 /// `ptr` must have been produced by `fj_rt_closure_new`.
 pub extern "C" fn fj_rt_closure_free(ptr: *mut u8) {
+    let ptr = untag(ptr);
     if !ptr.is_null() {
         // SAFETY: caller guarantees valid ClosureHandle pointer
         unsafe {
@@ -7286,6 +7382,9 @@ pub fn lookup_runtime_symbol(name: &str) -> Option<*const u8> {
         "fj_rt_closure_call_0" => Some(fj_rt_closure_call_0 as *const u8),
         "fj_rt_closure_call_1" => Some(fj_rt_closure_call_1 as *const u8),
         "fj_rt_closure_call_2" => Some(fj_rt_closure_call_2 as *const u8),
+        "fj_rt_closure_call_dyn_0" => Some(fj_rt_closure_call_dyn_0 as *const u8),
+        "fj_rt_closure_call_dyn_1" => Some(fj_rt_closure_call_dyn_1 as *const u8),
+        "fj_rt_closure_call_dyn_2" => Some(fj_rt_closure_call_dyn_2 as *const u8),
         "fj_rt_closure_capture_count" => Some(fj_rt_closure_capture_count as *const u8),
         "fj_rt_closure_free" => Some(fj_rt_closure_free as *const u8),
         "fj_rt_closure_get_capture" => Some(fj_rt_closure_get_capture as *const u8),

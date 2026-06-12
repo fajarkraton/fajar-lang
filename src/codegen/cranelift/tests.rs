@@ -6750,15 +6750,48 @@ fn native_closure_inline_as_arg() {
 }
 
 #[test]
-#[ignore = "closure-with-capture as argument requires trampoline (deferred to S2.6)"]
 fn native_closure_as_arg_with_capture() {
-    // Pass a closure with captures as argument (captures passed as extra args)
+    // S2.6 (closed 2026-06-12): capture closures pass as tagged
+    // ClosureHandles; fn-ptr call sites dispatch via __closure_call_dyn_N
+    // which untags handles and calls raw fn ptrs directly.
     let src = r#"
         fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }
         fn main() -> i64 {
             let offset = 10
             let add_offset = |x: i64| -> i64 { x + offset }
             apply(add_offset, 32)
+        }
+    "#;
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_closure_as_arg_mixed_plain_and_capture() {
+    // S2.6 key uniformity test: the SAME call site receives a plain fn
+    // (raw aligned address, tag bit clear) and a capture closure (tagged
+    // handle) — dyn dispatch must handle both.
+    let src = r#"
+        fn double(x: i64) -> i64 { x * 2 }
+        fn apply(f: fn(i64) -> i64, x: i64) -> i64 { f(x) }
+        fn main() -> i64 {
+            let offset = 2
+            let add_offset = |x: i64| -> i64 { x + offset }
+            apply(double, 10) + apply(add_offset, 20)
+        }
+    "#;
+    // 20 + 22 = 42
+    assert_eq!(compile_and_run(src), 42);
+}
+
+#[test]
+fn native_closure_as_arg_capture_two_params() {
+    // S2.6: 2-arg fn-ptr param with a capturing closure (call_dyn_2 path).
+    let src = r#"
+        fn apply2(f: fn(i64, i64) -> i64, x: i64, y: i64) -> i64 { f(x, y) }
+        fn main() -> i64 {
+            let bias = 2
+            let madd = |x: i64, y: i64| -> i64 { x * y + bias }
+            apply2(madd, 5, 8)
         }
     "#;
     assert_eq!(compile_and_run(src), 42);

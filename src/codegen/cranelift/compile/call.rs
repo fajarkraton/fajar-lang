@@ -3217,6 +3217,44 @@ fn compile_fn_ptr_call<M: Module>(
         .ok_or_else(|| CodegenError::UndefinedVariable(var_name.to_string()))?;
     let fn_addr = builder.use_var(var);
 
+    // Compile arguments
+    let mut call_args = Vec::new();
+    for a in args {
+        call_args.push(compile_expr(builder, cx, &a.value)?);
+    }
+
+    // S2.6: when the signature is all-integer/pointer with ≤2 args, dispatch
+    // through __closure_call_dyn_N so the SAME call site accepts both raw
+    // function addresses (tag bit clear) and tagged ClosureHandles from
+    // capturing closures. Non-integer or >2-arg signatures keep the direct
+    // call_indirect path (capturing closures there remain unsupported —
+    // pre-S2.6 parity).
+    let int_ty = clif_types::default_int_type();
+    let ptr_ty = clif_types::pointer_type();
+    let all_int = param_types.iter().all(|&t| t == int_ty || t == ptr_ty)
+        && ret_type.is_none_or(|t| t == int_ty || t == ptr_ty);
+    if all_int && args.len() <= 2 {
+        let dyn_name = match args.len() {
+            0 => "__closure_call_dyn_0",
+            1 => "__closure_call_dyn_1",
+            _ => "__closure_call_dyn_2",
+        };
+        let fn_id = *cx
+            .functions
+            .get(dyn_name)
+            .ok_or_else(|| CodegenError::Internal(format!("{dyn_name} not declared")))?;
+        let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+        let mut dyn_args = vec![fn_addr];
+        dyn_args.extend(call_args);
+        let call = builder.ins().call(callee, &dyn_args);
+        let results = builder.inst_results(call);
+        cx.last_expr_type = Some(ret_type.unwrap_or(int_ty));
+        if results.is_empty() {
+            return Ok(builder.ins().iconst(int_ty, 0));
+        }
+        return Ok(results[0]);
+    }
+
     // Build call signature
     let mut sig = cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV);
     for &pt in param_types {
@@ -3226,12 +3264,6 @@ fn compile_fn_ptr_call<M: Module>(
         sig.returns.push(cranelift_codegen::ir::AbiParam::new(rt));
     }
     let sig_ref = builder.import_signature(sig);
-
-    // Compile arguments
-    let mut call_args = Vec::new();
-    for a in args {
-        call_args.push(compile_expr(builder, cx, &a.value)?);
-    }
 
     let call = builder.ins().call_indirect(sig_ref, fn_addr, &call_args);
     let results = builder.inst_results(call);

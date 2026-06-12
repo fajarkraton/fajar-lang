@@ -24,7 +24,7 @@ shows pass at 95.1% on `fj run`.
 | `distributed_mnist.fj` | `@distributed` annotation for cluster ML training | Distributed runtime (Raft) is in `src/distributed/` but the `@distributed` lexer keyword is not wired. Per kompas §5.1 also flagged for "side library" relocation since not relevant to embedded niche. |
 | `ffi_numpy.fj` | `@ffi("python")` syntax for Python interop | FFI v2 supports Python via pyo3 (`--features python-ffi`) but this annotation form `@ffi("python")` is not parsed. Existing FFI uses `extern "python" fn ...` syntax. |
 | `ffi_opencv.fj` | `@ffi("c++")` syntax for C++ interop | Same as ffi_numpy — `@ffi("c++")` annotation form not parsed. Use `extern "C++" fn ...` syntax. |
-| `wasi_http_server.fj` | Async HTTP router with closures-as-arg: `router.get("/", fn(req) -> Response { ... })` | Closure-with-capture passed as call-argument requires Cranelift trampoline (deferred to S2.6 — see `tests/codegen/cranelift/tests.rs:6753` `#[ignore]`). Current syntax is async fn definition + manual route registration. |
+| `wasi_http_server.fj` | Async HTTP router with closures-as-arg: `router.get("/", fn(req) -> Response { ... })` | ~~Closure-with-capture as call-argument~~ **CLOSED 2026-06-12** (S2.6 — tagged ClosureHandle + `__closure_call_dyn_N` dispatch; the `#[ignore]` is removed and `native_closure_as_arg_with_capture` passes). Remaining for this example: the async router API itself (WASI P2 extracted to `fajar-wasi-p2` at v36.0.0; HTTP-server surface not on the embedded hot path). |
 
 ## Why we keep them
 

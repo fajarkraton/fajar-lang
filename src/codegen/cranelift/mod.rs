@@ -2633,6 +2633,26 @@ impl CraneliftCompiler {
                     .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
                 self.functions.insert("__closure_call_2".to_string(), id);
             }
+
+            // S2.6: dynamic fn-ptr/closure-handle dispatch — same shapes as
+            // call_0/1/2 (target is an i64 that is either a tagged handle or
+            // a raw function address; see runtime_fns CLOSURE_TAG).
+            for (rt, local) in [
+                ("fj_rt_closure_call_dyn_0", "__closure_call_dyn_0"),
+                ("fj_rt_closure_call_dyn_1", "__closure_call_dyn_1"),
+                ("fj_rt_closure_call_dyn_2", "__closure_call_dyn_2"),
+            ] {
+                let sig = match local.chars().last() {
+                    Some('0') => &sig_1i_i,
+                    Some('1') => &sig_2i_i,
+                    _ => &sig_3i_i,
+                };
+                let id = self
+                    .module
+                    .declare_function(rt, Linkage::Import, sig)
+                    .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                self.functions.insert(local.to_string(), id);
+            }
         }
 
         // ── RwLock primitives ────────────────────────────────────────────
@@ -10366,6 +10386,26 @@ impl ObjectCompiler {
                     .declare_function("fj_rt_closure_call_2", Linkage::Import, &sig_3i_i)
                     .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
                 self.functions.insert("__closure_call_2".to_string(), id);
+            }
+
+            // S2.6: dynamic fn-ptr/closure-handle dispatch — same shapes as
+            // call_0/1/2 (target is an i64 that is either a tagged handle or
+            // a raw function address; see runtime_fns CLOSURE_TAG).
+            for (rt, local) in [
+                ("fj_rt_closure_call_dyn_0", "__closure_call_dyn_0"),
+                ("fj_rt_closure_call_dyn_1", "__closure_call_dyn_1"),
+                ("fj_rt_closure_call_dyn_2", "__closure_call_dyn_2"),
+            ] {
+                let sig = match local.chars().last() {
+                    Some('0') => &sig_1i_i,
+                    Some('1') => &sig_2i_i,
+                    _ => &sig_3i_i,
+                };
+                let id = self
+                    .module
+                    .declare_function(rt, Linkage::Import, sig)
+                    .map_err(|e| CodegenError::FunctionError(e.to_string()))?;
+                self.functions.insert(local.to_string(), id);
             }
         }
 
