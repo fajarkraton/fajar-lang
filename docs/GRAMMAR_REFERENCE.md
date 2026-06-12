@@ -197,7 +197,10 @@ simple_type = 'bool' | 'i8' | 'i16' | 'i32' | 'i64' | 'i128' | 'isize'
 
 generic_type = IDENT '<' type_expr { ',' type_expr } '>' ;
 tensor_type  = ( 'tensor' | 'Tensor' ) '<' simple_type '>' '[' dim { ',' dim } ']' ;
-dim          = INT_LIT | '*' ;
+dim          = INT_LIT | '*' | SYM_DIM ;
+SYM_DIM      = uppercase-initial IDENT ;  (* symbolic dim, fn-signature-scoped;
+                                             unified per call site — TE011 on
+                                             conflict. P3 Compass §6.3 / D3a *)
 pointer_type = '*const' type_expr | '*mut' type_expr ;
 ref_type     = '&' [ 'mut' ] type_expr ;
 tuple_type   = '(' type_expr { ',' type_expr } ')' ;

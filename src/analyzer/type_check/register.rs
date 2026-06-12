@@ -2131,6 +2131,34 @@ impl TypeChecker {
                     span: fndef.span,
                     used: false,
                 });
+
+                // P3 (Compass §6.3 / D3a): capture symbolic shape signatures
+                // for per-call unification. Only fns whose annotations
+                // mention a symbolic dim pay any cost.
+                fn tensor_dims(t: &TypeExpr) -> Option<Vec<TensorDimExpr>> {
+                    if let TypeExpr::Tensor { dims, .. } = t {
+                        Some(dims.clone())
+                    } else {
+                        None
+                    }
+                }
+                fn has_sym(dims: &Option<Vec<TensorDimExpr>>) -> bool {
+                    dims.as_ref()
+                        .is_some_and(|d| d.iter().any(|x| matches!(x, TensorDimExpr::Sym(_))))
+                }
+                let param_shapes: Vec<Option<Vec<TensorDimExpr>>> =
+                    fndef.params.iter().map(|p| tensor_dims(&p.ty)).collect();
+                let ret_shape = fndef.return_type.as_ref().and_then(tensor_dims);
+                if param_shapes.iter().any(has_sym) || has_sym(&ret_shape) {
+                    self.symbolic_fn_shapes.insert(
+                        fndef.name.clone(),
+                        SymbolicFnShape {
+                            params: param_shapes,
+                            ret: ret_shape,
+                        },
+                    );
+                }
+
                 // Track annotation context
                 if let Some(ann) = &fndef.annotation {
                     match ann.name.as_str() {

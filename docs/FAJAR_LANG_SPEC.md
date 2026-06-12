@@ -284,6 +284,26 @@ Automotive (ADAS), aerospace, medical AI — di mana compile-time guarantees buk
 
 Tensor adalah tipe native di Fajar Lang — bukan objek library. Shape adalah bagian dari type system dan diperiksa di compile time.
 
+**Anotasi shape (sintaks aktual, v36+):** `Tensor<f64>[2, 3]`. Slot dimensi
+menerima tiga bentuk — ukuran literal (`3`), wildcard dinamis (`*`), dan
+**dimensi simbolik** (identifier berawalan huruf kapital, P3 Compass §6.3):
+
+```fajar
+// Simbol di-scope ke satu signature; simbol sama = ukuran sama.
+// Analyzer meng-unifikasi per call site dari shape argumen:
+//   dense(zeros(4, 10), zeros(10, 2))  → OK; hasil bertipe Tensor<f64>[4, 2]
+//   dense(zeros(4, 10), zeros(11, 2))  → TE011: I terikat 10, lalu 11
+fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O] {
+    matmul(x, w)
+}
+```
+
+Konstruktor dengan argumen literal (`zeros(2, 3)`) menghasilkan shape konkret
+yang merambat melalui `matmul`/`reshape`/`transpose`/elementwise/aktivasi;
+dimensi non-literal tetap dinamis (gradual — tanpa false positive). Check
+runtime tetap aktif sebagai lapisan kedua (keputusan D1a,
+`docs/decisions/2026-06-12-tensor-shape-ct.md`).
+
 > // Tensor\<Shape, DType\>
 >
 > // Shape = compile-time tuple of dimensions

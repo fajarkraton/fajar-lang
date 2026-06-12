@@ -1745,17 +1745,27 @@ impl Parser {
                         let mut dims = Vec::new();
                         while !self.at(&TokenKind::RBracket) && !self.at_eof() {
                             if self.eat(&TokenKind::Star) {
-                                dims.push(None);
+                                dims.push(TensorDimExpr::Wildcard);
                             } else {
                                 let dim_tok = self.peek().clone();
                                 match &dim_tok.kind {
                                     TokenKind::IntLit(n) => {
-                                        dims.push(Some(*n as u64));
+                                        dims.push(TensorDimExpr::Known(*n as u64));
+                                        self.advance();
+                                    }
+                                    // P3 (Compass §6.3 / D3a): uppercase-initial
+                                    // ident = symbolic dim, fn-signature-scoped.
+                                    TokenKind::Ident(s)
+                                        if s.chars().next().is_some_and(|c| c.is_uppercase()) =>
+                                    {
+                                        dims.push(TensorDimExpr::Sym(s.clone()));
                                         self.advance();
                                     }
                                     _ => {
                                         return Err(ParseError::UnexpectedToken {
-                                            expected: "dimension size or *".into(),
+                                            expected:
+                                                "dimension size, *, or uppercase symbolic dim"
+                                                    .into(),
                                             found: format!("{}", dim_tok.kind),
                                             line: dim_tok.line,
                                             col: dim_tok.col,

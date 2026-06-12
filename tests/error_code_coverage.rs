@@ -572,7 +572,7 @@ fn coverage_de002_kernel_call_in_device() {
 // Annotated forward-compat in docs/ERROR_CODES.md §5.2.
 
 // ════════════════════════════════════════════════════════════════════════
-// TE — Tensor Errors (10 codes: TE001-TE010)
+// TE — Tensor Errors (11 codes: TE001-TE011)
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
@@ -666,6 +666,16 @@ fn coverage_te010_gpu_oom_format() {
         available: 1 << 20,
     };
     assert!(format!("{e}").contains("TE010"), "got: {e}");
+}
+
+#[test]
+fn coverage_te011_symbolic_dim_mismatch() {
+    // P3 (Compass §6.3 / D3a): one signature symbol bound to two different
+    // sizes by the arguments of a single call → analyzer-level TE011.
+    expect_semantic_error(
+        "fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O] {\n    matmul(x, w)\n}\nlet r = dense(zeros(4, 10), zeros(11, 2))",
+        "TE011",
+    );
 }
 
 // ════════════════════════════════════════════════════════════════════════

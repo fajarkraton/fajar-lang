@@ -1397,6 +1397,31 @@ pub struct FieldInit {
 // Type expressions
 // ═══════════════════════════════════════════════════════════════════════
 
+/// One dimension slot in a tensor type annotation (P3, Compass §6.3).
+///
+/// Decision D3a (`docs/decisions/2026-06-12-tensor-shape-ct.md`): an
+/// uppercase-initial identifier in a dim slot is a symbolic dimension,
+/// scoped to the enclosing fn signature and unified per call site.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TensorDimExpr {
+    /// Known size: `Tensor<f64>[3, 4]`.
+    Known(u64),
+    /// Dynamic wildcard: `Tensor<f64>[*, 10]`.
+    Wildcard,
+    /// Symbolic dimension: `Tensor<f64>[B, I]`.
+    Sym(String),
+}
+
+impl fmt::Display for TensorDimExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TensorDimExpr::Known(n) => write!(f, "{n}"),
+            TensorDimExpr::Wildcard => write!(f, "*"),
+            TensorDimExpr::Sym(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// A type expression in Fajar Lang.
 ///
 /// Used in variable declarations, function signatures, struct fields, etc.
@@ -1420,12 +1445,13 @@ pub enum TypeExpr {
         span: Span,
     },
 
-    /// A tensor type: `Tensor<f32>[3, 4]` or `Tensor<f64>[*, 10]`.
+    /// A tensor type: `Tensor<f32>[3, 4]`, `Tensor<f64>[*, 10]`, or
+    /// `Tensor<f64>[B, I]` (P3 Compass §6.3 / D3a symbolic dims).
     Tensor {
         /// Element type.
         element_type: Box<TypeExpr>,
-        /// Dimensions (None = dynamic `*`).
-        dims: Vec<Option<u64>>,
+        /// Dimensions.
+        dims: Vec<TensorDimExpr>,
         /// Source span.
         span: Span,
     },
@@ -1732,10 +1758,7 @@ impl fmt::Display for TypeExpr {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    match dim {
-                        Some(n) => write!(f, "{n}")?,
-                        None => write!(f, "*")?,
-                    }
+                    write!(f, "{dim}")?;
                 }
                 write!(f, "]")
             }
@@ -2114,7 +2137,7 @@ mod tests {
                 name: "f32".into(),
                 span: dummy_span(),
             }),
-            dims: vec![Some(3), Some(4)],
+            dims: vec![TensorDimExpr::Known(3), TensorDimExpr::Known(4)],
             span: dummy_span(),
         };
         assert_eq!(format!("{ty}"), "Tensor<f32>[3, 4]");
@@ -2127,10 +2150,23 @@ mod tests {
                 name: "f64".into(),
                 span: dummy_span(),
             }),
-            dims: vec![None, Some(10)],
+            dims: vec![TensorDimExpr::Wildcard, TensorDimExpr::Known(10)],
             span: dummy_span(),
         };
         assert_eq!(format!("{ty}"), "Tensor<f64>[*, 10]");
+
+        let sym = TypeExpr::Tensor {
+            element_type: Box::new(TypeExpr::Simple {
+                name: "f64".into(),
+                span: dummy_span(),
+            }),
+            dims: vec![
+                TensorDimExpr::Sym("B".into()),
+                TensorDimExpr::Sym("I".into()),
+            ],
+            span: dummy_span(),
+        };
+        assert_eq!(format!("{sym}"), "Tensor<f64>[B, I]");
     }
 
     #[test]

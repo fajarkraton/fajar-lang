@@ -185,6 +185,7 @@ error[KE001]: heap allocation not allowed in @kernel context
 | TE008 | InvalidData | Invalid tensor data (catch-all `{reason}`) |
 | TE009 | GpuShapeMismatch | GPU tensor shape mismatch (feature-gated `cuda`) |
 | TE010 | GpuOutOfMemory | GPU memory exhausted (feature-gated `cuda`) |
+| TE011 | SymbolicDimMismatch | Symbolic dim (`Tensor<f64>[B, I]`) bound to two different sizes in one call (analyzer-level; P3 Compass §6.3) |
 
 ### Contoh Output TE001:
 

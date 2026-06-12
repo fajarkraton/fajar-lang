@@ -2682,6 +2682,7 @@ fn semantic_error_to_diagnostic(e: &SemanticError, doc: &DocumentState) -> Diagn
         SemanticError::CannotInferType { .. } => "SE013",
         SemanticError::TraitMethodSignatureMismatch { .. } => "SE016",
         SemanticError::TensorShapeMismatch { .. } => "TE001",
+        SemanticError::SymbolicDimMismatch { .. } => "TE011",
         SemanticError::HardwareAccessInSafe { .. } => "SE020",
         SemanticError::AsmInSafeContext { .. } => "KE005",
         SemanticError::AsmInDeviceContext { .. } => "KE006",

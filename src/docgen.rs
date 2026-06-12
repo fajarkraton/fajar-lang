@@ -254,13 +254,7 @@ fn type_to_string(ty: &TypeExpr) -> String {
         TypeExpr::Tensor {
             element_type, dims, ..
         } => {
-            let dims_str: Vec<String> = dims
-                .iter()
-                .map(|d| match d {
-                    Some(n) => n.to_string(),
-                    None => "*".to_string(),
-                })
-                .collect();
+            let dims_str: Vec<String> = dims.iter().map(|d| d.to_string()).collect();
             format!(
                 "Tensor<{}>[{}]",
                 type_to_string(element_type),

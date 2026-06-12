@@ -16,9 +16,20 @@ use crate::const_generics;
 use crate::const_traits;
 use crate::dependent;
 use crate::lexer::token::Span;
-use crate::parser::ast::Program;
+use crate::parser::ast::{Program, TensorDimExpr};
 
 use crate::analyzer::scope::{Symbol, SymbolTable};
+
+/// P3 (Compass §6.3): annotation-level shape info of one user fn whose
+/// signature mentions a symbolic dim. Captured at registration
+/// (`register_item`) because symbolic dims erase to dynamic in `Type`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SymbolicFnShape {
+    /// Per-param: `Some(dims)` when the param annotation is a Tensor type.
+    pub(crate) params: Vec<Option<Vec<TensorDimExpr>>>,
+    /// Return annotation dims when the return type is a Tensor.
+    pub(crate) ret: Option<Vec<TensorDimExpr>>,
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Suggestion engine (string similarity)
@@ -1002,6 +1013,27 @@ pub enum SemanticError {
         span: Span,
     },
 
+    /// TE011: Symbolic dimension mismatch at a call site (P3, Compass §6.3).
+    /// A signature symbol (e.g. `I` in `Tensor<f64>[B, I]`) bound to two
+    /// different sizes by the arguments of one call.
+    #[error(
+        "TE011: symbolic dim mismatch in call to `{fn_name}`: {symbol} bound to {first}, but argument {arg_index} requires {symbol} = {second}"
+    )]
+    SymbolicDimMismatch {
+        /// Callee function name.
+        fn_name: String,
+        /// The symbolic dimension name.
+        symbol: String,
+        /// First bound size.
+        first: u64,
+        /// Conflicting size.
+        second: u64,
+        /// 1-based argument index that introduced the conflict.
+        arg_index: usize,
+        /// Span of the conflicting argument.
+        span: Span,
+    },
+
     /// SE022: Compile-time array index out of bounds.
     #[error("SE022: array index {index} out of bounds (length {length})")]
     IndexOutOfBounds {
@@ -1205,6 +1237,7 @@ impl SemanticError {
             | SemanticError::CannotInferType { span, .. }
             | SemanticError::TraitMethodSignatureMismatch { span, .. }
             | SemanticError::TensorShapeMismatch { span, .. }
+            | SemanticError::SymbolicDimMismatch { span, .. }
             | SemanticError::IndexOutOfBounds { span, .. }
             | SemanticError::UnusedImport { span, .. }
             | SemanticError::UnreachablePattern { span, .. }
@@ -1406,6 +1439,11 @@ pub struct TypeChecker {
     /// is being checked, so explicit `return` statements can be verified.
     /// `None` inside closures (their return type is inferred, not declared).
     current_fn_return: Option<Type>,
+    /// P3 (Compass §6.3 / D3a): symbolic shape signatures of user fns whose
+    /// annotations mention a symbolic dim (`Tensor<f64>[B, I]`), keyed by fn
+    /// name. Used for per-call-site unification (TE011) + return
+    /// substitution in `check_call`.
+    symbolic_fn_shapes: HashMap<String, SymbolicFnShape>,
     /// V14: Effects inferred from the current function body.
     current_fn_inferred_effects: std::collections::BTreeSet<String>,
     /// V14: Effects handled by enclosing handle blocks (don't require `with`).
@@ -1936,6 +1974,7 @@ impl TypeChecker {
             current_handler_resume_type: None,
             current_fn_name: None,
             current_fn_return: None,
+            symbolic_fn_shapes: HashMap::new(),
             current_fn_inferred_effects: std::collections::BTreeSet::new(),
             handled_effects_in_scope: std::collections::BTreeSet::new(),
             strict_ownership: false,
@@ -4681,6 +4720,102 @@ mod tests {
                 "closure return wrongly checked against outer fn: {errors:?}"
             );
         }
+    }
+
+    // ── P3 (Compass §6.3 / D3a): symbolic dims at fn boundaries ──
+    // `Tensor<f64>[B, I]` — uppercase ident in a dim slot is a symbolic
+    // dimension scoped to the fn signature, unified per call site (TE011).
+    // Decision: docs/decisions/2026-06-12-tensor-shape-ct.md.
+
+    const DENSE_FN: &str = r#"
+        fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O] {
+            matmul(x, w)
+        }
+    "#;
+
+    #[test]
+    fn p3_symbolic_conflict_errors_te011() {
+        // I binds to 10 from x, then 11 from w → TE011 naming the symbol.
+        let src = format!(
+            "{DENSE_FN}
+            let r = dense(zeros(4, 10), zeros(11, 2))"
+        );
+        let errors = check_errors(&src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::SymbolicDimMismatch { .. })),
+            "expected SymbolicDimMismatch, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn p3_symbolic_match_ok_and_return_substitutes() {
+        // B=4, I=10, O=2 → r: Tensor<f64>[4, 2]; proving substitution:
+        // r @ [9,9] must shape-error (inner 2 != 9).
+        let src = format!(
+            "{DENSE_FN}
+            let r = dense(zeros(4, 10), zeros(10, 2))
+            let bad = r @ zeros(9, 9)"
+        );
+        let errors = check_errors(&src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TensorShapeMismatch { .. })),
+            "return substitution did not propagate concrete dims: {errors:?}"
+        );
+        // And the matching call alone is clean.
+        let clean = format!(
+            "{DENSE_FN}
+            let r = dense(zeros(4, 10), zeros(10, 2))
+            println(r)"
+        );
+        assert!(check(&clean).is_ok());
+    }
+
+    #[test]
+    fn p3_symbolic_dynamic_args_stay_gradual() {
+        // Dynamic dims bind nothing — no false TE011.
+        let src = format!(
+            "{DENSE_FN}
+            fn caller(n: i64) -> void {{
+                let r = dense(zeros(n, 10), zeros(10, 2))
+                println(r)
+            }}"
+        );
+        assert!(check(&src).is_ok());
+    }
+
+    #[test]
+    fn p3_symbolic_bindings_are_per_call_site() {
+        // Different B/O across two calls must not cross-contaminate.
+        let src = format!(
+            "{DENSE_FN}
+            let r1 = dense(zeros(4, 10), zeros(10, 2))
+            let r2 = dense(zeros(7, 10), zeros(10, 3))
+            println(r1)
+            println(r2)"
+        );
+        assert!(check(&src).is_ok());
+    }
+
+    #[test]
+    fn p3_mixed_symbolic_and_known_dims() {
+        // Known dim in the same annotation still enforced by SE004 path.
+        let src = r#"
+            fn g(x: Tensor<f64>[B, 8]) -> void {
+                println(x)
+            }
+            g(zeros(2, 9))
+        "#;
+        let errors = check_errors(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SemanticError::TypeMismatch { .. })),
+            "known dim next to symbolic must still enforce: {errors:?}"
+        );
     }
 
     // ── F.4: Missing builtin registration tests ──

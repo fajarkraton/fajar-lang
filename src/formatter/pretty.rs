@@ -959,10 +959,7 @@ impl<'src> Formatter<'src> {
                     if i > 0 {
                         self.push(", ");
                     }
-                    match d {
-                        Some(n) => self.push(&n.to_string()),
-                        None => self.push("*"),
-                    }
+                    self.push(&d.to_string());
                 }
                 self.push("]");
             }

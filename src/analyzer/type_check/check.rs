@@ -1828,7 +1828,7 @@ impl TypeChecker {
             }
         }
 
-        match callee_ty {
+        let result_ty = match callee_ty {
             Type::Function { params, ret } => {
                 // Check arity (skip for variadic builtins with Unknown params)
                 let is_variadic =
@@ -1950,7 +1950,81 @@ impl TypeChecker {
                 });
                 Type::Unknown
             }
+        };
+
+        // P3 (Compass §6.3 / D3a): symbolic-dim unification + return
+        // substitution for user fns like
+        // `fn dense(x: Tensor<f64>[B, I], w: Tensor<f64>[I, O]) -> Tensor<f64>[B, O]`.
+        if let Some(name) = callee_name {
+            if let Some(sub) = self.symbolic_call_shape(name, args, &arg_types, &result_ty, span) {
+                return sub;
+            }
         }
+        result_ty
+    }
+
+    /// P3 (Compass §6.3): unify a call's argument shapes against the callee's
+    /// symbolic signature. Same symbol must bind one size across all args
+    /// (conflict → TE011); bound symbols substitute into the return shape.
+    /// Dynamic argument dims bind nothing (gradual). Returns the substituted
+    /// return type, or `None` when the callee has no symbolic signature.
+    fn symbolic_call_shape(
+        &mut self,
+        name: &str,
+        args: &[CallArg],
+        arg_types: &[Type],
+        result_ty: &Type,
+        span: Span,
+    ) -> Option<Type> {
+        let shape = self.symbolic_fn_shapes.get(name)?.clone();
+        let mut bind: HashMap<String, u64> = HashMap::new();
+        for (i, pdims) in shape.params.iter().enumerate() {
+            let Some(pdims) = pdims else { continue };
+            let Some(Type::Tensor { dims: adims, .. }) = arg_types.get(i) else {
+                continue;
+            };
+            // Dynamic rank / rank mismatch: other checks own those cases.
+            if adims.is_empty() || adims.len() != pdims.len() {
+                continue;
+            }
+            for (pd, ad) in pdims.iter().zip(adims.iter()) {
+                let (TensorDimExpr::Sym(s), Some(n)) = (pd, ad) else {
+                    continue;
+                };
+                match bind.get(s) {
+                    None => {
+                        bind.insert(s.clone(), *n);
+                    }
+                    Some(prev) if prev != n => {
+                        let arg_span = args.get(i).map_or(span, |a| a.value.span());
+                        self.errors.push(SemanticError::SymbolicDimMismatch {
+                            fn_name: name.to_string(),
+                            symbol: s.clone(),
+                            first: *prev,
+                            second: *n,
+                            arg_index: i + 1,
+                            span: arg_span,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let ret_dims = shape.ret.as_ref()?;
+        let element = if let Type::Tensor { element, .. } = result_ty {
+            element.clone()
+        } else {
+            Box::new(Type::F64)
+        };
+        let dims: Vec<Option<u64>> = ret_dims
+            .iter()
+            .map(|d| match d {
+                TensorDimExpr::Known(n) => Some(*n),
+                TensorDimExpr::Wildcard => None,
+                TensorDimExpr::Sym(s) => bind.get(s).copied(),
+            })
+            .collect();
+        Some(Type::Tensor { element, dims })
     }
 
     /// P1 (Compass §6.3): shape-aware tensor builtin returns.
@@ -3177,7 +3251,16 @@ impl TypeChecker {
                 }
                 Type::Tensor {
                     element: Box::new(elem),
-                    dims: dims.clone(),
+                    // P3 (D3a): symbolic dims erase to dynamic in the value
+                    // type; per-call unification happens via the symbolic
+                    // signature table in check_call.
+                    dims: dims
+                        .iter()
+                        .map(|d| match d {
+                            TensorDimExpr::Known(n) => Some(*n),
+                            TensorDimExpr::Wildcard | TensorDimExpr::Sym(_) => None,
+                        })
+                        .collect(),
                 }
             }
             TypeExpr::Pointer { .. } => Type::Unknown,
