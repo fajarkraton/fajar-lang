@@ -298,6 +298,23 @@ plus the test helper's `FromPyObject` gaining the 0.29 two-lifetime +
 associated-`Error` form. Verified: clippy `--all-targets` w/ python-ffi
 exit 0; 349 ffi_v2 lib tests PASS (real CPython via auto-initialize);
 6,591 lib tests PASS; `cargo audit` with the CI ignore set exit 0.
+Confirmed on-runner: Security Audit + Feature Tests (python-ffi) green
+in the CI run at `2a3d158d`.
+
+### F12 — CI history sweep: external-service flake in nq2_1_https_get_real
+
+Sweeping the ci.yml run history (per the GitHub Actions page) explained
+every red run: 2026-05-13 reds were the already-fixed clippy-1.95/smt/rsa
+chain (633eba00 + e44b5ad7); 2026-06-12 reds were F11. The one remaining
+undiagnosed red — `Feature Tests (tls)` on docs-only commit `f8063e9d`
+(2026-05-25) — was `stdlib_v3::net::tests::nq2_1_https_get_real`: the
+test tolerates *connection* failure (skip-arm) but asserted
+`status == 200`, and httpbin.org (shared public service) returned 502.
+Flake class: external-endpoint health treated as our failure.
+
+Fixed: non-200 from the public endpoint now takes the same skip path as
+no-network, with the 2026-05-25 incident cited inline. The test still
+exercises the real TLS stack whenever the endpoint is healthy.
 
 ---
 
