@@ -208,9 +208,7 @@ impl Framebuffer {
 
     /// Clears the entire framebuffer to the given color.
     pub fn clear(&mut self, color: Pixel) {
-        for p in &mut self.pixels {
-            *p = color;
-        }
+        self.pixels.fill(color);
     }
 
     /// Blits (copies) a source framebuffer onto this one at position `(dx, dy)`.

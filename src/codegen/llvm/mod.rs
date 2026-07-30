@@ -14244,7 +14244,7 @@ mod tests {
         assert!(
             ir.contains("module asm") && ir.contains(".my_test"),
             "expected module asm with .my_test section in IR. IR head:\n{}",
-            &ir.chars().take(500).collect::<String>(),
+            ir.chars().take(500).collect::<String>(),
         );
     }
 
@@ -14267,7 +14267,7 @@ mod tests {
         assert!(
             ir.contains(".first") && ir.contains(".second"),
             "both global_asm blocks should appear in module IR. IR head:\n{}",
-            &ir.chars().take(800).collect::<String>(),
+            ir.chars().take(800).collect::<String>(),
         );
     }
 

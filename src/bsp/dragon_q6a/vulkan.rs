@@ -928,7 +928,7 @@ impl Drop for VulkanCompute {
 
             // Destroy cached kernels
             if let Ok(kernels) = self.kernels.lock() {
-                for (_, kernel) in kernels.iter() {
+                for kernel in kernels.values() {
                     self.device.destroy_pipeline(kernel.pipeline, None);
                     self.device
                         .destroy_pipeline_layout(kernel.pipeline_layout, None);

@@ -455,9 +455,7 @@ impl Canvas {
 
     /// Clears the entire canvas to the given color.
     pub fn clear(&mut self, color: Color) {
-        for px in &mut self.pixels {
-            *px = color;
-        }
+        self.pixels.fill(color);
     }
 
     /// Sets a single pixel if the coordinates are within bounds.

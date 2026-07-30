@@ -125,12 +125,13 @@ fn user_mode_linker_config() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// 4. Auto-link wiring in main.rs
+// 4. Auto-link wiring in the native build handler (src/cli/build.rs;
+//    moved from main.rs by REFACTOR_2026_07 Phase 2)
 // ════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn main_rs_has_user_mode_handling() {
-    let source = std::fs::read_to_string("src/main.rs").unwrap();
+    let source = std::fs::read_to_string("src/cli/build.rs").unwrap();
     assert!(source.contains("target.is_user_mode"));
     assert!(source.contains("set_user_mode(true)"));
     assert!(source.contains("set_no_std(true)"));
@@ -138,7 +139,7 @@ fn main_rs_has_user_mode_handling() {
 
 #[test]
 fn main_rs_generates_user_linker_script() {
-    let source = std::fs::read_to_string("src/main.rs").unwrap();
+    let source = std::fs::read_to_string("src/cli/build.rs").unwrap();
     // User-mode has a dedicated linker script section
     assert!(source.contains("User-mode"));
     assert!(source.contains("ENTRY(_start)"));
@@ -146,7 +147,7 @@ fn main_rs_generates_user_linker_script() {
 
 #[test]
 fn main_rs_generates_user_startup() {
-    let source = std::fs::read_to_string("src/main.rs").unwrap();
+    let source = std::fs::read_to_string("src/cli/build.rs").unwrap();
     // User-mode startup stubs generated
     assert!(source.contains("syscall-based runtime"));
 }

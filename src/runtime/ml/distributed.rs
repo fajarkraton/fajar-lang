@@ -195,9 +195,7 @@ impl ParameterServer {
         let all = self.barrier_arrived.iter().all(|&v| v);
         if all {
             // Reset barrier for next round
-            for v in &mut self.barrier_arrived {
-                *v = false;
-            }
+            self.barrier_arrived.fill(false);
         }
         all
     }
