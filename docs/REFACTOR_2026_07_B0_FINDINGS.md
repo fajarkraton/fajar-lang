@@ -200,6 +200,43 @@ recorded for a future perf pass only.
 Per-phase gate (mandatory): `cargo test --lib` == 6,616 · clippy/fmt clean ·
 `cargo test --tests` unchanged pass count · phase17 4/4 for any codegen touch.
 
+## Execution record
+
+### Phase 1 — EXECUTED 2026-07-30 (same session as B0) [actual ~1h, est 1-2 sessions, −60%]
+
+R1 closed via `src/codegen/cranelift/runtime_hosted.rs`:
+`declare_hosted_runtime<M: Module>(module, functions, jit_extras, profiling)`
+— body is the JIT declaration text with the four JIT-only groups (str_rev;
+waker; thread pool→stream; SIMD+ONNX) behind `jit_extras` and the profiler
+pair behind `profiling`. Both `declare_runtime_functions` methods are now
+thin wrappers keeping their original `no_std`/`user_mode` prologs.
+
+**Equivalence proof (pre-merge):** the AOT fj_rt symbol stream (293) was
+shown to be an exact ordered subsequence of the JIT stream (385) with 0
+AOT-only symbols; post-merge, the comment-stripped string-literal streams
+of both simulated variants reproduce the original bodies exactly
+(JIT 804/804, AOT 620/620 literals, order-identical).
+
+**Gates (all green):**
+
+```
+cargo test --lib                                   6,616 PASS (== baseline)
+cargo test --lib -- --test-threads=64  (×5)        5/5 PASS
+cargo test --lib --features native                 7,792 PASS (baseline 7,791 + 1 new drift test)
+cargo test --features native --lib codegen::cranelift  1,130 (baseline 1,129 + 1)
+cargo clippy --lib | --features native | --tests --features native   all clean
+cargo fmt -- --check                               PASS
+python3 scripts/audit_unwrap.py                    0 production unwraps
+python3 scripts/audit_unsafe.py --strict           PASS
+```
+
+**LOC:** cranelift/mod.rs 13,503 → 5,772; new runtime_hosted.rs ~3,990
+(incl. drift test). **Net ≈ −3,740 LOC**, duplication class eliminated.
+
+**Prevention layer (§6.8 R3):** single source of truth by construction +
+`runtime_hosted::tests::aot_runtime_declarations_are_subset_of_jit` pins
+AOT ⊆ JIT and asserts the JIT-only groups never leak into AOT objects.
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |
