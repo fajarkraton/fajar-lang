@@ -241,6 +241,39 @@ python3 scripts/audit_unsafe.py --strict           PASS
 `runtime_hosted::tests::aot_runtime_declarations_are_subset_of_jit` pins
 AOT ⊆ JIT and asserts the JIT-only groups never leak into AOT objects.
 
+### Phase 2 — EXECUTED 2026-07-30 (same session) [actual ~1h, est 1 session, on-target]
+
+R2 closed: `main.rs` 6,419 → 945 lines (clap defs + dispatch + exit-code
+consts + dispatch-only helpers). 59 `cmd_*` handlers + their private
+helpers moved to `src/cli/{util,run,repl,check,build,project,registry,
+demo,dev}.rs`, flat-re-exported (`use cli::*;`) so dispatch call sites are
+unchanged. Pure code motion: **76 fns before == 76 after** (extraction
+diff), consts intact; only deltas are `pub(crate)` visibility, per-file
+imports, and `include_str!` paths rebased to the new file depth.
+
+**Gates (all green):**
+
+```
+fj run|check|dump-tokens|run --vm|--help (debug + release)   OK
+cargo test --lib                                   6,616 PASS (unchanged)
+cargo test --lib --features native                 7,792 PASS (unchanged)
+cargo clippy default | native | --tests native     all clean
+cargo fmt -- --check                               PASS
+cargo build --release --bin fj                     OK (3m08s)
+selfhost_stage1_full (release fj)                  91/91 PASS
+selfhost_phase17_self_compile (byte-equality)      4/4 PASS
+context_safety_tests                               149/149 PASS
+```
+
+**Env caveat:** `cargo check --features llvm` cannot compile in this
+container (no system LLVM-18 headers; `llvm-sys` cc failure predates the
+refactor). The llvm-gated moved code was audited manually (imports,
+`include_str!` paths, fully-qualified calls); the CI llvm matrix job is
+the compile arbiter.
+
+**Scanner correction (§6.6 R3):** B0's "cmd_debug_replay 2,023 lines" was
+a brace-scanner false positive — actual 53 lines (fixed in R2 text above).
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |
