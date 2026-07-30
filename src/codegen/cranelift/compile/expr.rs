@@ -693,7 +693,7 @@ pub(in crate::codegen::cranelift) fn compile_ident<M: Module>(
     }
 
     // Check for bare enum variant (e.g., `Green` for `enum Color { Red, Green, Blue }`)
-    for (_enum_name, variants) in cx.enum_defs.iter() {
+    for variants in cx.enum_defs.values() {
         if let Some(tag_idx) = variants.iter().position(|v| v == name) {
             cx.last_expr_type = Some(clif_types::default_int_type());
             cx.last_enum_payload = Some(builder.ins().iconst(clif_types::default_int_type(), 0));

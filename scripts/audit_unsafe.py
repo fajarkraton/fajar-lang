@@ -48,6 +48,7 @@ ALLOWED = (
     "stdlib_v3/crypto.rs",          # write_volatile key-material zeroize
     "compiler/performance.rs",      # SmallString from_utf8_unchecked
     "main.rs",                      # CLI-level process glue
+    "cli/",                         # CLI handlers (extracted from main.rs, REFACTOR_2026_07 Phase 2)
 )
 
 WINDOW = 30  # lines of look-back for a covering SAFETY comment (clusters)
@@ -64,8 +65,10 @@ FN_PTR_TYPE_RE = re.compile(r'\bunsafe\s+extern\s+"[^"]*"\s+fn\b')
 def scan_file(path: Path):
     """Return list of (lineno, kind, has_safety) for production unsafe sites."""
     # Whole-file test modules (declared `#[cfg(test)] mod tests;` in the
-    # parent, e.g. src/codegen/cranelift/tests.rs) are test code — skip.
-    if path.name == "tests.rs":
+    # parent) are test code — skip. Covers both the single-file form
+    # (src/foo/tests.rs) and the directory form introduced by
+    # REFACTOR_2026_07 Phase 3 (src/codegen/cranelift/tests/*.rs).
+    if path.name == "tests.rs" or "tests" in path.parts:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     sites = []

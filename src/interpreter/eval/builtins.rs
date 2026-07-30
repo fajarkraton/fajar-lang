@@ -29,6 +29,498 @@ impl Interpreter {
             .into());
         }
         match name {
+            "print" | "println" | "len" | "type_of" | "const_type_name" | "const_field_names"
+            | "push" | "pop" | "to_string" | "format" | "to_int" | "to_float" | "assert"
+            | "assert_eq" | "panic" | "todo" | "dbg" | "eprint" | "eprintln" => {
+                self.builtin_core_io(name, args)
+            }
+            "abs" | "sqrt" | "log" | "log2" | "log10" | "sin" | "cos" | "tan" | "floor"
+            | "ceil" | "round" | "pow" | "clamp" | "min" | "max" | "wrapping_add"
+            | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"
+            | "saturating_mul" | "checked_add" | "checked_sub" | "checked_mul" => {
+                self.builtin_math_int(name, args)
+            }
+            "mem_alloc" | "mem_free" | "mem_read_u8" | "mem_read_u32" | "mem_read_u64"
+            | "mem_write_u8" | "mem_write_u32" | "mem_write_u64" | "page_map" | "page_unmap"
+            | "irq_register" | "irq_unregister" | "irq_enable" | "irq_disable" | "port_read"
+            | "port_write" | "syscall_define" | "syscall_dispatch" => {
+                self.builtin_os_mem(name, args)
+            }
+            "tensor_zeros"
+            | "zeros"
+            | "tensor_ones"
+            | "ones"
+            | "tensor_randn"
+            | "tensor_rand"
+            | "randn"
+            | "tensor_eye"
+            | "eye"
+            | "tensor_full"
+            | "tensor_from_data"
+            | "from_data"
+            | "tensor_shape"
+            | "shape"
+            | "tensor_reshape"
+            | "reshape"
+            | "tensor_numel"
+            | "tensor_add"
+            | "tensor_sub"
+            | "tensor_mul"
+            | "tensor_div"
+            | "tensor_neg"
+            | "tensor_matmul"
+            | "matmul"
+            | "tensor_transpose"
+            | "transpose"
+            | "tensor_flatten"
+            | "flatten"
+            | "tensor_concat"
+            | "concat"
+            | "tensor_squeeze"
+            | "tensor_unsqueeze"
+            | "tensor_sum"
+            | "tensor_mean"
+            | "tensor_max"
+            | "tensor_min"
+            | "tensor_argmax"
+            | "argmax"
+            | "tensor_arange"
+            | "tensor_linspace"
+            | "tensor_xavier"
+            | "xavier"
+            | "tensor_free"
+            | "tensor_rows"
+            | "tensor_cols"
+            | "tensor_set"
+            | "tensor_row"
+            | "tensor_normalize"
+            | "tensor_scale"
+            | "tensor_relu"
+            | "relu"
+            | "tensor_sigmoid"
+            | "sigmoid"
+            | "tensor_tanh"
+            | "tanh"
+            | "tensor_softmax"
+            | "softmax"
+            | "tensor_gelu"
+            | "gelu"
+            | "tensor_leaky_relu"
+            | "leaky_relu"
+            | "sign"
+            | "argmin"
+            | "norm"
+            | "dot"
+            | "exp_tensor"
+            | "log_tensor"
+            | "sqrt_tensor"
+            | "abs_tensor"
+            | "exp"
+            | "gamma"
+            | "clamp_tensor"
+            | "where_tensor"
+            | "gpu_discover"
+            | "turboquant_create"
+            | "turboquant_encode"
+            | "turboquant_decode"
+            | "turboquant_inner_product"
+            | "fajarquant_compare"
+            | "fq_kv_cache_create"
+            | "fq_kv_cache_append"
+            | "fq_fused_attention"
+            | "gpu_fq_codebook_dot"
+            | "fq_schedule_create"
+            | "fq_hierarchical_stats"
+            | "avx2_dot_f32"
+            | "avx2_add_f32"
+            | "avx2_mul_f32"
+            | "avx2_relu_f32"
+            | "aesni_encrypt_block"
+            | "aesni_decrypt_block"
+            | "tensor_mse_loss"
+            | "mse_loss"
+            | "tensor_cross_entropy"
+            | "cross_entropy_loss"
+            | "cross_entropy"
+            | "tensor_bce_loss"
+            | "tensor_l1_loss"
+            | "quantize_int8"
+            | "quantize"
+            | "dequantize"
+            | "quantized_bits"
+            | "quantized_shape"
+            | "quantized_scale"
+            | "quantized_numel"
+            | "quantized_size_bytes"
+            | "hadamard"
+            | "hadamard_inverse"
+            | "hadamard_quantize"
+            | "matmul_quantized"
+            | "kv_cache_create"
+            | "kv_cache_update"
+            | "kv_cache_get_keys"
+            | "kv_cache_get_values"
+            | "kv_cache_len"
+            | "kv_cache_size_bytes"
+            | "tensor_var_axis"
+            | "var_axis"
+            | "tensor_std_axis"
+            | "std_axis"
+            | "tensor_kurtosis"
+            | "kurtosis_axis"
+            | "tensor_skewness"
+            | "skewness_axis"
+            | "tensor_abs_max"
+            | "abs_max_axis"
+            | "tensor_channel_cv"
+            | "channel_cv"
+            | "tensor_svd_ratio"
+            | "svd_ratio"
+            | "tensor_select"
+            | "select_dim"
+            | "tensor_topk"
+            | "topk_indices"
+            | "quantize_per_channel"
+            | "quantize_residual"
+            | "quantize_asymmetric"
+            | "load_calibration"
+            | "save_calibration"
+            | "verify_orthogonal" => self.builtin_tensor_quant(name, args),
+            "tensor_backward"
+            | "backward"
+            | "tensor_grad"
+            | "grad"
+            | "tensor_requires_grad"
+            | "tensor_set_requires_grad"
+            | "set_requires_grad"
+            | "tensor_detach"
+            | "tensor_no_grad_begin"
+            | "tensor_no_grad_end"
+            | "tensor_clear_tape" => self.builtin_autograd(name, args),
+            "optimizer_sgd"
+            | "SGD"
+            | "optimizer_adam"
+            | "Adam"
+            | "optimizer_step"
+            | "optim_step"
+            | "optimizer_zero_grad"
+            | "zero_grad" => self.builtin_optimizer(name, args),
+            "model_save" | "model_save_quantized" => self.builtin_model_export(name, args),
+            "layer_dense" | "Dense" | "layer_conv2d" | "Conv2d" | "MultiHeadAttention"
+            | "attention" | "layer_forward" | "forward" | "layer_params" | "diffusion_create"
+            | "diffusion_denoise" | "rl_agent_create" | "rl_agent_step" | "pipeline_create"
+            | "pipeline_add_stage" | "pipeline_run" | "accelerate" => {
+                self.builtin_layers_dyn(name, args)
+            }
+            "actor_spawn"
+            | "actor_send"
+            | "actor_supervise"
+            | "actor_stop"
+            | "actor_status"
+            | "const_alloc"
+            | "const_size_of"
+            | "const_align_of"
+            | "const_trait_list"
+            | "const_trait_implements"
+            | "const_trait_resolve"
+            | "const_eval_nat"
+            | "const_serialize" => self.builtin_actors_const(name, args),
+            "metric_accuracy" | "accuracy" | "metric_precision" | "metric_recall"
+            | "metric_f1_score" | "split" | "trim" | "contains" | "starts_with" | "ends_with"
+            | "replace" | "read_file_text" | "read_file" | "write_file" | "run_command"
+            | "append_file" | "mnist_load_images" | "mnist_load_labels" | "thread_idx"
+            | "block_idx" | "block_dim" | "grid_dim" | "gpu_sync" | "read_binary"
+            | "write_binary" | "file_exists" => self.builtin_metrics_str_io(name, args),
+            "map_new" | "map_insert" | "map_get" | "map_get_or" | "map_remove"
+            | "map_contains_key" | "map_keys" | "map_values" | "map_len" | "Some" | "Ok"
+            | "Err" => self.builtin_maps_ctors(name, args),
+            "hw_cpu_vendor"
+            | "hw_cpu_arch"
+            | "hw_has_avx2"
+            | "hw_has_avx512"
+            | "hw_has_amx"
+            | "hw_has_neon"
+            | "hw_has_sve"
+            | "hw_simd_width"
+            | "hw_gpu_count"
+            | "hw_npu_count"
+            | "hw_best_accelerator"
+            | "gpio_open"
+            | "gpio_close"
+            | "gpio_set_direction"
+            | "gpio_write"
+            | "gpio_read"
+            | "gpio_toggle"
+            | "uart_open"
+            | "uart_close"
+            | "uart_write_byte"
+            | "uart_read_byte"
+            | "uart_write_str"
+            | "pwm_open"
+            | "pwm_close"
+            | "pwm_set_frequency"
+            | "pwm_set_duty"
+            | "pwm_enable"
+            | "pwm_disable"
+            | "spi_open"
+            | "spi_close"
+            | "spi_transfer"
+            | "spi_write"
+            | "npu_available"
+            | "npu_info"
+            | "npu_load"
+            | "npu_infer"
+            | "qnn_quantize"
+            | "qnn_dequantize"
+            | "qnn_version"
+            | "delay_ms"
+            | "delay_us"
+            | "gpu_available"
+            | "gpu_info"
+            | "gpu_matmul"
+            | "gpu_add"
+            | "gpu_relu"
+            | "gpu_sigmoid"
+            | "gpu_mul"
+            | "gpu_transpose"
+            | "gpu_sum"
+            | "cpu_temp"
+            | "cpu_freq"
+            | "mem_usage"
+            | "sys_uptime"
+            | "log_to_file"
+            | "watchdog_start"
+            | "watchdog_kick"
+            | "watchdog_stop"
+            | "process_id"
+            | "sleep_ms"
+            | "cache_set"
+            | "cache_get"
+            | "cache_clear"
+            | "file_size"
+            | "dir_list"
+            | "env_var" => self.builtin_hw_embedded(name, args),
+            "port_outb"
+            | "x86_serial_init"
+            | "port_inb"
+            | "set_uart_mode_x86"
+            | "cpuid_eax"
+            | "cpuid_ebx"
+            | "cpuid_ecx"
+            | "cpuid_edx"
+            | "read_cr0"
+            | "read_cr4"
+            | "sse_enable"
+            | "idt_init"
+            | "pic_remap"
+            | "pic_eoi"
+            | "pit_init"
+            | "read_timer_ticks"
+            | "str_byte_at"
+            | "str_len"
+            | "proc_table_addr"
+            | "get_current_pid"
+            | "get_proc_count"
+            | "set_current_pid"
+            | "yield_proc"
+            | "proc_create"
+            | "tss_init"
+            | "syscall_init"
+            | "proc_create_user"
+            | "kb_read_scancode"
+            | "kb_has_data"
+            | "pci_read32"
+            | "pci_write32"
+            | "volatile_read_u64"
+            | "volatile_write_u64"
+            | "buffer_read_u16_le"
+            | "buffer_read_u32_le"
+            | "buffer_read_u64_le"
+            | "buffer_read_u16_be"
+            | "buffer_read_u32_be"
+            | "buffer_read_u64_be"
+            | "buffer_write_u16_le"
+            | "buffer_write_u32_le"
+            | "buffer_write_u64_le"
+            | "buffer_write_u16_be"
+            | "buffer_write_u32_be"
+            | "buffer_write_u64_be"
+            | "acpi_shutdown"
+            | "acpi_find_rsdp"
+            | "acpi_get_cpu_count"
+            | "rdtsc"
+            | "hlt"
+            | "cli"
+            | "sti"
+            | "swapgs"
+            | "int_n"
+            | "pause"
+            | "stac"
+            | "clac"
+            | "port_inw"
+            | "port_ind"
+            | "port_outw"
+            | "port_outd"
+            | "ltr"
+            | "lgdt_mem"
+            | "lidt_mem"
+            | "memcmp_buf"
+            | "memcpy_buf"
+            | "memset_buf"
+            | "cpuid"
+            | "rdmsr"
+            | "read_msr"
+            | "wrmsr"
+            | "write_msr"
+            | "write_cr4"
+            | "invlpg"
+            | "fxsave"
+            | "fxrstor"
+            | "iretq_to_user"
+            | "rdrand"
+            | "gpio_config"
+            | "gpio_set_output"
+            | "gpio_set_input"
+            | "gpio_set_pull"
+            | "gpio_set_irq"
+            | "uart_init"
+            | "uart_available"
+            | "spi_init"
+            | "spi_cs_set"
+            | "i2c_init"
+            | "i2c_write"
+            | "i2c_read"
+            | "dma_alloc"
+            | "dma_config"
+            | "dma_start"
+            | "dma_wait"
+            | "dma_status"
+            | "timer_get_ticks"
+            | "timer_get_freq"
+            | "time_since_boot"
+            | "timer_set_deadline"
+            | "timer_enable_virtual"
+            | "timer_disable_virtual"
+            | "sleep_us"
+            | "timer_mark_boot"
+            | "dma_free"
+            | "dma_barrier"
+            | "nvme_init"
+            | "sd_init"
+            | "nvme_read"
+            | "nvme_write"
+            | "sd_read_block"
+            | "sd_write_block"
+            | "vfs_close"
+            | "vfs_stat"
+            | "vfs_read"
+            | "vfs_open"
+            | "vfs_write"
+            | "vfs_mount"
+            | "eth_init"
+            | "net_socket"
+            | "net_bind"
+            | "net_listen"
+            | "net_connect"
+            | "net_close"
+            | "net_accept"
+            | "net_send"
+            | "net_recv"
+            | "fb_init"
+            | "fb_write_pixel"
+            | "fb_fill_rect"
+            | "kb_init"
+            | "fb_set_base"
+            | "fb_scroll"
+            | "fb_width"
+            | "fb_height"
+            | "kb_read"
+            | "kb_available"
+            | "cap_new"
+            | "cap_unwrap"
+            | "cap_is_valid"
+            | "tensor_workload_hint"
+            | "schedule_ai_task"
+            | "proc_spawn"
+            | "proc_wait"
+            | "proc_kill"
+            | "proc_self"
+            | "sys_cpu_temp"
+            | "sys_ram_total"
+            | "sys_ram_free"
+            | "proc_yield"
+            | "sys_poweroff"
+            | "sys_reboot" => self.builtin_kernel_x86(name, args),
+            "join" => {
+                // join(future1, future2, ...) → await all, return array of results
+                let mut results = Vec::new();
+                for arg in args {
+                    match arg {
+                        Value::Future { task_id } => {
+                            if let Some((body, task_env)) = self.async_tasks.remove(&task_id) {
+                                let prev_env = self.env.clone();
+                                self.env = task_env;
+                                let result = self.eval_expr(&body).unwrap_or(Value::Null);
+                                self.env = prev_env;
+                                results.push(result);
+                            } else {
+                                results.push(Value::Null);
+                            }
+                        }
+                        other => results.push(other),
+                    }
+                }
+                Ok(Value::array_from_vec(results))
+            }
+            "timeout" => {
+                // timeout(ms, future) → resolve future (cooperative, no real timeout in interpreter)
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 2,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                let _ms = &args[0];
+                match &args[1] {
+                    Value::Future { task_id } => {
+                        let tid = *task_id;
+                        if let Some((body, task_env)) = self.async_tasks.remove(&tid) {
+                            let prev_env = self.env.clone();
+                            self.env = task_env;
+                            let result = self.eval_expr(&body).unwrap_or(Value::Null);
+                            self.env = prev_env;
+                            Ok(result)
+                        } else {
+                            Ok(Value::Null)
+                        }
+                    }
+                    other => Ok(other.clone()),
+                }
+            }
+            "spawn" => {
+                // spawn(future) → starts task via concurrency_v2 structured scope.
+                // Uses AsyncScope to track spawned tasks with well-defined lifetimes.
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArityMismatch {
+                        expected: 1,
+                        got: args.len(),
+                    }
+                    .into());
+                }
+                // Track spawn through structured concurrency scope
+                let mut scope = crate::concurrency_v2::scopes::AsyncScope::new();
+                let _task_id = scope.spawn("spawned_task");
+                Ok(args.into_iter().next().unwrap_or(Value::Null))
+            }
+
+            _ => self.builtin_effect_fallback(name, args),
+        }
+    }
+
+    /// Builtins: print/println/len/type conversions, asserts, panics, dbg, eprint.
+    fn builtin_core_io(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "print" => {
                 let text: Vec<String> = args.iter().map(|a| format!("{a}")).collect();
                 let output = text.join(" ");
@@ -315,6 +807,13 @@ impl Interpreter {
                 }
                 Ok(Value::Null)
             }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: math fns and wrapping/saturating/checked integer arithmetic.
+    fn builtin_math_int(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── Math builtins ──
             "abs" => {
                 if args.len() != 1 {
@@ -410,6 +909,13 @@ impl Interpreter {
             "checked_add" => self.checked_int_builtin(args, "checked_add", i64::checked_add),
             "checked_sub" => self.checked_int_builtin(args, "checked_sub", i64::checked_sub),
             "checked_mul" => self.checked_int_builtin(args, "checked_mul", i64::checked_mul),
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: OS-context memory, paging, IRQ, port and syscall builtins.
+    fn builtin_os_mem(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── OS runtime builtins ──
             "mem_alloc" => self.builtin_mem_alloc(args),
             "mem_free" => self.builtin_mem_free(args),
@@ -430,6 +936,13 @@ impl Interpreter {
             "syscall_define" => self.builtin_syscall_define(args),
             "syscall_dispatch" => self.builtin_syscall_dispatch(args),
             // ML runtime builtins
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: tensor constructors/ops, GPU discover, quantization, KV cache, calibration.
+    fn builtin_tensor_quant(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "tensor_zeros" | "zeros" => self.builtin_tensor_zeros(args),
             "tensor_ones" | "ones" => self.builtin_tensor_ones(args),
             "tensor_randn" | "tensor_rand" | "randn" => self.builtin_tensor_randn(args),
@@ -559,6 +1072,13 @@ impl Interpreter {
             "load_calibration" => self.builtin_load_calibration(args),
             "save_calibration" => self.builtin_save_calibration(args),
             "verify_orthogonal" => self.builtin_verify_orthogonal(args),
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: backward/grad/requires_grad/detach/no_grad/tape builtins.
+    fn builtin_autograd(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── Autograd builtins ──
             "tensor_backward" | "backward" => {
                 if args.len() != 1 {
@@ -686,6 +1206,13 @@ impl Interpreter {
                 self.tape.clear();
                 Ok(Value::Null)
             }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: SGD/Adam optimizer construction, step and zero_grad.
+    fn builtin_optimizer(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── Optimizer builtins ──
             "optimizer_sgd" | "SGD" => {
                 if args.len() != 2 {
@@ -806,6 +1333,13 @@ impl Interpreter {
                     .into()),
                 }
             }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: model_save and quantized model export.
+    fn builtin_model_export(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── Model export builtins ──
             "model_save" => {
                 // model_save(path, name1, tensor1, name2, tensor2, ...)
@@ -914,6 +1448,13 @@ impl Interpreter {
                     }),
                 }
             }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: layer builtins, attention, diffusion, RL agents, pipelines, accelerate.
+    fn builtin_layers_dyn(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── Layer builtins ──
             "layer_dense" | "Dense" => {
                 if args.len() != 2 {
@@ -1457,6 +1998,13 @@ impl Interpreter {
             // ═══════════════════════════════════════════════════════════
             // V20 Phase 6: Concurrency v2 — Actor Supervision
             // ═══════════════════════════════════════════════════════════
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: threaded actors (V21) and const_* metaprogramming builtins.
+    fn builtin_actors_const(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             // ── V21: Real threaded actors (std::thread + mpsc) ──
             "actor_spawn" => {
                 if args.len() != 2 {
@@ -1982,10 +2530,19 @@ impl Interpreter {
                 m.insert("type_desc".to_string(), Value::Str(alloc.type_desc));
                 m.insert(
                     "bytes".to_string(),
-                    Value::array_from_vec(alloc.bytes.iter().map(|b| Value::Int(*b as i64)).collect()),
+                    Value::array_from_vec(
+                        alloc.bytes.iter().map(|b| Value::Int(*b as i64)).collect(),
+                    ),
                 );
                 Ok(Value::Map(m))
             }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: metrics, string ops, file/binary I/O, run_command, MNIST loaders.
+    fn builtin_metrics_str_io(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "metric_accuracy" | "accuracy" => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArityMismatch {
@@ -2508,6 +3065,13 @@ impl Interpreter {
                 }
             }
             // Collection builtins — HashMap
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: map_* builtins and Some/Ok/Err constructors.
+    fn builtin_maps_ctors(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "map_new" => {
                 if !args.is_empty() {
                     return Err(RuntimeError::ArityMismatch {
@@ -2731,6 +3295,13 @@ impl Interpreter {
                 })
             }
             // Hardware detection builtins (v1.1)
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: hw_* detection, GPIO/UART/PWM/SPI, NPU/GPU, watchdog, cache, env.
+    fn builtin_hw_embedded(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "hw_cpu_vendor" => {
                 let cpu = crate::hw::CpuFeatures::cached();
                 Ok(Value::Str(cpu.vendor.to_string()))
@@ -2846,6 +3417,13 @@ impl Interpreter {
             "dir_list" => self.builtin_dir_list(args),
             "env_var" => self.builtin_env_var(args),
             // x86_64 port I/O builtins (FajarOS Nova) — simulation stubs
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
+
+    /// Builtins: x86/kernel builtins: ports, CPUID, ACPI, VFS, net, framebuffer, caps, proc.
+    fn builtin_kernel_x86(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        match name {
             "port_outb" | "x86_serial_init" => Ok(Value::Int(0)),
             "port_inb" => {
                 // Simulate COM1 LSR: TX empty
@@ -3007,10 +3585,9 @@ impl Interpreter {
                             .into()),
                         }
                     }
-                    _ => Err(RuntimeError::TypeError(
-                        "cap_unwrap: argument must be a Cap".into(),
-                    )
-                    .into()),
+                    _ => Err(
+                        RuntimeError::TypeError("cap_unwrap: argument must be a Cap".into()).into(),
+                    ),
                 }
             }
             "cap_is_valid" => {
@@ -3059,679 +3636,609 @@ impl Interpreter {
             "proc_yield" | "sys_poweroff" | "sys_reboot" => Ok(Value::Null),
 
             // AA2: Async ecosystem builtins
-            "join" => {
-                // join(future1, future2, ...) → await all, return array of results
-                let mut results = Vec::new();
-                for arg in args {
-                    match arg {
-                        Value::Future { task_id } => {
-                            if let Some((body, task_env)) = self.async_tasks.remove(&task_id) {
-                                let prev_env = self.env.clone();
-                                self.env = task_env;
-                                let result = self.eval_expr(&body).unwrap_or(Value::Null);
-                                self.env = prev_env;
-                                results.push(result);
-                            } else {
-                                results.push(Value::Null);
-                            }
-                        }
-                        other => results.push(other),
-                    }
-                }
-                Ok(Value::array_from_vec(results))
-            }
-            "timeout" => {
-                // timeout(ms, future) → resolve future (cooperative, no real timeout in interpreter)
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArityMismatch {
-                        expected: 2,
-                        got: args.len(),
-                    }
-                    .into());
-                }
-                let _ms = &args[0];
-                match &args[1] {
-                    Value::Future { task_id } => {
-                        let tid = *task_id;
-                        if let Some((body, task_env)) = self.async_tasks.remove(&tid) {
-                            let prev_env = self.env.clone();
-                            self.env = task_env;
-                            let result = self.eval_expr(&body).unwrap_or(Value::Null);
-                            self.env = prev_env;
-                            Ok(result)
-                        } else {
-                            Ok(Value::Null)
-                        }
-                    }
-                    other => Ok(other.clone()),
-                }
-            }
-            "spawn" => {
-                // spawn(future) → starts task via concurrency_v2 structured scope.
-                // Uses AsyncScope to track spawned tasks with well-defined lifetimes.
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArityMismatch {
-                        expected: 1,
-                        got: args.len(),
-                    }
-                    .into());
-                }
-                // Track spawn through structured concurrency scope
-                let mut scope = crate::concurrency_v2::scopes::AsyncScope::new();
-                let _task_id = scope.spawn("spawned_task");
-                Ok(args.into_iter().next().unwrap_or(Value::Null))
-            }
+            _ => Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into()),
+        }
+    }
 
-            _ => {
-                // Check for enum constructor builtins
-                if name.starts_with("__enum_") {
-                    if args.len() == 1 {
-                        let variant_name = name.rsplit('_').next().unwrap_or(name);
-                        return Ok(Value::Enum {
-                            variant: variant_name.to_string(),
-                            data: Some(Box::new(args.into_iter().next().unwrap_or(Value::Null))),
-                        });
-                    }
-                    // Multiple args — wrap in tuple
-                    let variant_name = name.rsplit('_').next().unwrap_or(name);
-                    return Ok(Value::Enum {
-                        variant: variant_name.to_string(),
-                        data: Some(Box::new(Value::Tuple(args))),
-                    });
+    /// Fallback for names that are not builtins: effect operations
+    /// (`Effect::op`) and the final unknown-builtin error.
+    fn builtin_effect_fallback(&mut self, name: &str, args: Vec<Value>) -> EvalResult {
+        // Check for enum constructor builtins
+        if name.starts_with("__enum_") {
+            if args.len() == 1 {
+                let variant_name = name.rsplit('_').next().unwrap_or(name);
+                return Ok(Value::Enum {
+                    variant: variant_name.to_string(),
+                    data: Some(Box::new(args.into_iter().next().unwrap_or(Value::Null))),
+                });
+            }
+            // Multiple args — wrap in tuple
+            let variant_name = name.rsplit('_').next().unwrap_or(name);
+            return Ok(Value::Enum {
+                variant: variant_name.to_string(),
+                data: Some(Box::new(Value::Tuple(args))),
+            });
+        }
+        // V18 1.4: Synchronous HTTP client builtins
+        if name == "http_get" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
                 }
-                // V18 1.4: Synchronous HTTP client builtins
-                if name == "http_get" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Str(url) = &args[0] {
-                        return self.builtin_http_get_sync(url);
-                    }
-                    return Err(RuntimeError::TypeError("http_get(url: str) -> str".into()).into());
+                .into());
+            }
+            if let Value::Str(url) = &args[0] {
+                return self.builtin_http_get_sync(url);
+            }
+            return Err(RuntimeError::TypeError("http_get(url: str) -> str".into()).into());
+        }
+        if name == "http_post" {
+            if args.len() != 2 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 2,
+                    got: args.len(),
                 }
-                if name == "http_post" {
-                    if args.len() != 2 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 2,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let (Value::Str(url), Value::Str(body)) = (&args[0], &args[1]) {
-                        return self.builtin_http_post_sync(url, body);
-                    }
-                    return Err(RuntimeError::TypeError(
-                        "http_post(url: str, body: str) -> str".into(),
-                    )
-                    .into());
+                .into());
+            }
+            if let (Value::Str(url), Value::Str(body)) = (&args[0], &args[1]) {
+                return self.builtin_http_post_sync(url, body);
+            }
+            return Err(
+                RuntimeError::TypeError("http_post(url: str, body: str) -> str".into()).into(),
+            );
+        }
+        // V18 2.2: DNS resolve
+        if name == "dns_resolve" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
                 }
-                // V18 2.2: DNS resolve
-                if name == "dns_resolve" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Str(hostname) = &args[0] {
-                        use std::net::ToSocketAddrs;
-                        let addr_str = format!("{hostname}:0");
-                        match addr_str.to_socket_addrs() {
-                            Ok(mut addrs) => {
-                                if let Some(addr) = addrs.next() {
-                                    return Ok(Value::Enum {
-                                        variant: "Ok".into(),
-                                        data: Some(Box::new(Value::Str(addr.ip().to_string()))),
-                                    });
-                                }
-                                return Ok(Value::Enum {
-                                    variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str("no addresses found".into()))),
-                                });
-                            }
-                            Err(e) => {
-                                return Ok(Value::Enum {
-                                    variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(format!("dns failed: {e}")))),
-                                });
-                            }
-                        }
-                    }
-                    return Err(RuntimeError::TypeError(
-                        "dns_resolve(hostname: str) -> str".into(),
-                    )
-                    .into());
-                }
-                // TQ12.1: HTTP server builtin
-                if name == "http_listen" {
-                    return self.builtin_http_listen(args);
-                }
-
-                // V18 4.5: Channel builtins for actor-style message passing
-                if name == "channel_create" {
-                    let (tx, rx) = std::sync::mpsc::channel();
-                    let id = self.next_channel_id;
-                    self.next_channel_id += 1;
-                    self.channels.insert(id, (tx, Some(rx)));
-                    return Ok(Value::Int(id));
-                }
-                if name == "channel_send" {
-                    if args.len() != 2 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 2,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Int(ch_id) = &args[0] {
-                        if let Some((tx, _)) = self.channels.get(ch_id) {
-                            let val = args[1].clone();
-                            let _ = tx.send(val);
-                            return Ok(Value::Bool(true));
-                        }
-                        return Ok(Value::Bool(false));
-                    }
-                    return Err(
-                        RuntimeError::TypeError("channel_send(ch: i64, value)".into()).into(),
-                    );
-                }
-                if name == "channel_recv" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Int(ch_id) = &args[0] {
-                        if let Some((_, Some(rx))) = self.channels.get(ch_id) {
-                            match rx.try_recv() {
-                                Ok(v) => {
-                                    return Ok(Value::Enum {
-                                        variant: "Some".into(),
-                                        data: Some(Box::new(v)),
-                                    });
-                                }
-                                Err(_) => {
-                                    return Ok(Value::Enum {
-                                        variant: "None".into(),
-                                        data: None,
-                                    });
-                                }
-                            }
+                .into());
+            }
+            if let Value::Str(hostname) = &args[0] {
+                use std::net::ToSocketAddrs;
+                let addr_str = format!("{hostname}:0");
+                match addr_str.to_socket_addrs() {
+                    Ok(mut addrs) => {
+                        if let Some(addr) = addrs.next() {
+                            return Ok(Value::Enum {
+                                variant: "Ok".into(),
+                                data: Some(Box::new(Value::Str(addr.ip().to_string()))),
+                            });
                         }
                         return Ok(Value::Enum {
-                            variant: "None".into(),
-                            data: None,
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str("no addresses found".into()))),
                         });
                     }
-                    return Err(RuntimeError::TypeError("channel_recv(ch: i64)".into()).into());
+                    Err(e) => {
+                        return Ok(Value::Enum {
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str(format!("dns failed: {e}")))),
+                        });
+                    }
                 }
-                // V18 2.8: FFI builtins
-                if name == "ffi_load_library" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
+            }
+            return Err(RuntimeError::TypeError("dns_resolve(hostname: str) -> str".into()).into());
+        }
+        // TQ12.1: HTTP server builtin
+        if name == "http_listen" {
+            return self.builtin_http_listen(args);
+        }
+
+        // V18 4.5: Channel builtins for actor-style message passing
+        if name == "channel_create" {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let id = self.next_channel_id;
+            self.next_channel_id += 1;
+            self.channels.insert(id, (tx, Some(rx)));
+            return Ok(Value::Int(id));
+        }
+        if name == "channel_send" {
+            if args.len() != 2 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 2,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Int(ch_id) = &args[0] {
+                if let Some((tx, _)) = self.channels.get(ch_id) {
+                    let val = args[1].clone();
+                    let _ = tx.send(val);
+                    return Ok(Value::Bool(true));
+                }
+                return Ok(Value::Bool(false));
+            }
+            return Err(RuntimeError::TypeError("channel_send(ch: i64, value)".into()).into());
+        }
+        if name == "channel_recv" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Int(ch_id) = &args[0] {
+                if let Some((_, Some(rx))) = self.channels.get(ch_id) {
+                    match rx.try_recv() {
+                        Ok(v) => {
+                            return Ok(Value::Enum {
+                                variant: "Some".into(),
+                                data: Some(Box::new(v)),
+                            });
                         }
-                        .into());
+                        Err(_) => {
+                            return Ok(Value::Enum {
+                                variant: "None".into(),
+                                data: None,
+                            });
+                        }
                     }
-                    if let Value::Str(path) = &args[0] {
-                        match self
-                            .ffi_manager
-                            .load_library(std::path::Path::new(path.as_str()))
-                        {
-                            Ok(idx) => {
-                                return Ok(Value::Enum {
-                                    variant: "Ok".into(),
-                                    data: Some(Box::new(Value::Int(idx as i64))),
-                                });
-                            }
-                            Err(e) => {
-                                return Ok(Value::Enum {
-                                    variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(e))),
-                                });
+                }
+                return Ok(Value::Enum {
+                    variant: "None".into(),
+                    data: None,
+                });
+            }
+            return Err(RuntimeError::TypeError("channel_recv(ch: i64)".into()).into());
+        }
+        // V18 2.8: FFI builtins
+        if name == "ffi_load_library" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Str(path) = &args[0] {
+                match self
+                    .ffi_manager
+                    .load_library(std::path::Path::new(path.as_str()))
+                {
+                    Ok(idx) => {
+                        return Ok(Value::Enum {
+                            variant: "Ok".into(),
+                            data: Some(Box::new(Value::Int(idx as i64))),
+                        });
+                    }
+                    Err(e) => {
+                        return Ok(Value::Enum {
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str(e))),
+                        });
+                    }
+                }
+            }
+            return Err(
+                RuntimeError::TypeError("ffi_load_library(path: str) -> Result".into()).into(),
+            );
+        }
+        if name == "ffi_register" {
+            // ffi_register(lib_index, name, symbol, param_types, ret_type)
+            if args.len() < 3 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 3,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let (Value::Int(lib_idx), Value::Str(fn_name), Value::Str(symbol)) =
+                (&args[0], &args[1], &args[2])
+            {
+                // Default: all params i64, return i64
+                use crate::interpreter::ffi::FfiType;
+                let param_count = if args.len() > 3 {
+                    if let Value::Int(n) = &args[3] {
+                        *n as usize
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                let param_types = vec![FfiType::I64; param_count];
+                let ret_type = FfiType::I64;
+                match self.ffi_manager.register_function(
+                    fn_name,
+                    *lib_idx as usize,
+                    symbol,
+                    param_types,
+                    ret_type,
+                ) {
+                    Ok(()) => return Ok(Value::Bool(true)),
+                    Err(e) => {
+                        return Ok(Value::Enum {
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str(e))),
+                        });
+                    }
+                }
+            }
+            return Err(RuntimeError::TypeError(
+                "ffi_register(lib: i64, name: str, symbol: str, param_count: i64)".into(),
+            )
+            .into());
+        }
+        if name == "ffi_call" {
+            if args.is_empty() {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: 0,
+                }
+                .into());
+            }
+            if let Value::Str(fn_name) = &args[0] {
+                let call_args = args[1..].to_vec();
+                match self.ffi_manager.call(fn_name, &call_args) {
+                    Ok(v) => {
+                        return Ok(Value::Enum {
+                            variant: "Ok".into(),
+                            data: Some(Box::new(v)),
+                        });
+                    }
+                    Err(e) => {
+                        return Ok(Value::Enum {
+                            variant: "Err".into(),
+                            data: Some(Box::new(Value::Str(e))),
+                        });
+                    }
+                }
+            }
+            return Err(
+                RuntimeError::TypeError("ffi_call(name: str, ...args) -> Result".into()).into(),
+            );
+        }
+        // V18 1.6: TCP socket builtins
+        if name == "tcp_connect" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Str(addr) = &args[0] {
+                return self.builtin_tcp_connect(addr);
+            }
+            return Err(RuntimeError::TypeError("tcp_connect(addr: str) -> i64".into()).into());
+        }
+        if name == "tcp_send" {
+            if args.len() != 2 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 2,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let (Value::Int(fd), Value::Str(data)) = (&args[0], &args[1]) {
+                return self.builtin_tcp_send(*fd, data);
+            }
+            return Err(
+                RuntimeError::TypeError("tcp_send(fd: i64, data: str) -> i64".into()).into(),
+            );
+        }
+        if name == "tcp_recv" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Int(fd) = &args[0] {
+                return self.builtin_tcp_recv(*fd);
+            }
+            return Err(RuntimeError::TypeError("tcp_recv(fd: i64) -> str".into()).into());
+        }
+        if name == "tcp_close" {
+            if args.len() != 1 {
+                return Err(RuntimeError::ArityMismatch {
+                    expected: 1,
+                    got: args.len(),
+                }
+                .into());
+            }
+            if let Value::Int(fd) = &args[0] {
+                self.tcp_connections.remove(&(*fd as usize));
+                return Ok(Value::Null);
+            }
+            return Err(RuntimeError::TypeError("tcp_close(fd: i64)".into()).into());
+        }
+        // TQ12.2: Database builtins
+        if name == "db_open" {
+            return self.builtin_db_open(args);
+        }
+        if name == "db_execute" {
+            return self.builtin_db_execute(args);
+        }
+        if name == "db_query" {
+            return self.builtin_db_query(args);
+        }
+        if name == "db_close" {
+            return self.builtin_db_close(args);
+        }
+        if name == "db_begin" {
+            return self.builtin_db_begin(args);
+        }
+        if name == "db_commit" {
+            return self.builtin_db_commit(args);
+        }
+        if name == "db_rollback" {
+            return self.builtin_db_rollback(args);
+        }
+        // CQ1.4 (2026-05-09): Crypto signing builtins.
+        // Per docs/CQ1_4_RSA_B0_FINDINGS.md §3 Option B.
+        if name == "rsa_generate_2048" {
+            return self.builtin_rsa_generate_2048(args);
+        }
+        if name == "rsa_sign" {
+            return self.builtin_rsa_sign(args);
+        }
+        if name == "rsa_verify" {
+            return self.builtin_rsa_verify(args);
+        }
+        if name == "ed25519_generate" {
+            return self.builtin_ed25519_generate(args);
+        }
+        if name == "ed25519_sign" {
+            return self.builtin_ed25519_sign(args);
+        }
+        if name == "ed25519_verify" {
+            return self.builtin_ed25519_verify(args);
+        }
+        if name == "sha256" {
+            return self.builtin_sha256(args);
+        }
+        // v35.3.0 Batch 1 (2026-05-09): trivial crypto wrappers.
+        if name == "sha384" {
+            return self.builtin_sha384(args);
+        }
+        if name == "sha512" {
+            return self.builtin_sha512(args);
+        }
+        if name == "hex_encode_str" {
+            return self.builtin_hex_encode_str(args);
+        }
+        if name == "hex_decode_str" {
+            return self.builtin_hex_decode_str(args);
+        }
+        if name == "base64_encode_str" {
+            return self.builtin_base64_encode_str(args);
+        }
+        if name == "base64_decode_str" {
+            return self.builtin_base64_decode_str(args);
+        }
+        if name == "constant_time_eq" {
+            return self.builtin_constant_time_eq(args);
+        }
+        if name == "random_u64_range" {
+            return self.builtin_random_u64_range(args);
+        }
+        if name == "argon2_hash" {
+            return self.builtin_argon2_hash(args);
+        }
+        if name == "argon2_verify" {
+            return self.builtin_argon2_verify(args);
+        }
+        // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes.
+        if name == "hmac_sha256" {
+            return self.builtin_hmac_sha256(args);
+        }
+        if name == "hmac_sha256_verify" {
+            return self.builtin_hmac_sha256_verify(args);
+        }
+        if name == "pbkdf2_sha256" {
+            return self.builtin_pbkdf2_sha256(args);
+        }
+        if name == "hkdf_sha256" {
+            return self.builtin_hkdf_sha256(args);
+        }
+        if name == "random_bytes" {
+            return self.builtin_random_bytes(args);
+        }
+        // v35.3.0 Batch 3 (2026-05-09): AES variants.
+        if name == "aes128_gcm_encrypt" {
+            return self.builtin_aes128_gcm_encrypt(args);
+        }
+        if name == "aes128_gcm_decrypt" {
+            return self.builtin_aes128_gcm_decrypt(args);
+        }
+        if name == "aes256_gcm_encrypt" {
+            return self.builtin_aes256_gcm_encrypt(args);
+        }
+        if name == "aes256_gcm_decrypt" {
+            return self.builtin_aes256_gcm_decrypt(args);
+        }
+        if name == "aes128_cbc_encrypt" {
+            return self.builtin_aes128_cbc_encrypt(args);
+        }
+        if name == "aes128_cbc_decrypt" {
+            return self.builtin_aes128_cbc_decrypt(args);
+        }
+        if name == "aes256_cbc_encrypt" {
+            return self.builtin_aes256_cbc_encrypt(args);
+        }
+        if name == "aes256_cbc_decrypt" {
+            return self.builtin_aes256_cbc_decrypt(args);
+        }
+        // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange.
+        if name == "x25519_generate" {
+            return self.builtin_x25519_generate(args);
+        }
+        // v35.3.1 (2026-05-09): X25519 DH shared-secret derivation.
+        if name == "x25519_dh" {
+            return self.builtin_x25519_dh(args);
+        }
+
+        // WebSocket builtins
+        if name == "ws_connect" {
+            return self.builtin_ws_connect(args);
+        }
+        if name == "ws_send" {
+            return self.builtin_ws_send(args);
+        }
+        if name == "ws_recv" {
+            return self.builtin_ws_recv(args);
+        }
+        if name == "ws_close" {
+            return self.builtin_ws_close(args);
+        }
+
+        // MQTT builtins
+        if name == "mqtt_connect" {
+            return self.builtin_mqtt_connect(args);
+        }
+        if name == "mqtt_publish" {
+            return self.builtin_mqtt_publish(args);
+        }
+        if name == "mqtt_subscribe" {
+            return self.builtin_mqtt_subscribe(args);
+        }
+        if name == "mqtt_recv" {
+            return self.builtin_mqtt_recv(args);
+        }
+        if name == "mqtt_disconnect" {
+            return self.builtin_mqtt_disconnect(args);
+        }
+        if name == "ble_scan" {
+            return self.builtin_ble_scan(args);
+        }
+        if name == "ble_connect" {
+            return self.builtin_ble_connect(args);
+        }
+        if name == "ble_read" {
+            return self.builtin_ble_read(args);
+        }
+        if name == "ble_write" {
+            return self.builtin_ble_write(args);
+        }
+        if name == "ble_disconnect" {
+            return self.builtin_ble_disconnect(args);
+        }
+
+        // GUI builtins
+        if name == "gui_window" {
+            return self.builtin_gui_window(args);
+        }
+        if name == "gui_label" {
+            return self.builtin_gui_label(args);
+        }
+        if name == "gui_button" {
+            return self.builtin_gui_button(args);
+        }
+        if name == "gui_rect" {
+            return self.builtin_gui_rect(args);
+        }
+        if name == "gui_layout" {
+            return self.builtin_gui_layout(args);
+        }
+
+        // Regex builtins
+        if name == "regex_match" {
+            return self.builtin_regex_match(args);
+        }
+        if name == "regex_find" {
+            return self.builtin_regex_find(args);
+        }
+        if name == "regex_find_all" {
+            return self.builtin_regex_find_all(args);
+        }
+        if name == "regex_replace" {
+            return self.builtin_regex_replace(args);
+        }
+        if name == "regex_replace_all" {
+            return self.builtin_regex_replace_all(args);
+        }
+        if name == "regex_captures" {
+            return self.builtin_regex_captures(args);
+        }
+
+        // HTTP framework builtins (V10 P3)
+        if name == "http_server" {
+            return self.builtin_http_server(args);
+        }
+        if name == "http_route" {
+            return self.builtin_http_route(args);
+        }
+        if name == "http_middleware" {
+            return self.builtin_http_middleware(args);
+        }
+        if name == "http_start" {
+            return self.builtin_http_start(args);
+        }
+        if name == "http_start_tls" {
+            return self.builtin_http_start_tls(args);
+        }
+        if name == "request_json" {
+            return self.builtin_request_json(args);
+        }
+        if name == "response_json" {
+            return self.builtin_response_json(args);
+        }
+
+        // Async builtins (V10)
+        if name == "async_sleep" {
+            return self.builtin_async_sleep(args);
+        }
+        if name == "async_http_get" {
+            return self.builtin_async_http_get(args);
+        }
+        if name == "async_http_post" {
+            return self.builtin_async_http_post(args);
+        }
+        if name == "async_spawn" {
+            return self.builtin_async_spawn(args);
+        }
+        if name == "async_join" {
+            return self.builtin_async_join(args);
+        }
+        if name == "async_select" {
+            return self.builtin_async_select(args);
+        }
+        if name == "async_timeout" {
+            return self.builtin_async_timeout(args);
+        }
+
+        // V14: Check if this is an effect operation (prefixed with __effect__).
+        if let Some(effect_op) = name.strip_prefix("__effect__") {
+            if let Some((effect_name, op_name)) = effect_op.split_once("::") {
+                if self.effect_handler_depth > 0 {
+                    // V15: Check replay stack — walk from innermost to outermost
+                    // handle, looking for a cached resume value that matches
+                    // this effect's identity. This correctly handles nested
+                    // handle expressions where different handles catch different
+                    // effects.
+                    for level in (0..self.effect_replay_stack.len()).rev() {
+                        let (ref cache, ref mut idx) = self.effect_replay_stack[level];
+                        if *idx < cache.len() {
+                            let (ref eff, ref op, ref val) = cache[*idx];
+                            if eff == effect_name && op == op_name {
+                                let v = val.clone();
+                                self.effect_replay_stack[level].1 += 1;
+                                return Ok(v);
                             }
                         }
                     }
-                    return Err(RuntimeError::TypeError(
-                        "ffi_load_library(path: str) -> Result".into(),
-                    )
+                    // Not cached at any level — raise the effect.
+                    return Err(ControlFlow::EffectPerformed {
+                        effect: effect_name.to_string(),
+                        op: op_name.to_string(),
+                        args,
+                    }
                     .into());
                 }
-                if name == "ffi_register" {
-                    // ffi_register(lib_index, name, symbol, param_types, ret_type)
-                    if args.len() < 3 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 3,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let (Value::Int(lib_idx), Value::Str(fn_name), Value::Str(symbol)) =
-                        (&args[0], &args[1], &args[2])
-                    {
-                        // Default: all params i64, return i64
-                        use crate::interpreter::ffi::FfiType;
-                        let param_count = if args.len() > 3 {
-                            if let Value::Int(n) = &args[3] {
-                                *n as usize
-                            } else {
-                                0
-                            }
-                        } else {
-                            0
-                        };
-                        let param_types = vec![FfiType::I64; param_count];
-                        let ret_type = FfiType::I64;
-                        match self.ffi_manager.register_function(
-                            fn_name,
-                            *lib_idx as usize,
-                            symbol,
-                            param_types,
-                            ret_type,
-                        ) {
-                            Ok(()) => return Ok(Value::Bool(true)),
-                            Err(e) => {
-                                return Ok(Value::Enum {
-                                    variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(e))),
-                                });
-                            }
-                        }
-                    }
-                    return Err(RuntimeError::TypeError(
-                        "ffi_register(lib: i64, name: str, symbol: str, param_count: i64)".into(),
-                    )
-                    .into());
-                }
-                if name == "ffi_call" {
-                    if args.is_empty() {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: 0,
-                        }
-                        .into());
-                    }
-                    if let Value::Str(fn_name) = &args[0] {
-                        let call_args = args[1..].to_vec();
-                        match self.ffi_manager.call(fn_name, &call_args) {
-                            Ok(v) => {
-                                return Ok(Value::Enum {
-                                    variant: "Ok".into(),
-                                    data: Some(Box::new(v)),
-                                });
-                            }
-                            Err(e) => {
-                                return Ok(Value::Enum {
-                                    variant: "Err".into(),
-                                    data: Some(Box::new(Value::Str(e))),
-                                });
-                            }
-                        }
-                    }
-                    return Err(RuntimeError::TypeError(
-                        "ffi_call(name: str, ...args) -> Result".into(),
-                    )
-                    .into());
-                }
-                // V18 1.6: TCP socket builtins
-                if name == "tcp_connect" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Str(addr) = &args[0] {
-                        return self.builtin_tcp_connect(addr);
-                    }
-                    return Err(
-                        RuntimeError::TypeError("tcp_connect(addr: str) -> i64".into()).into(),
-                    );
-                }
-                if name == "tcp_send" {
-                    if args.len() != 2 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 2,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let (Value::Int(fd), Value::Str(data)) = (&args[0], &args[1]) {
-                        return self.builtin_tcp_send(*fd, data);
-                    }
-                    return Err(RuntimeError::TypeError(
-                        "tcp_send(fd: i64, data: str) -> i64".into(),
-                    )
-                    .into());
-                }
-                if name == "tcp_recv" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Int(fd) = &args[0] {
-                        return self.builtin_tcp_recv(*fd);
-                    }
-                    return Err(RuntimeError::TypeError("tcp_recv(fd: i64) -> str".into()).into());
-                }
-                if name == "tcp_close" {
-                    if args.len() != 1 {
-                        return Err(RuntimeError::ArityMismatch {
-                            expected: 1,
-                            got: args.len(),
-                        }
-                        .into());
-                    }
-                    if let Value::Int(fd) = &args[0] {
-                        self.tcp_connections.remove(&(*fd as usize));
-                        return Ok(Value::Null);
-                    }
-                    return Err(RuntimeError::TypeError("tcp_close(fd: i64)".into()).into());
-                }
-                // TQ12.2: Database builtins
-                if name == "db_open" {
-                    return self.builtin_db_open(args);
-                }
-                if name == "db_execute" {
-                    return self.builtin_db_execute(args);
-                }
-                if name == "db_query" {
-                    return self.builtin_db_query(args);
-                }
-                if name == "db_close" {
-                    return self.builtin_db_close(args);
-                }
-                if name == "db_begin" {
-                    return self.builtin_db_begin(args);
-                }
-                if name == "db_commit" {
-                    return self.builtin_db_commit(args);
-                }
-                if name == "db_rollback" {
-                    return self.builtin_db_rollback(args);
-                }
-                // CQ1.4 (2026-05-09): Crypto signing builtins.
-                // Per docs/CQ1_4_RSA_B0_FINDINGS.md §3 Option B.
-                if name == "rsa_generate_2048" {
-                    return self.builtin_rsa_generate_2048(args);
-                }
-                if name == "rsa_sign" {
-                    return self.builtin_rsa_sign(args);
-                }
-                if name == "rsa_verify" {
-                    return self.builtin_rsa_verify(args);
-                }
-                if name == "ed25519_generate" {
-                    return self.builtin_ed25519_generate(args);
-                }
-                if name == "ed25519_sign" {
-                    return self.builtin_ed25519_sign(args);
-                }
-                if name == "ed25519_verify" {
-                    return self.builtin_ed25519_verify(args);
-                }
-                if name == "sha256" {
-                    return self.builtin_sha256(args);
-                }
-                // v35.3.0 Batch 1 (2026-05-09): trivial crypto wrappers.
-                if name == "sha384" {
-                    return self.builtin_sha384(args);
-                }
-                if name == "sha512" {
-                    return self.builtin_sha512(args);
-                }
-                if name == "hex_encode_str" {
-                    return self.builtin_hex_encode_str(args);
-                }
-                if name == "hex_decode_str" {
-                    return self.builtin_hex_decode_str(args);
-                }
-                if name == "base64_encode_str" {
-                    return self.builtin_base64_encode_str(args);
-                }
-                if name == "base64_decode_str" {
-                    return self.builtin_base64_decode_str(args);
-                }
-                if name == "constant_time_eq" {
-                    return self.builtin_constant_time_eq(args);
-                }
-                if name == "random_u64_range" {
-                    return self.builtin_random_u64_range(args);
-                }
-                if name == "argon2_hash" {
-                    return self.builtin_argon2_hash(args);
-                }
-                if name == "argon2_verify" {
-                    return self.builtin_argon2_verify(args);
-                }
-                // v35.3.0 Batch 2 (2026-05-09): MAC + KDF + RNG bytes.
-                if name == "hmac_sha256" {
-                    return self.builtin_hmac_sha256(args);
-                }
-                if name == "hmac_sha256_verify" {
-                    return self.builtin_hmac_sha256_verify(args);
-                }
-                if name == "pbkdf2_sha256" {
-                    return self.builtin_pbkdf2_sha256(args);
-                }
-                if name == "hkdf_sha256" {
-                    return self.builtin_hkdf_sha256(args);
-                }
-                if name == "random_bytes" {
-                    return self.builtin_random_bytes(args);
-                }
-                // v35.3.0 Batch 3 (2026-05-09): AES variants.
-                if name == "aes128_gcm_encrypt" {
-                    return self.builtin_aes128_gcm_encrypt(args);
-                }
-                if name == "aes128_gcm_decrypt" {
-                    return self.builtin_aes128_gcm_decrypt(args);
-                }
-                if name == "aes256_gcm_encrypt" {
-                    return self.builtin_aes256_gcm_encrypt(args);
-                }
-                if name == "aes256_gcm_decrypt" {
-                    return self.builtin_aes256_gcm_decrypt(args);
-                }
-                if name == "aes128_cbc_encrypt" {
-                    return self.builtin_aes128_cbc_encrypt(args);
-                }
-                if name == "aes128_cbc_decrypt" {
-                    return self.builtin_aes128_cbc_decrypt(args);
-                }
-                if name == "aes256_cbc_encrypt" {
-                    return self.builtin_aes256_cbc_encrypt(args);
-                }
-                if name == "aes256_cbc_decrypt" {
-                    return self.builtin_aes256_cbc_decrypt(args);
-                }
-                // v35.3.0 Batch 4 (2026-05-09): X25519 key exchange.
-                if name == "x25519_generate" {
-                    return self.builtin_x25519_generate(args);
-                }
-                // v35.3.1 (2026-05-09): X25519 DH shared-secret derivation.
-                if name == "x25519_dh" {
-                    return self.builtin_x25519_dh(args);
-                }
-
-                // WebSocket builtins
-                if name == "ws_connect" {
-                    return self.builtin_ws_connect(args);
-                }
-                if name == "ws_send" {
-                    return self.builtin_ws_send(args);
-                }
-                if name == "ws_recv" {
-                    return self.builtin_ws_recv(args);
-                }
-                if name == "ws_close" {
-                    return self.builtin_ws_close(args);
-                }
-
-                // MQTT builtins
-                if name == "mqtt_connect" {
-                    return self.builtin_mqtt_connect(args);
-                }
-                if name == "mqtt_publish" {
-                    return self.builtin_mqtt_publish(args);
-                }
-                if name == "mqtt_subscribe" {
-                    return self.builtin_mqtt_subscribe(args);
-                }
-                if name == "mqtt_recv" {
-                    return self.builtin_mqtt_recv(args);
-                }
-                if name == "mqtt_disconnect" {
-                    return self.builtin_mqtt_disconnect(args);
-                }
-                if name == "ble_scan" {
-                    return self.builtin_ble_scan(args);
-                }
-                if name == "ble_connect" {
-                    return self.builtin_ble_connect(args);
-                }
-                if name == "ble_read" {
-                    return self.builtin_ble_read(args);
-                }
-                if name == "ble_write" {
-                    return self.builtin_ble_write(args);
-                }
-                if name == "ble_disconnect" {
-                    return self.builtin_ble_disconnect(args);
-                }
-
-                // GUI builtins
-                if name == "gui_window" {
-                    return self.builtin_gui_window(args);
-                }
-                if name == "gui_label" {
-                    return self.builtin_gui_label(args);
-                }
-                if name == "gui_button" {
-                    return self.builtin_gui_button(args);
-                }
-                if name == "gui_rect" {
-                    return self.builtin_gui_rect(args);
-                }
-                if name == "gui_layout" {
-                    return self.builtin_gui_layout(args);
-                }
-
-                // Regex builtins
-                if name == "regex_match" {
-                    return self.builtin_regex_match(args);
-                }
-                if name == "regex_find" {
-                    return self.builtin_regex_find(args);
-                }
-                if name == "regex_find_all" {
-                    return self.builtin_regex_find_all(args);
-                }
-                if name == "regex_replace" {
-                    return self.builtin_regex_replace(args);
-                }
-                if name == "regex_replace_all" {
-                    return self.builtin_regex_replace_all(args);
-                }
-                if name == "regex_captures" {
-                    return self.builtin_regex_captures(args);
-                }
-
-                // HTTP framework builtins (V10 P3)
-                if name == "http_server" {
-                    return self.builtin_http_server(args);
-                }
-                if name == "http_route" {
-                    return self.builtin_http_route(args);
-                }
-                if name == "http_middleware" {
-                    return self.builtin_http_middleware(args);
-                }
-                if name == "http_start" {
-                    return self.builtin_http_start(args);
-                }
-                if name == "http_start_tls" {
-                    return self.builtin_http_start_tls(args);
-                }
-                if name == "request_json" {
-                    return self.builtin_request_json(args);
-                }
-                if name == "response_json" {
-                    return self.builtin_response_json(args);
-                }
-
-                // Async builtins (V10)
-                if name == "async_sleep" {
-                    return self.builtin_async_sleep(args);
-                }
-                if name == "async_http_get" {
-                    return self.builtin_async_http_get(args);
-                }
-                if name == "async_http_post" {
-                    return self.builtin_async_http_post(args);
-                }
-                if name == "async_spawn" {
-                    return self.builtin_async_spawn(args);
-                }
-                if name == "async_join" {
-                    return self.builtin_async_join(args);
-                }
-                if name == "async_select" {
-                    return self.builtin_async_select(args);
-                }
-                if name == "async_timeout" {
-                    return self.builtin_async_timeout(args);
-                }
-
-                // V14: Check if this is an effect operation (prefixed with __effect__).
-                if let Some(effect_op) = name.strip_prefix("__effect__") {
-                    if let Some((effect_name, op_name)) = effect_op.split_once("::") {
-                        if self.effect_handler_depth > 0 {
-                            // V15: Check replay stack — walk from innermost to outermost
-                            // handle, looking for a cached resume value that matches
-                            // this effect's identity. This correctly handles nested
-                            // handle expressions where different handles catch different
-                            // effects.
-                            for level in (0..self.effect_replay_stack.len()).rev() {
-                                let (ref cache, ref mut idx) = self.effect_replay_stack[level];
-                                if *idx < cache.len() {
-                                    let (ref eff, ref op, ref val) = cache[*idx];
-                                    if eff == effect_name && op == op_name {
-                                        let v = val.clone();
-                                        self.effect_replay_stack[level].1 += 1;
-                                        return Ok(v);
-                                    }
-                                }
-                            }
-                            // Not cached at any level — raise the effect.
-                            return Err(ControlFlow::EffectPerformed {
-                                effect: effect_name.to_string(),
-                                op: op_name.to_string(),
-                                args,
-                            }
-                            .into());
-                        }
-                        // Outside any handle block — execute with default behavior.
-                        // Default: IO effects print/read, others return Null.
-                        return self.default_effect_handler(effect_name, op_name, args);
-                    }
-                }
-
-                Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
+                // Outside any handle block — execute with default behavior.
+                // Default: IO effects print/read, others return Null.
+                return self.default_effect_handler(effect_name, op_name, args);
             }
         }
+
+        Err(RuntimeError::Unsupported(format!("unknown builtin '{name}'")).into())
     }
 
     /// V14: Default effect handler for unhandled effect operations.

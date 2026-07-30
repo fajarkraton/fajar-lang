@@ -252,8 +252,10 @@ fn d1_main_rs_dispatches_lsp_subcommand() {
         main_rs.contains("Command::Lsp"),
         "src/main.rs must dispatch Command::Lsp"
     );
+    // REFACTOR_2026_07 Phase 2: cmd_lsp body moved to src/cli/dev.rs.
+    let cli_dev = read("src/cli/dev.rs");
     assert!(
-        main_rs.contains("run_lsp"),
-        "src/main.rs must call lsp::run_lsp"
+        cli_dev.contains("run_lsp"),
+        "src/cli/dev.rs must call lsp::run_lsp"
     );
 }

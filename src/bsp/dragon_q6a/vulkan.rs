@@ -928,7 +928,7 @@ impl Drop for VulkanCompute {
 
             // Destroy cached kernels
             if let Ok(kernels) = self.kernels.lock() {
-                for (_, kernel) in kernels.iter() {
+                for kernel in kernels.values() {
                     self.device.destroy_pipeline(kernel.pipeline, None);
                     self.device
                         .destroy_pipeline_layout(kernel.pipeline_layout, None);
@@ -1832,7 +1832,7 @@ mod tests {
         let words = encode_string("main");
         // "main" = 4 chars + null = 5 bytes → 2 words (8 bytes padded)
         assert_eq!(words.len(), 2);
-        assert_eq!(words[0], u32::from_le_bytes([b'm', b'a', b'i', b'n']));
+        assert_eq!(words[0], u32::from_le_bytes(*b"main"));
     }
 
     #[test]

@@ -19,9 +19,11 @@ use std::fs;
 use std::path::PathBuf;
 
 fn read_main_rs() -> String {
+    // REFACTOR_2026_07 Phase 2: the cmd_* handlers moved from src/main.rs
+    // to src/cli/run.rs; the guard follows them.
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("src/main.rs");
-    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read src/main.rs: {e}"))
+    path.push("src/cli/run.rs");
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read src/cli/run.rs: {e}"))
 }
 
 /// Extracts the body of a `fn <name>(...) -> ExitCode { ... }` from main.rs.
@@ -30,7 +32,7 @@ fn extract_fn_body(src: &str, fn_name: &str) -> String {
     let needle = format!("fn {fn_name}(");
     let start = src
         .find(&needle)
-        .unwrap_or_else(|| panic!("{fn_name} not found in main.rs"));
+        .unwrap_or_else(|| panic!("{fn_name} not found in src/cli/run.rs"));
     let brace_start = src[start..]
         .find('{')
         .unwrap_or_else(|| panic!("no opening brace after fn {fn_name}"))

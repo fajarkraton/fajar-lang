@@ -51,22 +51,34 @@ UNWRAP_RE = re.compile(r"\.unwrap\(\)")
 COMMENT_RE = re.compile(r"^\s*(?://|///|//!|/\*|\*)")
 
 
-def is_test_only_file(path: Path) -> bool:
-    """Return True if `path` is declared as #[cfg(test)] in its parent mod file.
+def is_test_only_file(path: Path, _seen=None) -> bool:
+    """Return True if `path` lives under a #[cfg(test)]-declared module.
 
-    For src/foo/bar.rs the parent mod file is src/foo/mod.rs (or src/foo.rs).
-    For src/foo.rs the parent mod file is src/lib.rs (or src/main.rs).
+    Direct case: the parent mod file declares `#[cfg(test)] mod <name>;`.
+    Transitive case (REFACTOR_2026_07 Phase 3: test *directories* like
+    src/codegen/cranelift/tests/{mod,basics,...}.rs): the declaring mod
+    file is itself test-only, so every module it declares inherits that.
+    For a mod.rs the module name is its directory name and the declaration
+    lives one level up.
     """
-    parent_dir = path.parent
-    basename = path.stem  # without .rs
+    if _seen is None:
+        _seen = set()
+    if path in _seen:
+        return False
+    _seen.add(path)
 
-    # Candidate parent mod files in priority order
+    if path.name == "mod.rs":
+        mod_name = path.parent.name
+        decl_dir = path.parent.parent
+    else:
+        mod_name = path.stem
+        decl_dir = path.parent
+
     candidates = [
-        parent_dir / "mod.rs",
-        parent_dir.parent / f"{parent_dir.name}.rs",  # sibling .rs file
+        decl_dir / "mod.rs",
+        decl_dir.parent / f"{decl_dir.name}.rs",  # sibling .rs file
     ]
-    # If we're at src/, the parent is lib.rs / main.rs
-    if parent_dir == SRC_DIR:
+    if decl_dir == SRC_DIR:
         candidates = [SRC_DIR / "lib.rs", SRC_DIR / "main.rs"]
 
     for parent in candidates:
@@ -77,8 +89,15 @@ def is_test_only_file(path: Path) -> bool:
         except (OSError, UnicodeDecodeError):
             continue
         for m in FILE_LEVEL_TEST_MOD_RE.finditer(content):
-            if m.group(1) == basename:
+            if m.group(1) == mod_name:
                 return True
+        declares_us = re.search(
+            rf"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+{re.escape(mod_name)}\s*;",
+            content,
+            re.M,
+        )
+        if declares_us and is_test_only_file(parent, _seen):
+            return True
     return False
 
 

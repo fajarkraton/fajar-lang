@@ -192,1787 +192,140 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
 
     if !is_user_fn {
         match fn_name.as_str() {
-            "println" | "print" | "eprintln" | "eprint" => {
-                return compile_print_builtin(builder, cx, &fn_name, args);
-            }
-            "dbg" => {
-                return compile_dbg_builtin(builder, cx, args);
-            }
-            "abs" | "sqrt" | "floor" | "ceil" | "round" => {
-                return compile_math_unary_builtin(builder, cx, &fn_name, args);
-            }
-            "sin" | "cos" | "tan" | "log" | "log2" | "log10" => {
-                return compile_math_rt_builtin(builder, cx, &fn_name, args);
-            }
-            "pow" => {
-                return compile_pow_builtin(builder, cx, args);
-            }
-            "min" | "max" => {
-                return compile_min_max_builtin(builder, cx, &fn_name, args);
-            }
-            "clamp" => {
-                return compile_clamp_builtin(builder, cx, args);
-            }
-            "len" => {
-                return compile_len_builtin(builder, cx, args);
-            }
-            "to_string" => {
-                return compile_to_string_builtin(builder, cx, args);
-            }
-            "to_int" | "to_float" => {
-                return compile_convert_builtin(builder, cx, &fn_name, args);
-            }
-            "type_of" => {
-                return compile_type_of_builtin(builder, cx, args);
-            }
-            "assert" => {
-                return compile_assert_builtin(builder, cx, args);
-            }
-            "assert_eq" => {
-                return compile_assert_eq_builtin(builder, cx, args);
-            }
-            "panic" | "todo" => {
-                return compile_panic_builtin(builder, cx, &fn_name, args);
-            }
-            "format" => {
-                return compile_format_builtin(builder, cx, args);
-            }
-            "write_file" | "read_file" | "append_file" | "file_exists" | "async_read_file"
-            | "async_write_file" => {
-                return compile_file_builtin(builder, cx, &fn_name, args);
-            }
-            "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add"
+            "println" | "print" | "eprintln" | "eprint" | "dbg" | "abs" | "sqrt" | "floor"
+            | "ceil" | "round" | "sin" | "cos" | "tan" | "log" | "log2" | "log10" | "pow"
+            | "min" | "max" | "clamp" | "len" | "to_string" | "to_int" | "to_float" | "type_of"
+            | "assert" | "assert_eq" | "panic" | "todo" | "format" | "write_file" | "read_file"
+            | "append_file" | "file_exists" | "async_read_file" | "async_write_file"
+            | "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add"
             | "saturating_sub" | "saturating_mul" | "checked_add" | "checked_sub"
-            | "checked_mul" => {
-                return compile_wrapping_builtin(builder, cx, &fn_name, args);
+            | "checked_mul" | "sleep" => {
+                return compile_builtin_core_io_math(builder, cx, &fn_name, args);
             }
-            "sleep" => {
-                let millis = if args.is_empty() {
-                    builder.ins().iconst(clif_types::default_int_type(), 0)
-                } else {
-                    compile_expr(builder, cx, &args[0].value)?
-                };
-                let sleep_id = *cx
-                    .functions
-                    .get("__sleep")
-                    .ok_or_else(|| CodegenError::Internal("__sleep not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(sleep_id, builder.func);
-                builder.ins().call(callee, &[millis]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "channel_select" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "channel_select requires 2 channel arguments".into(),
-                    ));
-                }
-                let ch1 = compile_expr(builder, cx, &args[0].value)?;
-                let ch2 = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__channel_select2").ok_or_else(|| {
-                    CodegenError::Internal("__channel_select2 not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ch1, ch2]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tls_set" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tls_set requires 2 arguments (key, value)".into(),
-                    ));
-                }
-                let key = compile_expr(builder, cx, &args[0].value)?;
-                let value = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tls_set")
-                    .ok_or_else(|| CodegenError::Internal("__tls_set not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[key, value]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "tls_get" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tls_get requires 1 argument (key)".into(),
-                    ));
-                }
-                let key = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tls_get")
-                    .ok_or_else(|| CodegenError::Internal("__tls_get not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[key]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "volatile_read" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "volatile_read requires 1 argument (address)".into(),
-                    ));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__volatile_read")
-                    .ok_or_else(|| CodegenError::Internal("__volatile_read not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[addr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "volatile_write" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "volatile_write requires 2 arguments (address, value)".into(),
-                    ));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let value = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__volatile_write").ok_or_else(|| {
-                    CodegenError::Internal("__volatile_write not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[addr, value]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // fn_addr("function_name") → returns the link-time address of a function
-            "fn_addr" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "fn_addr requires 1 argument (function name as string)".into(),
-                    ));
-                }
-                // Extract function name from identifier or string argument
-                let target_name = match &args[0].value {
-                    crate::parser::ast::Expr::Ident { name, .. } => name.clone(),
-                    crate::parser::ast::Expr::Literal {
-                        kind: crate::parser::ast::LiteralKind::String(s),
-                        ..
-                    } => s.clone(),
-                    _ => {
-                        return Err(CodegenError::NotImplemented(
-                            "fn_addr argument must be a function name".into(),
-                        ));
-                    }
-                };
-                let func_id = *cx
-                    .functions
-                    .get(&target_name)
-                    .ok_or_else(|| CodegenError::UndefinedFunction(target_name.clone()))?;
-                let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
-                let addr = builder
-                    .ins()
-                    .func_addr(clif_types::default_int_type(), func_ref);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(addr);
-            }
-            "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32"
-            | "volatile_read_u64" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument (address)"
-                    )));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let internal = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&internal)
-                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[addr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32"
-            | "volatile_write_u64" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 2 arguments (address, value)"
-                    )));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let value = compile_expr(builder, cx, &args[1].value)?;
-                let internal = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&internal)
-                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[addr, value]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // Buffer read helpers (LE + BE): (addr) -> i64
-            "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
-            | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument (address)"
-                    )));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let internal = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&internal)
-                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[addr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            // Buffer write helpers (LE + BE): (addr, value) -> void
-            "buffer_write_u16_le"
+            "channel_select"
+            | "tls_set"
+            | "tls_get"
+            | "volatile_read"
+            | "volatile_write"
+            | "fn_addr"
+            | "volatile_read_u8"
+            | "volatile_read_u16"
+            | "volatile_read_u32"
+            | "volatile_read_u64"
+            | "volatile_write_u8"
+            | "volatile_write_u16"
+            | "volatile_write_u32"
+            | "volatile_write_u64"
+            | "buffer_read_u16_le"
+            | "buffer_read_u32_le"
+            | "buffer_read_u64_le"
+            | "buffer_read_u16_be"
+            | "buffer_read_u32_be"
+            | "buffer_read_u64_be"
+            | "buffer_write_u16_le"
             | "buffer_write_u32_le"
             | "buffer_write_u64_le"
             | "buffer_write_u16_be"
             | "buffer_write_u32_be"
-            | "buffer_write_u64_be" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 2 arguments (address, value)"
-                    )));
-                }
-                let addr = compile_expr(builder, cx, &args[0].value)?;
-                let value = compile_expr(builder, cx, &args[1].value)?;
-                let internal = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&internal)
-                    .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[addr, value]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "compiler_fence" => {
-                let fn_id = *cx.functions.get("__compiler_fence").ok_or_else(|| {
-                    CodegenError::Internal("__compiler_fence not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "memory_fence" => {
-                let fn_id = *cx
-                    .functions
-                    .get("__memory_fence")
-                    .ok_or_else(|| CodegenError::Internal("__memory_fence not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "alloc" => {
-                let size = if args.is_empty() {
-                    builder.ins().iconst(clif_types::default_int_type(), 8)
-                } else {
-                    compile_expr(builder, cx, &args[0].value)?
-                };
-                let fn_id = *cx
-                    .functions
-                    .get("__alloc")
-                    .ok_or_else(|| CodegenError::Internal("__alloc not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[size]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dealloc" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dealloc requires 2 arguments (ptr, size)".into(),
-                    ));
-                }
-                let ptr = compile_expr(builder, cx, &args[0].value)?;
-                let size = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__free")
-                    .ok_or_else(|| CodegenError::Internal("__free not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[ptr, size]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "mem_read" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "mem_read requires 2 arguments (ptr, offset)".into(),
-                    ));
-                }
-                let ptr = compile_expr(builder, cx, &args[0].value)?;
-                let offset = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__mem_read")
-                    .ok_or_else(|| CodegenError::Internal("__mem_read not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ptr, offset]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "mem_write" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "mem_write requires 3 arguments (ptr, offset, value)".into(),
-                    ));
-                }
-                let ptr = compile_expr(builder, cx, &args[0].value)?;
-                let offset = compile_expr(builder, cx, &args[1].value)?;
-                let value = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__mem_write")
-                    .ok_or_else(|| CodegenError::Internal("__mem_write not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[ptr, offset, value]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "tensor_zeros" | "tensor_ones" | "zeros" | "ones" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 2 arguments (rows, cols)"
-                    )));
-                }
-                let rows = compile_expr(builder, cx, &args[0].value)?;
-                let cols = compile_expr(builder, cx, &args[1].value)?;
-                let canon = match fn_name.as_str() {
-                    "zeros" => "tensor_zeros",
-                    "ones" => "tensor_ones",
-                    other => other,
-                };
-                let key = format!("__{canon}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[rows, cols]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_add" | "tensor_sub" | "tensor_mul" | "tensor_matmul" | "matmul" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 2 arguments"
-                    )));
-                }
-                let a = compile_expr(builder, cx, &args[0].value)?;
-                let b = compile_expr(builder, cx, &args[1].value)?;
-                let canon = match fn_name.as_str() {
-                    "matmul" => "tensor_matmul",
-                    other => other,
-                };
-                let key = format!("__{canon}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[a, b]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_reshape" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_reshape requires 3 arguments (tensor, rows, cols)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let rows = compile_expr(builder, cx, &args[1].value)?;
-                let cols = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx.functions.get("__tensor_reshape").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_reshape not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, rows, cols]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_transpose" | "tensor_relu" | "tensor_softmax" | "tensor_sigmoid"
-            | "tensor_flatten" | "relu" | "softmax" | "sigmoid" | "transpose" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument"
-                    )));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let canon = match fn_name.as_str() {
-                    "relu" => "tensor_relu",
-                    "softmax" => "tensor_softmax",
-                    "sigmoid" => "tensor_sigmoid",
-                    "transpose" => "tensor_transpose",
-                    other => other,
-                };
-                let key = format!("__{canon}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_rows" | "tensor_cols" | "tensor_sum" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument"
-                    )));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_get" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_get requires 3 arguments (tensor, row, col)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let row = compile_expr(builder, cx, &args[1].value)?;
-                let col = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_get")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_get not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, row, col]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(cranelift_codegen::ir::types::F64);
-                return Ok(result);
-            }
-            "tensor_set" => {
-                if args.len() < 4 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_set requires 4 arguments (tensor, row, col, value)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let row = compile_expr(builder, cx, &args[1].value)?;
-                let col = compile_expr(builder, cx, &args[2].value)?;
-                let val = compile_expr(builder, cx, &args[3].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_set")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_set not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[t, row, col, val]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "tensor_free" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_free requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_free")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_free not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[t]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // --- Autograd builtins ---
-            "backward" => {
-                // backward(loss_tensor) — autograd backward pass (simplified no-op in native)
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "requires_grad" | "set_requires_grad" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "requires_grad requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__tensor_requires_grad").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_requires_grad not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "mse_loss" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "mse_loss requires 2 arguments".into(),
-                    ));
-                }
-                let pred = compile_expr(builder, cx, &args[0].value)?;
-                let target = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__mse_loss")
-                    .ok_or_else(|| CodegenError::Internal("__mse_loss not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[pred, target]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "cross_entropy_loss" | "cross_entropy" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "cross_entropy_loss requires 2 arguments".into(),
-                    ));
-                }
-                let pred = compile_expr(builder, cx, &args[0].value)?;
-                let target = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__cross_entropy_loss").ok_or_else(|| {
-                    CodegenError::Internal("__cross_entropy_loss not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[pred, target]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_grad" | "grad" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_grad requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_grad")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_grad not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "zero_grad" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "zero_grad requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__tensor_zero_grad").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_zero_grad not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[t]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "grad_tensor_data" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "grad_tensor_data requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__grad_tensor_data").ok_or_else(|| {
-                    CodegenError::Internal("__grad_tensor_data not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "grad_tensor_free" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "grad_tensor_free requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__grad_tensor_free").ok_or_else(|| {
-                    CodegenError::Internal("__grad_tensor_free not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[t]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // --- S32.3: Gradient through matmul, relu, sigmoid, softmax ---
-            "grad_relu" | "grad_sigmoid" | "grad_softmax" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument (grad_tensor)"
-                    )));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "grad_matmul" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "grad_matmul requires 2 arguments (grad_tensor_a, tensor_b)".into(),
-                    ));
-                }
-                let a = compile_expr(builder, cx, &args[0].value)?;
-                let b = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__grad_matmul")
-                    .ok_or_else(|| CodegenError::Internal("__grad_matmul not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[a, b]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            // --- S33: Optimizer builtins ---
-            "sgd_new" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "sgd_new requires 1 argument (learning rate)".into(),
-                    ));
-                }
-                let lr = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__sgd_new")
-                    .ok_or_else(|| CodegenError::Internal("__sgd_new not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[lr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "adam_new" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "adam_new requires 1 argument (learning rate)".into(),
-                    ));
-                }
-                let lr = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__adam_new")
-                    .ok_or_else(|| CodegenError::Internal("__adam_new not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[lr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "sgd_step" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "sgd_step requires 2 arguments (optimizer, param)".into(),
-                    ));
-                }
-                let opt = compile_expr(builder, cx, &args[0].value)?;
-                let param = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__sgd_step")
-                    .ok_or_else(|| CodegenError::Internal("__sgd_step not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[opt, param]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "adam_step" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "adam_step requires 2 arguments (optimizer, param)".into(),
-                    ));
-                }
-                let opt = compile_expr(builder, cx, &args[0].value)?;
-                let param = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__adam_step")
-                    .ok_or_else(|| CodegenError::Internal("__adam_step not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[opt, param]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "optimizer_free" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "optimizer_free requires 2 arguments (ptr, tag)".into(),
-                    ));
-                }
-                let ptr = compile_expr(builder, cx, &args[0].value)?;
-                let tag = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__optimizer_free").ok_or_else(|| {
-                    CodegenError::Internal("__optimizer_free not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[ptr, tag]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // --- S39: Mixed precision builtins ---
-            "f32_to_f16" | "f16_to_f32" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument"
-                    )));
-                }
-                let val = compile_expr(builder, cx, &args[0].value)?;
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[val]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_to_f16" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_to_f16 requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_to_f16")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_to_f16 not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            // --- S39.3: Loss scaling ---
-            "loss_scale" | "loss_unscale" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 2 arguments (tensor, scale)"
-                    )));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let scale = compile_expr(builder, cx, &args[1].value)?;
-                // Ensure scale is f64
-                let scale_f = if !clif_types::is_float(builder.func.dfg.value_type(scale)) {
-                    builder
-                        .ins()
-                        .fcvt_from_sint(clif_types::default_float_type(), scale)
-                } else {
-                    scale
-                };
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, scale_f]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            // --- S39.4: Post-training quantization ---
-            "tensor_quantize_int8" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_quantize_int8 requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__tensor_quantize_int8").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_quantize_int8 not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_quant_scale" | "tensor_quant_zero_point" => {
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_float_type());
-                return Ok(result);
-            }
-            "tensor_dequantize_int8" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_dequantize_int8 requires 3 arguments (tensor, scale, zero_point)"
-                            .into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let scale = compile_expr(builder, cx, &args[1].value)?;
-                let zp = compile_expr(builder, cx, &args[2].value)?;
-                // Ensure scale and zp are f64
-                let scale_f = if !clif_types::is_float(builder.func.dfg.value_type(scale)) {
-                    builder
-                        .ins()
-                        .fcvt_from_sint(clif_types::default_float_type(), scale)
-                } else {
-                    scale
-                };
-                let zp_f = if !clif_types::is_float(builder.func.dfg.value_type(zp)) {
-                    builder
-                        .ins()
-                        .fcvt_from_sint(clif_types::default_float_type(), zp)
-                } else {
-                    zp
-                };
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_dequantize_int8")
-                    .ok_or_else(|| {
-                        CodegenError::Internal("__tensor_dequantize_int8 not declared".into())
-                    })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, scale_f, zp_f]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            // --- S34: Distributed training builtins ---
-            "dist_init" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_init requires 2 arguments (world_size, rank)".into(),
-                    ));
-                }
-                let ws = compile_expr(builder, cx, &args[0].value)?;
-                let rank = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_init")
-                    .ok_or_else(|| CodegenError::Internal("__dist_init not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ws, rank]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_world_size" | "dist_rank" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(format!(
-                        "{fn_name} requires 1 argument (ctx)"
-                    )));
-                }
-                let ctx = compile_expr(builder, cx, &args[0].value)?;
-                let key = format!("__{fn_name}");
-                let fn_id = *cx
-                    .functions
-                    .get(&key)
-                    .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ctx]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_all_reduce_sum" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_all_reduce_sum requires 2 arguments (ctx, tensor)".into(),
-                    ));
-                }
-                let ctx = compile_expr(builder, cx, &args[0].value)?;
-                let t = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__dist_all_reduce_sum").ok_or_else(|| {
-                    CodegenError::Internal("__dist_all_reduce_sum not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ctx, t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_broadcast" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_broadcast requires 3 arguments (ctx, tensor, root)".into(),
-                    ));
-                }
-                let ctx = compile_expr(builder, cx, &args[0].value)?;
-                let t = compile_expr(builder, cx, &args[1].value)?;
-                let root = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx.functions.get("__dist_broadcast").ok_or_else(|| {
-                    CodegenError::Internal("__dist_broadcast not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ctx, t, root]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_split_batch" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_split_batch requires 2 arguments (ctx, tensor)".into(),
-                    ));
-                }
-                let ctx = compile_expr(builder, cx, &args[0].value)?;
-                let t = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__dist_split_batch").ok_or_else(|| {
-                    CodegenError::Internal("__dist_split_batch not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[ctx, t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_free" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_free requires 1 argument (ctx)".into(),
-                    ));
-                }
-                let ctx = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_free")
-                    .ok_or_else(|| CodegenError::Internal("__dist_free not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[ctx]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // --- S34.4: TCP gradient exchange ---
-            "dist_tcp_bind" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_tcp_bind requires 1 argument (port)".into(),
-                    ));
-                }
-                let port = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_tcp_bind")
-                    .ok_or_else(|| CodegenError::Internal("__dist_tcp_bind not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[port]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_tcp_port" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_tcp_port requires 1 argument (handle)".into(),
-                    ));
-                }
-                let handle = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_tcp_port")
-                    .ok_or_else(|| CodegenError::Internal("__dist_tcp_port not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[handle]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_tcp_send" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_tcp_send requires 2 arguments (port, tensor)".into(),
-                    ));
-                }
-                let port = compile_expr(builder, cx, &args[0].value)?;
-                let tensor = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_tcp_send")
-                    .ok_or_else(|| CodegenError::Internal("__dist_tcp_send not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[port, tensor]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_tcp_recv" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_tcp_recv requires 1 argument (handle)".into(),
-                    ));
-                }
-                let handle = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_tcp_recv")
-                    .ok_or_else(|| CodegenError::Internal("__dist_tcp_recv not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[handle]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dist_tcp_free" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dist_tcp_free requires 1 argument (handle)".into(),
-                    ));
-                }
-                let handle = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dist_tcp_free")
-                    .ok_or_else(|| CodegenError::Internal("__dist_tcp_free not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[handle]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            // --- S36: Data Pipeline builtins ---
-            "dataloader_new" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_new requires 3 arguments (data, labels, batch_size)".into(),
-                    ));
-                }
-                let data = compile_expr(builder, cx, &args[0].value)?;
-                let labels = compile_expr(builder, cx, &args[1].value)?;
-                let batch = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx.functions.get("__dataloader_new").ok_or_else(|| {
-                    CodegenError::Internal("__dataloader_new not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[data, labels, batch]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "dataloader_len" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_len requires 1 argument".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__dataloader_len").ok_or_else(|| {
-                    CodegenError::Internal("__dataloader_len not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[dl]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dataloader_reset" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_reset requires 2 arguments (dl, shuffle)".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let shuffle = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx.functions.get("__dataloader_reset").ok_or_else(|| {
-                    CodegenError::Internal("__dataloader_reset not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[dl, shuffle]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "dataloader_next_data" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_next_data requires 1 argument".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__dataloader_next_data").ok_or_else(|| {
-                    CodegenError::Internal("__dataloader_next_data not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[dl]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "dataloader_next_labels" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_next_labels requires 1 argument".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dataloader_next_labels")
-                    .ok_or_else(|| {
-                        CodegenError::Internal("__dataloader_next_labels not declared".into())
-                    })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[dl]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "dataloader_num_samples" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_num_samples requires 1 argument".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__dataloader_num_samples")
-                    .ok_or_else(|| {
-                        CodegenError::Internal("__dataloader_num_samples not declared".into())
-                    })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[dl]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "dataloader_free" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "dataloader_free requires 1 argument".into(),
-                    ));
-                }
-                let dl = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__dataloader_free").ok_or_else(|| {
-                    CodegenError::Internal("__dataloader_free not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                builder.ins().call(callee, &[dl]);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(builder.ins().iconst(clif_types::default_int_type(), 0));
-            }
-            "tensor_normalize" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_normalize requires 1 argument".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx.functions.get("__tensor_normalize").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_normalize not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            // --- S37: Model Serialization builtins ---
-            "tensor_save" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_save requires 2 arguments (tensor, path)".into(),
-                    ));
-                }
-                let tensor = compile_expr(builder, cx, &args[0].value)?;
-                let path = compile_expr(builder, cx, &args[1].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_save")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_save not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[tensor, path, path_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_load" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_load requires 1 argument (path)".into(),
-                    ));
-                }
-                let path = compile_expr(builder, cx, &args[0].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_load")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_load not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[path, path_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "checkpoint_save" => {
-                if args.len() < 4 {
-                    return Err(CodegenError::NotImplemented(
-                        "checkpoint_save requires 4 args (tensor, path, epoch, loss)".into(),
-                    ));
-                }
-                let tensor = compile_expr(builder, cx, &args[0].value)?;
-                let path = compile_expr(builder, cx, &args[1].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let epoch = compile_expr(builder, cx, &args[2].value)?;
-                let loss = compile_expr(builder, cx, &args[3].value)?;
-                let fn_id = *cx.functions.get("__checkpoint_save").ok_or_else(|| {
-                    CodegenError::Internal("__checkpoint_save not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder
-                    .ins()
-                    .call(callee, &[tensor, path, path_len, epoch, loss]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "checkpoint_load" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "checkpoint_load requires 1 argument (path)".into(),
-                    ));
-                }
-                let path = compile_expr(builder, cx, &args[0].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let fn_id = *cx.functions.get("__checkpoint_load").ok_or_else(|| {
-                    CodegenError::Internal("__checkpoint_load not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[path, path_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "checkpoint_epoch" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "checkpoint_epoch requires 1 argument (path)".into(),
-                    ));
-                }
-                let path = compile_expr(builder, cx, &args[0].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let fn_id = *cx.functions.get("__checkpoint_epoch").ok_or_else(|| {
-                    CodegenError::Internal("__checkpoint_epoch not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[path, path_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "checkpoint_loss" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "checkpoint_loss requires 1 argument (path)".into(),
-                    ));
-                }
-                let path = compile_expr(builder, cx, &args[0].value)?;
-                let path_len = cx
-                    .last_string_len
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let fn_id = *cx.functions.get("__checkpoint_loss").ok_or_else(|| {
-                    CodegenError::Internal("__checkpoint_loss not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[path, path_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            // --- Additional tensor & utility builtins ---
-            "tensor_mean" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_mean requires 1 arg".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_mean")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_mean not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_row" | "row" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_row requires 2 args (tensor, row_idx)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let row = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_row")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_row not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, row]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_abs" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_abs requires 1 arg".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_abs")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_abs not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_fill" => {
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_fill requires 3 args (rows, cols, val_bits)".into(),
-                    ));
-                }
-                let rows = compile_expr(builder, cx, &args[0].value)?;
-                let cols = compile_expr(builder, cx, &args[1].value)?;
-                let val = compile_expr(builder, cx, &args[2].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_fill")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_fill not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[rows, cols, val]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_rand" | "randn" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_rand requires 2 args (rows, cols)".into(),
-                    ));
-                }
-                let rows = compile_expr(builder, cx, &args[0].value)?;
-                let cols = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_rand")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_rand not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[rows, cols]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_xavier" | "xavier" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_xavier requires 2 args (rows, cols)".into(),
-                    ));
-                }
-                let rows = compile_expr(builder, cx, &args[0].value)?;
-                let cols = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_xavier")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_xavier not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[rows, cols]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_argmax" | "argmax" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_argmax requires 1 arg (tensor)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_argmax")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_argmax not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "tensor_from_data" => {
-                if args.len() < 4 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_from_data requires 4 args (data_ptr, n_elems, rows, cols)".into(),
-                    ));
-                }
-                let data_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let n_elems = compile_expr(builder, cx, &args[1].value)?;
-                let rows = compile_expr(builder, cx, &args[2].value)?;
-                let cols = compile_expr(builder, cx, &args[3].value)?;
-                let fn_id = *cx.functions.get("__tensor_from_data").ok_or_else(|| {
-                    CodegenError::Internal("__tensor_from_data not declared".into())
-                })?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[data_ptr, n_elems, rows, cols]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "tensor_scale" => {
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "tensor_scale requires 2 args (tensor, scalar_bits)".into(),
-                    ));
-                }
-                let t = compile_expr(builder, cx, &args[0].value)?;
-                let scalar = compile_expr(builder, cx, &args[1].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__tensor_scale")
-                    .ok_or_else(|| CodegenError::Internal("__tensor_scale not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[t, scalar]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(result);
-            }
-            "random_int" => {
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "random_int requires 1 arg (max)".into(),
-                    ));
-                }
-                let max = compile_expr(builder, cx, &args[0].value)?;
-                let fn_id = *cx
-                    .functions
-                    .get("__random_int")
-                    .ok_or_else(|| CodegenError::Internal("__random_int not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[max]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "map_new" => {
-                let fn_id = *cx
-                    .functions
-                    .get("__map_new")
-                    .ok_or_else(|| CodegenError::Internal("__map_new not declared".into()))?;
-                let callee = cx.module.declare_func_in_func(fn_id, builder.func);
-                let call = builder.ins().call(callee, &[]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                cx.last_map_new = true;
-                return Ok(result);
-            }
-            "map_insert" => {
-                // map_insert(map, key, value) → fj_rt_map_insert_int(map, key_ptr, key_len, value)
-                if args.len() < 3 {
-                    return Err(CodegenError::NotImplemented(
-                        "map_insert requires 3 args (map, key, value)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let key_val = compile_expr(builder, cx, &args[1].value)?;
-                let key_len = cx.last_string_len.take().ok_or_else(|| {
-                    CodegenError::NotImplemented("map_insert key must be a string".into())
-                })?;
-                let val = compile_expr(builder, cx, &args[2].value)?;
-                let func_id = *cx.functions.get("__map_insert_int").ok_or_else(|| {
-                    CodegenError::Internal("__map_insert_int not declared".into())
-                })?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                builder.ins().call(local, &[map_ptr, key_val, key_len, val]);
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(map_ptr);
-            }
-            "map_get" => {
-                // map_get(map, key) → fj_rt_map_get_int(map, key_ptr, key_len)
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "map_get requires 2 args (map, key)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let key_val = compile_expr(builder, cx, &args[1].value)?;
-                let key_len = cx.last_string_len.take().ok_or_else(|| {
-                    CodegenError::NotImplemented("map_get key must be a string".into())
-                })?;
-                let func_id = *cx
-                    .functions
-                    .get("__map_get_int")
-                    .ok_or_else(|| CodegenError::Internal("__map_get_int not declared".into()))?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "map_len" => {
-                // map_len(map) → fj_rt_map_len(map)
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "map_len requires 1 arg (map)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let func_id = *cx
-                    .functions
-                    .get("__map_len")
-                    .ok_or_else(|| CodegenError::Internal("__map_len not declared".into()))?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                let call = builder.ins().call(local, &[map_ptr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "map_keys" => {
-                // map_keys(map) → fj_rt_map_keys(map, count_out)
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "map_keys requires 1 arg (map)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let count_slot =
-                    builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-                        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                        8,
-                        3,
-                    ));
-                let count_addr =
-                    builder
-                        .ins()
-                        .stack_addr(clif_types::default_int_type(), count_slot, 0);
-                let func_id = *cx
-                    .functions
-                    .get("__map_keys")
-                    .ok_or_else(|| CodegenError::Internal("__map_keys not declared".into()))?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                let call = builder.ins().call(local, &[map_ptr, count_addr]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                cx.last_split_result = Some(result);
-                return Ok(result);
-            }
-            "map_contains" => {
-                // map_contains(map, key) → fj_rt_map_contains(map, key_ptr, key_len)
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "map_contains requires 2 args (map, key)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let key_val = compile_expr(builder, cx, &args[1].value)?;
-                let key_len = cx.last_string_len.take().ok_or_else(|| {
-                    CodegenError::NotImplemented("map_contains key must be a string".into())
-                })?;
-                let func_id = *cx
-                    .functions
-                    .get("__map_contains")
-                    .ok_or_else(|| CodegenError::Internal("__map_contains not declared".into()))?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
-                let result = builder.inst_results(call)[0];
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(result);
-            }
-            "map_remove" => {
-                // map_remove(map, key) → fj_rt_map_remove(map, key_ptr, key_len)
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "map_remove requires 2 args (map, key)".into(),
-                    ));
-                }
-                let map_ptr = compile_expr(builder, cx, &args[0].value)?;
-                let key_val = compile_expr(builder, cx, &args[1].value)?;
-                let key_len = cx.last_string_len.take().ok_or_else(|| {
-                    CodegenError::NotImplemented("map_remove key must be a string".into())
-                })?;
-                let func_id = *cx
-                    .functions
-                    .get("__map_remove")
-                    .ok_or_else(|| CodegenError::Internal("__map_remove not declared".into()))?;
-                let local = cx.module.declare_func_in_func(func_id, builder.func);
-                builder.ins().call(local, &[map_ptr, key_val, key_len]);
-                cx.last_expr_type = Some(clif_types::pointer_type());
-                return Ok(map_ptr);
-            }
-            "is_some" => {
-                // is_some(val): Some has tag=1, so check tag != 0
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "is_some requires 1 argument".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let result = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
-                let widened = builder
-                    .ins()
-                    .uextend(clif_types::default_int_type(), result);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(widened);
-            }
-            "is_none" => {
-                // is_none(val): None has tag=0, so check tag == 0
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "is_none requires 1 argument".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let result = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
-                let widened = builder
-                    .ins()
-                    .uextend(clif_types::default_int_type(), result);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(widened);
-            }
-            "is_ok" => {
-                // is_ok(val): Ok has tag=0, so check tag == 0
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "is_ok requires 1 argument".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let result = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
-                let widened = builder
-                    .ins()
-                    .uextend(clif_types::default_int_type(), result);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(widened);
-            }
-            "is_err" => {
-                // is_err(val): Err has tag=1, so check tag != 0
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "is_err requires 1 argument".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let result = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
-                let widened = builder
-                    .ins()
-                    .uextend(clif_types::default_int_type(), result);
-                cx.last_expr_type = Some(clif_types::default_int_type());
-                return Ok(widened);
-            }
-            "unwrap" => {
-                // unwrap(val): get payload; trap if None(tag=0) or Err(tag!=0)
-                // Convention: unwrap for Option checks tag!=0 (Some), for Result checks tag==0 (Ok)
-                // Since we can't distinguish, use Option convention: payload is in Some(tag=1)
-                // For Result, use unwrap_ok() (future)
-                // MVP: trap if tag == 0 (None), return payload of Some(tag=1)
-                if args.is_empty() {
-                    return Err(CodegenError::NotImplemented(
-                        "unwrap requires 1 argument".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let payload = cx
-                    .last_enum_payload
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let payload_type = cx
-                    .last_enum_payload_type
-                    .take()
-                    .unwrap_or(clif_types::default_int_type());
-                // Trap if tag == 0 (None)
-                let is_none = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
-                builder.ins().trapnz(
-                    is_none,
-                    cranelift_codegen::ir::TrapCode::user(1).expect("valid trap"),
-                );
-                cx.last_expr_type = Some(payload_type);
-                return Ok(payload);
-            }
-            "unwrap_or" => {
-                // unwrap_or(val, default): use Option convention
-                // If tag != 0 (Some), return payload; else return default
-                if args.len() < 2 {
-                    return Err(CodegenError::NotImplemented(
-                        "unwrap_or requires 2 arguments".into(),
-                    ));
-                }
-                let tag = compile_expr(builder, cx, &args[0].value)?;
-                let payload = cx
-                    .last_enum_payload
-                    .take()
-                    .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
-                let payload_type = cx
-                    .last_enum_payload_type
-                    .take()
-                    .unwrap_or(clif_types::default_int_type());
-                let default_val = compile_expr(builder, cx, &args[1].value)?;
-                // Select: if tag != 0 (Some), use payload; else use default
-                let is_some = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
-                let result = builder.ins().select(is_some, payload, default_val);
-                cx.last_expr_type = Some(payload_type);
-                return Ok(result);
+            | "buffer_write_u64_be"
+            | "compiler_fence"
+            | "memory_fence"
+            | "alloc"
+            | "dealloc"
+            | "mem_read"
+            | "mem_write" => {
+                return compile_builtin_sync_mem(builder, cx, &fn_name, args);
+            }
+            "tensor_zeros"
+            | "tensor_ones"
+            | "zeros"
+            | "ones"
+            | "tensor_add"
+            | "tensor_sub"
+            | "tensor_mul"
+            | "tensor_matmul"
+            | "matmul"
+            | "tensor_reshape"
+            | "tensor_transpose"
+            | "tensor_relu"
+            | "tensor_softmax"
+            | "tensor_sigmoid"
+            | "tensor_flatten"
+            | "relu"
+            | "softmax"
+            | "sigmoid"
+            | "transpose"
+            | "tensor_rows"
+            | "tensor_cols"
+            | "tensor_sum"
+            | "tensor_get"
+            | "tensor_set"
+            | "tensor_free"
+            | "backward"
+            | "requires_grad"
+            | "set_requires_grad"
+            | "mse_loss"
+            | "cross_entropy_loss"
+            | "cross_entropy"
+            | "tensor_grad"
+            | "grad"
+            | "zero_grad"
+            | "grad_tensor_data"
+            | "grad_tensor_free"
+            | "grad_relu"
+            | "grad_sigmoid"
+            | "grad_softmax"
+            | "grad_matmul"
+            | "sgd_new"
+            | "adam_new"
+            | "sgd_step"
+            | "adam_step"
+            | "optimizer_free"
+            | "f32_to_f16"
+            | "f16_to_f32"
+            | "tensor_to_f16"
+            | "loss_scale"
+            | "loss_unscale"
+            | "tensor_quantize_int8"
+            | "tensor_quant_scale"
+            | "tensor_quant_zero_point"
+            | "tensor_dequantize_int8" => {
+                return compile_builtin_tensor_ml(builder, cx, &fn_name, args);
+            }
+            "dist_init"
+            | "dist_world_size"
+            | "dist_rank"
+            | "dist_all_reduce_sum"
+            | "dist_broadcast"
+            | "dist_split_batch"
+            | "dist_free"
+            | "dist_tcp_bind"
+            | "dist_tcp_port"
+            | "dist_tcp_send"
+            | "dist_tcp_recv"
+            | "dist_tcp_free"
+            | "dataloader_new"
+            | "dataloader_len"
+            | "dataloader_reset"
+            | "dataloader_next_data"
+            | "dataloader_next_labels"
+            | "dataloader_num_samples"
+            | "dataloader_free"
+            | "tensor_normalize"
+            | "tensor_save"
+            | "tensor_load"
+            | "checkpoint_save"
+            | "checkpoint_load"
+            | "checkpoint_epoch"
+            | "checkpoint_loss" => {
+                return compile_builtin_dist_data(builder, cx, &fn_name, args);
+            }
+            "tensor_mean" | "tensor_row" | "row" | "tensor_abs" | "tensor_fill" | "tensor_rand"
+            | "randn" | "tensor_xavier" | "xavier" | "tensor_argmax" | "argmax"
+            | "tensor_from_data" | "tensor_scale" | "random_int" | "map_new" | "map_insert"
+            | "map_get" | "map_len" | "map_keys" | "map_contains" | "map_remove" | "is_some"
+            | "is_none" | "is_ok" | "is_err" | "unwrap" | "unwrap_or" => {
+                return compile_builtin_tensor_maps(builder, cx, &fn_name, args);
             }
             _ => {}
         }
@@ -2074,6 +427,1851 @@ pub(in crate::codegen::cranelift) fn compile_call<M: Module>(
 
     // ── Regular function call ─────────────────────────────────────────
     compile_regular_call(builder, cx, &fn_name, args)
+}
+
+/// Lowers builtin calls: print/dbg/math/conversion/assert/format/file and wrapping-arithmetic builtins.
+fn compile_builtin_core_io_math<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    fn_name: &str,
+    args: &[CallArg],
+) -> Result<ClifValue, CodegenError> {
+    match fn_name {
+        "println" | "print" | "eprintln" | "eprint" => {
+            compile_print_builtin(builder, cx, fn_name, args)
+        }
+        "dbg" => compile_dbg_builtin(builder, cx, args),
+        "abs" | "sqrt" | "floor" | "ceil" | "round" => {
+            compile_math_unary_builtin(builder, cx, fn_name, args)
+        }
+        "sin" | "cos" | "tan" | "log" | "log2" | "log10" => {
+            compile_math_rt_builtin(builder, cx, fn_name, args)
+        }
+        "pow" => compile_pow_builtin(builder, cx, args),
+        "min" | "max" => compile_min_max_builtin(builder, cx, fn_name, args),
+        "clamp" => compile_clamp_builtin(builder, cx, args),
+        "len" => compile_len_builtin(builder, cx, args),
+        "to_string" => compile_to_string_builtin(builder, cx, args),
+        "to_int" | "to_float" => compile_convert_builtin(builder, cx, fn_name, args),
+        "type_of" => compile_type_of_builtin(builder, cx, args),
+        "assert" => compile_assert_builtin(builder, cx, args),
+        "assert_eq" => compile_assert_eq_builtin(builder, cx, args),
+        "panic" | "todo" => compile_panic_builtin(builder, cx, fn_name, args),
+        "format" => compile_format_builtin(builder, cx, args),
+        "write_file" | "read_file" | "append_file" | "file_exists" | "async_read_file"
+        | "async_write_file" => compile_file_builtin(builder, cx, fn_name, args),
+        "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub"
+        | "saturating_mul" | "checked_add" | "checked_sub" | "checked_mul" => {
+            compile_wrapping_builtin(builder, cx, fn_name, args)
+        }
+        "sleep" => {
+            let millis = if args.is_empty() {
+                builder.ins().iconst(clif_types::default_int_type(), 0)
+            } else {
+                compile_expr(builder, cx, &args[0].value)?
+            };
+            let sleep_id = *cx
+                .functions
+                .get("__sleep")
+                .ok_or_else(|| CodegenError::Internal("__sleep not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(sleep_id, builder.func);
+            builder.ins().call(callee, &[millis]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        _ => Err(CodegenError::Internal(format!(
+            "builtin '{fn_name}' routed to compile_builtin_core_io_math but not handled"
+        ))),
+    }
+}
+
+/// Lowers builtin calls: channel select, TLS, volatile and buffer access, fences, alloc, raw memory.
+fn compile_builtin_sync_mem<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    fn_name: &str,
+    args: &[CallArg],
+) -> Result<ClifValue, CodegenError> {
+    match fn_name {
+        "channel_select" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "channel_select requires 2 channel arguments".into(),
+                ));
+            }
+            let ch1 = compile_expr(builder, cx, &args[0].value)?;
+            let ch2 = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__channel_select2")
+                .ok_or_else(|| CodegenError::Internal("__channel_select2 not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ch1, ch2]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tls_set" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tls_set requires 2 arguments (key, value)".into(),
+                ));
+            }
+            let key = compile_expr(builder, cx, &args[0].value)?;
+            let value = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tls_set")
+                .ok_or_else(|| CodegenError::Internal("__tls_set not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[key, value]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "tls_get" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tls_get requires 1 argument (key)".into(),
+                ));
+            }
+            let key = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tls_get")
+                .ok_or_else(|| CodegenError::Internal("__tls_get not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[key]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "volatile_read" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "volatile_read requires 1 argument (address)".into(),
+                ));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__volatile_read")
+                .ok_or_else(|| CodegenError::Internal("__volatile_read not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[addr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "volatile_write" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "volatile_write requires 2 arguments (address, value)".into(),
+                ));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let value = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__volatile_write")
+                .ok_or_else(|| CodegenError::Internal("__volatile_write not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[addr, value]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // fn_addr("function_name") → returns the link-time address of a function
+        "fn_addr" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "fn_addr requires 1 argument (function name as string)".into(),
+                ));
+            }
+            // Extract function name from identifier or string argument
+            let target_name = match &args[0].value {
+                crate::parser::ast::Expr::Ident { name, .. } => name.clone(),
+                crate::parser::ast::Expr::Literal {
+                    kind: crate::parser::ast::LiteralKind::String(s),
+                    ..
+                } => s.clone(),
+                _ => {
+                    return Err(CodegenError::NotImplemented(
+                        "fn_addr argument must be a function name".into(),
+                    ));
+                }
+            };
+            let func_id = *cx
+                .functions
+                .get(&target_name)
+                .ok_or_else(|| CodegenError::UndefinedFunction(target_name.clone()))?;
+            let func_ref = cx.module.declare_func_in_func(func_id, builder.func);
+            let addr = builder
+                .ins()
+                .func_addr(clif_types::default_int_type(), func_ref);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(addr)
+        }
+        "volatile_read_u8" | "volatile_read_u16" | "volatile_read_u32" | "volatile_read_u64" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument (address)"
+                )));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let internal = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&internal)
+                .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[addr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "volatile_write_u8" | "volatile_write_u16" | "volatile_write_u32"
+        | "volatile_write_u64" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 2 arguments (address, value)"
+                )));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let value = compile_expr(builder, cx, &args[1].value)?;
+            let internal = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&internal)
+                .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[addr, value]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // Buffer read helpers (LE + BE): (addr) -> i64
+        "buffer_read_u16_le" | "buffer_read_u32_le" | "buffer_read_u64_le"
+        | "buffer_read_u16_be" | "buffer_read_u32_be" | "buffer_read_u64_be" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument (address)"
+                )));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let internal = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&internal)
+                .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[addr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        // Buffer write helpers (LE + BE): (addr, value) -> void
+        "buffer_write_u16_le"
+        | "buffer_write_u32_le"
+        | "buffer_write_u64_le"
+        | "buffer_write_u16_be"
+        | "buffer_write_u32_be"
+        | "buffer_write_u64_be" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 2 arguments (address, value)"
+                )));
+            }
+            let addr = compile_expr(builder, cx, &args[0].value)?;
+            let value = compile_expr(builder, cx, &args[1].value)?;
+            let internal = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&internal)
+                .ok_or_else(|| CodegenError::Internal(format!("{internal} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[addr, value]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "compiler_fence" => {
+            let fn_id = *cx
+                .functions
+                .get("__compiler_fence")
+                .ok_or_else(|| CodegenError::Internal("__compiler_fence not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "memory_fence" => {
+            let fn_id = *cx
+                .functions
+                .get("__memory_fence")
+                .ok_or_else(|| CodegenError::Internal("__memory_fence not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "alloc" => {
+            let size = if args.is_empty() {
+                builder.ins().iconst(clif_types::default_int_type(), 8)
+            } else {
+                compile_expr(builder, cx, &args[0].value)?
+            };
+            let fn_id = *cx
+                .functions
+                .get("__alloc")
+                .ok_or_else(|| CodegenError::Internal("__alloc not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[size]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dealloc" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dealloc requires 2 arguments (ptr, size)".into(),
+                ));
+            }
+            let ptr = compile_expr(builder, cx, &args[0].value)?;
+            let size = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__free")
+                .ok_or_else(|| CodegenError::Internal("__free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[ptr, size]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "mem_read" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "mem_read requires 2 arguments (ptr, offset)".into(),
+                ));
+            }
+            let ptr = compile_expr(builder, cx, &args[0].value)?;
+            let offset = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__mem_read")
+                .ok_or_else(|| CodegenError::Internal("__mem_read not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ptr, offset]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "mem_write" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "mem_write requires 3 arguments (ptr, offset, value)".into(),
+                ));
+            }
+            let ptr = compile_expr(builder, cx, &args[0].value)?;
+            let offset = compile_expr(builder, cx, &args[1].value)?;
+            let value = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__mem_write")
+                .ok_or_else(|| CodegenError::Internal("__mem_write not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[ptr, offset, value]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        _ => Err(CodegenError::Internal(format!(
+            "builtin '{fn_name}' routed to compile_builtin_sync_mem but not handled"
+        ))),
+    }
+}
+
+/// Lowers builtin calls: tensor ops, autograd, losses, SGD/Adam, f16 and int8 quantization.
+fn compile_builtin_tensor_ml<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    fn_name: &str,
+    args: &[CallArg],
+) -> Result<ClifValue, CodegenError> {
+    match fn_name {
+        "tensor_zeros" | "tensor_ones" | "zeros" | "ones" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 2 arguments (rows, cols)"
+                )));
+            }
+            let rows = compile_expr(builder, cx, &args[0].value)?;
+            let cols = compile_expr(builder, cx, &args[1].value)?;
+            let canon = match fn_name {
+                "zeros" => "tensor_zeros",
+                "ones" => "tensor_ones",
+                other => other,
+            };
+            let key = format!("__{canon}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[rows, cols]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_add" | "tensor_sub" | "tensor_mul" | "tensor_matmul" | "matmul" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 2 arguments"
+                )));
+            }
+            let a = compile_expr(builder, cx, &args[0].value)?;
+            let b = compile_expr(builder, cx, &args[1].value)?;
+            let canon = match fn_name {
+                "matmul" => "tensor_matmul",
+                other => other,
+            };
+            let key = format!("__{canon}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[a, b]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_reshape" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_reshape requires 3 arguments (tensor, rows, cols)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let rows = compile_expr(builder, cx, &args[1].value)?;
+            let cols = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_reshape")
+                .ok_or_else(|| CodegenError::Internal("__tensor_reshape not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, rows, cols]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_transpose" | "tensor_relu" | "tensor_softmax" | "tensor_sigmoid"
+        | "tensor_flatten" | "relu" | "softmax" | "sigmoid" | "transpose" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument"
+                )));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let canon = match fn_name {
+                "relu" => "tensor_relu",
+                "softmax" => "tensor_softmax",
+                "sigmoid" => "tensor_sigmoid",
+                "transpose" => "tensor_transpose",
+                other => other,
+            };
+            let key = format!("__{canon}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_rows" | "tensor_cols" | "tensor_sum" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument"
+                )));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_get" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_get requires 3 arguments (tensor, row, col)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let row = compile_expr(builder, cx, &args[1].value)?;
+            let col = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_get")
+                .ok_or_else(|| CodegenError::Internal("__tensor_get not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, row, col]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(cranelift_codegen::ir::types::F64);
+            Ok(result)
+        }
+        "tensor_set" => {
+            if args.len() < 4 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_set requires 4 arguments (tensor, row, col, value)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let row = compile_expr(builder, cx, &args[1].value)?;
+            let col = compile_expr(builder, cx, &args[2].value)?;
+            let val = compile_expr(builder, cx, &args[3].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_set")
+                .ok_or_else(|| CodegenError::Internal("__tensor_set not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[t, row, col, val]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "tensor_free" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_free requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_free")
+                .ok_or_else(|| CodegenError::Internal("__tensor_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[t]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // --- Autograd builtins ---
+        "backward" => {
+            // backward(loss_tensor) — autograd backward pass (simplified no-op in native)
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "requires_grad" | "set_requires_grad" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "requires_grad requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx.functions.get("__tensor_requires_grad").ok_or_else(|| {
+                CodegenError::Internal("__tensor_requires_grad not declared".into())
+            })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "mse_loss" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "mse_loss requires 2 arguments".into(),
+                ));
+            }
+            let pred = compile_expr(builder, cx, &args[0].value)?;
+            let target = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__mse_loss")
+                .ok_or_else(|| CodegenError::Internal("__mse_loss not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[pred, target]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "cross_entropy_loss" | "cross_entropy" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "cross_entropy_loss requires 2 arguments".into(),
+                ));
+            }
+            let pred = compile_expr(builder, cx, &args[0].value)?;
+            let target = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx.functions.get("__cross_entropy_loss").ok_or_else(|| {
+                CodegenError::Internal("__cross_entropy_loss not declared".into())
+            })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[pred, target]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_grad" | "grad" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_grad requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_grad")
+                .ok_or_else(|| CodegenError::Internal("__tensor_grad not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "zero_grad" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "zero_grad requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_zero_grad")
+                .ok_or_else(|| CodegenError::Internal("__tensor_zero_grad not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[t]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "grad_tensor_data" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "grad_tensor_data requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__grad_tensor_data")
+                .ok_or_else(|| CodegenError::Internal("__grad_tensor_data not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "grad_tensor_free" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "grad_tensor_free requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__grad_tensor_free")
+                .ok_or_else(|| CodegenError::Internal("__grad_tensor_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[t]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // --- S32.3: Gradient through matmul, relu, sigmoid, softmax ---
+        "grad_relu" | "grad_sigmoid" | "grad_softmax" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument (grad_tensor)"
+                )));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "grad_matmul" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "grad_matmul requires 2 arguments (grad_tensor_a, tensor_b)".into(),
+                ));
+            }
+            let a = compile_expr(builder, cx, &args[0].value)?;
+            let b = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__grad_matmul")
+                .ok_or_else(|| CodegenError::Internal("__grad_matmul not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[a, b]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        // --- S33: Optimizer builtins ---
+        "sgd_new" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "sgd_new requires 1 argument (learning rate)".into(),
+                ));
+            }
+            let lr = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__sgd_new")
+                .ok_or_else(|| CodegenError::Internal("__sgd_new not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[lr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "adam_new" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "adam_new requires 1 argument (learning rate)".into(),
+                ));
+            }
+            let lr = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__adam_new")
+                .ok_or_else(|| CodegenError::Internal("__adam_new not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[lr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "sgd_step" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "sgd_step requires 2 arguments (optimizer, param)".into(),
+                ));
+            }
+            let opt = compile_expr(builder, cx, &args[0].value)?;
+            let param = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__sgd_step")
+                .ok_or_else(|| CodegenError::Internal("__sgd_step not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[opt, param]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "adam_step" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "adam_step requires 2 arguments (optimizer, param)".into(),
+                ));
+            }
+            let opt = compile_expr(builder, cx, &args[0].value)?;
+            let param = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__adam_step")
+                .ok_or_else(|| CodegenError::Internal("__adam_step not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[opt, param]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "optimizer_free" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "optimizer_free requires 2 arguments (ptr, tag)".into(),
+                ));
+            }
+            let ptr = compile_expr(builder, cx, &args[0].value)?;
+            let tag = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__optimizer_free")
+                .ok_or_else(|| CodegenError::Internal("__optimizer_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[ptr, tag]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // --- S39: Mixed precision builtins ---
+        "f32_to_f16" | "f16_to_f32" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument"
+                )));
+            }
+            let val = compile_expr(builder, cx, &args[0].value)?;
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[val]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_to_f16" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_to_f16 requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_to_f16")
+                .ok_or_else(|| CodegenError::Internal("__tensor_to_f16 not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        // --- S39.3: Loss scaling ---
+        "loss_scale" | "loss_unscale" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 2 arguments (tensor, scale)"
+                )));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let scale = compile_expr(builder, cx, &args[1].value)?;
+            // Ensure scale is f64
+            let scale_f = if !clif_types::is_float(builder.func.dfg.value_type(scale)) {
+                builder
+                    .ins()
+                    .fcvt_from_sint(clif_types::default_float_type(), scale)
+            } else {
+                scale
+            };
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, scale_f]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        // --- S39.4: Post-training quantization ---
+        "tensor_quantize_int8" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_quantize_int8 requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx.functions.get("__tensor_quantize_int8").ok_or_else(|| {
+                CodegenError::Internal("__tensor_quantize_int8 not declared".into())
+            })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_quant_scale" | "tensor_quant_zero_point" => {
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_float_type());
+            Ok(result)
+        }
+        "tensor_dequantize_int8" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_dequantize_int8 requires 3 arguments (tensor, scale, zero_point)"
+                        .into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let scale = compile_expr(builder, cx, &args[1].value)?;
+            let zp = compile_expr(builder, cx, &args[2].value)?;
+            // Ensure scale and zp are f64
+            let scale_f = if !clif_types::is_float(builder.func.dfg.value_type(scale)) {
+                builder
+                    .ins()
+                    .fcvt_from_sint(clif_types::default_float_type(), scale)
+            } else {
+                scale
+            };
+            let zp_f = if !clif_types::is_float(builder.func.dfg.value_type(zp)) {
+                builder
+                    .ins()
+                    .fcvt_from_sint(clif_types::default_float_type(), zp)
+            } else {
+                zp
+            };
+            let fn_id = *cx
+                .functions
+                .get("__tensor_dequantize_int8")
+                .ok_or_else(|| {
+                    CodegenError::Internal("__tensor_dequantize_int8 not declared".into())
+                })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, scale_f, zp_f]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        // --- S34: Distributed training builtins ---
+        _ => Err(CodegenError::Internal(format!(
+            "builtin '{fn_name}' routed to compile_builtin_tensor_ml but not handled"
+        ))),
+    }
+}
+
+/// Lowers builtin calls: distributed runtime, dataloaders, tensor save/load, checkpoints.
+fn compile_builtin_dist_data<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    fn_name: &str,
+    args: &[CallArg],
+) -> Result<ClifValue, CodegenError> {
+    match fn_name {
+        "dist_init" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dist_init requires 2 arguments (world_size, rank)".into(),
+                ));
+            }
+            let ws = compile_expr(builder, cx, &args[0].value)?;
+            let rank = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_init")
+                .ok_or_else(|| CodegenError::Internal("__dist_init not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ws, rank]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_world_size" | "dist_rank" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(format!(
+                    "{fn_name} requires 1 argument (ctx)"
+                )));
+            }
+            let ctx = compile_expr(builder, cx, &args[0].value)?;
+            let key = format!("__{fn_name}");
+            let fn_id = *cx
+                .functions
+                .get(&key)
+                .ok_or_else(|| CodegenError::Internal(format!("{key} not declared")))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ctx]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_all_reduce_sum" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dist_all_reduce_sum requires 2 arguments (ctx, tensor)".into(),
+                ));
+            }
+            let ctx = compile_expr(builder, cx, &args[0].value)?;
+            let t = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx.functions.get("__dist_all_reduce_sum").ok_or_else(|| {
+                CodegenError::Internal("__dist_all_reduce_sum not declared".into())
+            })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ctx, t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_broadcast" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "dist_broadcast requires 3 arguments (ctx, tensor, root)".into(),
+                ));
+            }
+            let ctx = compile_expr(builder, cx, &args[0].value)?;
+            let t = compile_expr(builder, cx, &args[1].value)?;
+            let root = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_broadcast")
+                .ok_or_else(|| CodegenError::Internal("__dist_broadcast not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ctx, t, root]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_split_batch" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dist_split_batch requires 2 arguments (ctx, tensor)".into(),
+                ));
+            }
+            let ctx = compile_expr(builder, cx, &args[0].value)?;
+            let t = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_split_batch")
+                .ok_or_else(|| CodegenError::Internal("__dist_split_batch not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[ctx, t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_free" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dist_free requires 1 argument (ctx)".into(),
+                ));
+            }
+            let ctx = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_free")
+                .ok_or_else(|| CodegenError::Internal("__dist_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[ctx]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // --- S34.4: TCP gradient exchange ---
+        "dist_tcp_bind" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dist_tcp_bind requires 1 argument (port)".into(),
+                ));
+            }
+            let port = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_tcp_bind")
+                .ok_or_else(|| CodegenError::Internal("__dist_tcp_bind not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[port]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_tcp_port" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dist_tcp_port requires 1 argument (handle)".into(),
+                ));
+            }
+            let handle = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_tcp_port")
+                .ok_or_else(|| CodegenError::Internal("__dist_tcp_port not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[handle]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_tcp_send" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dist_tcp_send requires 2 arguments (port, tensor)".into(),
+                ));
+            }
+            let port = compile_expr(builder, cx, &args[0].value)?;
+            let tensor = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_tcp_send")
+                .ok_or_else(|| CodegenError::Internal("__dist_tcp_send not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[port, tensor]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_tcp_recv" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dist_tcp_recv requires 1 argument (handle)".into(),
+                ));
+            }
+            let handle = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_tcp_recv")
+                .ok_or_else(|| CodegenError::Internal("__dist_tcp_recv not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[handle]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dist_tcp_free" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dist_tcp_free requires 1 argument (handle)".into(),
+                ));
+            }
+            let handle = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dist_tcp_free")
+                .ok_or_else(|| CodegenError::Internal("__dist_tcp_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[handle]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        // --- S36: Data Pipeline builtins ---
+        "dataloader_new" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_new requires 3 arguments (data, labels, batch_size)".into(),
+                ));
+            }
+            let data = compile_expr(builder, cx, &args[0].value)?;
+            let labels = compile_expr(builder, cx, &args[1].value)?;
+            let batch = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_new")
+                .ok_or_else(|| CodegenError::Internal("__dataloader_new not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[data, labels, batch]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "dataloader_len" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_len requires 1 argument".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_len")
+                .ok_or_else(|| CodegenError::Internal("__dataloader_len not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[dl]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dataloader_reset" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_reset requires 2 arguments (dl, shuffle)".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let shuffle = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_reset")
+                .ok_or_else(|| CodegenError::Internal("__dataloader_reset not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[dl, shuffle]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "dataloader_next_data" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_next_data requires 1 argument".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx.functions.get("__dataloader_next_data").ok_or_else(|| {
+                CodegenError::Internal("__dataloader_next_data not declared".into())
+            })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[dl]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "dataloader_next_labels" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_next_labels requires 1 argument".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_next_labels")
+                .ok_or_else(|| {
+                    CodegenError::Internal("__dataloader_next_labels not declared".into())
+                })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[dl]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "dataloader_num_samples" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_num_samples requires 1 argument".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_num_samples")
+                .ok_or_else(|| {
+                    CodegenError::Internal("__dataloader_num_samples not declared".into())
+                })?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[dl]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "dataloader_free" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "dataloader_free requires 1 argument".into(),
+                ));
+            }
+            let dl = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__dataloader_free")
+                .ok_or_else(|| CodegenError::Internal("__dataloader_free not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            builder.ins().call(callee, &[dl]);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(builder.ins().iconst(clif_types::default_int_type(), 0))
+        }
+        "tensor_normalize" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_normalize requires 1 argument".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_normalize")
+                .ok_or_else(|| CodegenError::Internal("__tensor_normalize not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        // --- S37: Model Serialization builtins ---
+        "tensor_save" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_save requires 2 arguments (tensor, path)".into(),
+                ));
+            }
+            let tensor = compile_expr(builder, cx, &args[0].value)?;
+            let path = compile_expr(builder, cx, &args[1].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let fn_id = *cx
+                .functions
+                .get("__tensor_save")
+                .ok_or_else(|| CodegenError::Internal("__tensor_save not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[tensor, path, path_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_load" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_load requires 1 argument (path)".into(),
+                ));
+            }
+            let path = compile_expr(builder, cx, &args[0].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let fn_id = *cx
+                .functions
+                .get("__tensor_load")
+                .ok_or_else(|| CodegenError::Internal("__tensor_load not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[path, path_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "checkpoint_save" => {
+            if args.len() < 4 {
+                return Err(CodegenError::NotImplemented(
+                    "checkpoint_save requires 4 args (tensor, path, epoch, loss)".into(),
+                ));
+            }
+            let tensor = compile_expr(builder, cx, &args[0].value)?;
+            let path = compile_expr(builder, cx, &args[1].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let epoch = compile_expr(builder, cx, &args[2].value)?;
+            let loss = compile_expr(builder, cx, &args[3].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__checkpoint_save")
+                .ok_or_else(|| CodegenError::Internal("__checkpoint_save not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder
+                .ins()
+                .call(callee, &[tensor, path, path_len, epoch, loss]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "checkpoint_load" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "checkpoint_load requires 1 argument (path)".into(),
+                ));
+            }
+            let path = compile_expr(builder, cx, &args[0].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let fn_id = *cx
+                .functions
+                .get("__checkpoint_load")
+                .ok_or_else(|| CodegenError::Internal("__checkpoint_load not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[path, path_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "checkpoint_epoch" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "checkpoint_epoch requires 1 argument (path)".into(),
+                ));
+            }
+            let path = compile_expr(builder, cx, &args[0].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let fn_id = *cx
+                .functions
+                .get("__checkpoint_epoch")
+                .ok_or_else(|| CodegenError::Internal("__checkpoint_epoch not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[path, path_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "checkpoint_loss" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "checkpoint_loss requires 1 argument (path)".into(),
+                ));
+            }
+            let path = compile_expr(builder, cx, &args[0].value)?;
+            let path_len = cx
+                .last_string_len
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let fn_id = *cx
+                .functions
+                .get("__checkpoint_loss")
+                .ok_or_else(|| CodegenError::Internal("__checkpoint_loss not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[path, path_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        // --- Additional tensor & utility builtins ---
+        _ => Err(CodegenError::Internal(format!(
+            "builtin '{fn_name}' routed to compile_builtin_dist_data but not handled"
+        ))),
+    }
+}
+
+/// Lowers builtin calls: remaining tensor helpers, random_int, map_* and Option/Result inspectors.
+fn compile_builtin_tensor_maps<M: Module>(
+    builder: &mut FunctionBuilder,
+    cx: &mut CodegenCtx<'_, M>,
+    fn_name: &str,
+    args: &[CallArg],
+) -> Result<ClifValue, CodegenError> {
+    match fn_name {
+        "tensor_mean" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_mean requires 1 arg".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_mean")
+                .ok_or_else(|| CodegenError::Internal("__tensor_mean not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_row" | "row" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_row requires 2 args (tensor, row_idx)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let row = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_row")
+                .ok_or_else(|| CodegenError::Internal("__tensor_row not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, row]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_abs" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_abs requires 1 arg".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_abs")
+                .ok_or_else(|| CodegenError::Internal("__tensor_abs not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_fill" => {
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_fill requires 3 args (rows, cols, val_bits)".into(),
+                ));
+            }
+            let rows = compile_expr(builder, cx, &args[0].value)?;
+            let cols = compile_expr(builder, cx, &args[1].value)?;
+            let val = compile_expr(builder, cx, &args[2].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_fill")
+                .ok_or_else(|| CodegenError::Internal("__tensor_fill not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[rows, cols, val]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_rand" | "randn" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_rand requires 2 args (rows, cols)".into(),
+                ));
+            }
+            let rows = compile_expr(builder, cx, &args[0].value)?;
+            let cols = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_rand")
+                .ok_or_else(|| CodegenError::Internal("__tensor_rand not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[rows, cols]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_xavier" | "xavier" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_xavier requires 2 args (rows, cols)".into(),
+                ));
+            }
+            let rows = compile_expr(builder, cx, &args[0].value)?;
+            let cols = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_xavier")
+                .ok_or_else(|| CodegenError::Internal("__tensor_xavier not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[rows, cols]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_argmax" | "argmax" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_argmax requires 1 arg (tensor)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_argmax")
+                .ok_or_else(|| CodegenError::Internal("__tensor_argmax not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "tensor_from_data" => {
+            if args.len() < 4 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_from_data requires 4 args (data_ptr, n_elems, rows, cols)".into(),
+                ));
+            }
+            let data_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let n_elems = compile_expr(builder, cx, &args[1].value)?;
+            let rows = compile_expr(builder, cx, &args[2].value)?;
+            let cols = compile_expr(builder, cx, &args[3].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_from_data")
+                .ok_or_else(|| CodegenError::Internal("__tensor_from_data not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[data_ptr, n_elems, rows, cols]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "tensor_scale" => {
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "tensor_scale requires 2 args (tensor, scalar_bits)".into(),
+                ));
+            }
+            let t = compile_expr(builder, cx, &args[0].value)?;
+            let scalar = compile_expr(builder, cx, &args[1].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__tensor_scale")
+                .ok_or_else(|| CodegenError::Internal("__tensor_scale not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[t, scalar]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(result)
+        }
+        "random_int" => {
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "random_int requires 1 arg (max)".into(),
+                ));
+            }
+            let max = compile_expr(builder, cx, &args[0].value)?;
+            let fn_id = *cx
+                .functions
+                .get("__random_int")
+                .ok_or_else(|| CodegenError::Internal("__random_int not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[max]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "map_new" => {
+            let fn_id = *cx
+                .functions
+                .get("__map_new")
+                .ok_or_else(|| CodegenError::Internal("__map_new not declared".into()))?;
+            let callee = cx.module.declare_func_in_func(fn_id, builder.func);
+            let call = builder.ins().call(callee, &[]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            cx.last_map_new = true;
+            Ok(result)
+        }
+        "map_insert" => {
+            // map_insert(map, key, value) → fj_rt_map_insert_int(map, key_ptr, key_len, value)
+            if args.len() < 3 {
+                return Err(CodegenError::NotImplemented(
+                    "map_insert requires 3 args (map, key, value)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let key_val = compile_expr(builder, cx, &args[1].value)?;
+            let key_len = cx.last_string_len.take().ok_or_else(|| {
+                CodegenError::NotImplemented("map_insert key must be a string".into())
+            })?;
+            let val = compile_expr(builder, cx, &args[2].value)?;
+            let func_id = *cx
+                .functions
+                .get("__map_insert_int")
+                .ok_or_else(|| CodegenError::Internal("__map_insert_int not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            builder.ins().call(local, &[map_ptr, key_val, key_len, val]);
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(map_ptr)
+        }
+        "map_get" => {
+            // map_get(map, key) → fj_rt_map_get_int(map, key_ptr, key_len)
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "map_get requires 2 args (map, key)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let key_val = compile_expr(builder, cx, &args[1].value)?;
+            let key_len = cx.last_string_len.take().ok_or_else(|| {
+                CodegenError::NotImplemented("map_get key must be a string".into())
+            })?;
+            let func_id = *cx
+                .functions
+                .get("__map_get_int")
+                .ok_or_else(|| CodegenError::Internal("__map_get_int not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "map_len" => {
+            // map_len(map) → fj_rt_map_len(map)
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "map_len requires 1 arg (map)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let func_id = *cx
+                .functions
+                .get("__map_len")
+                .ok_or_else(|| CodegenError::Internal("__map_len not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            let call = builder.ins().call(local, &[map_ptr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "map_keys" => {
+            // map_keys(map) → fj_rt_map_keys(map, count_out)
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "map_keys requires 1 arg (map)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let count_slot =
+                builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                    8,
+                    3,
+                ));
+            let count_addr =
+                builder
+                    .ins()
+                    .stack_addr(clif_types::default_int_type(), count_slot, 0);
+            let func_id = *cx
+                .functions
+                .get("__map_keys")
+                .ok_or_else(|| CodegenError::Internal("__map_keys not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            let call = builder.ins().call(local, &[map_ptr, count_addr]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            cx.last_split_result = Some(result);
+            Ok(result)
+        }
+        "map_contains" => {
+            // map_contains(map, key) → fj_rt_map_contains(map, key_ptr, key_len)
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "map_contains requires 2 args (map, key)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let key_val = compile_expr(builder, cx, &args[1].value)?;
+            let key_len = cx.last_string_len.take().ok_or_else(|| {
+                CodegenError::NotImplemented("map_contains key must be a string".into())
+            })?;
+            let func_id = *cx
+                .functions
+                .get("__map_contains")
+                .ok_or_else(|| CodegenError::Internal("__map_contains not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            let call = builder.ins().call(local, &[map_ptr, key_val, key_len]);
+            let result = builder.inst_results(call)[0];
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(result)
+        }
+        "map_remove" => {
+            // map_remove(map, key) → fj_rt_map_remove(map, key_ptr, key_len)
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "map_remove requires 2 args (map, key)".into(),
+                ));
+            }
+            let map_ptr = compile_expr(builder, cx, &args[0].value)?;
+            let key_val = compile_expr(builder, cx, &args[1].value)?;
+            let key_len = cx.last_string_len.take().ok_or_else(|| {
+                CodegenError::NotImplemented("map_remove key must be a string".into())
+            })?;
+            let func_id = *cx
+                .functions
+                .get("__map_remove")
+                .ok_or_else(|| CodegenError::Internal("__map_remove not declared".into()))?;
+            let local = cx.module.declare_func_in_func(func_id, builder.func);
+            builder.ins().call(local, &[map_ptr, key_val, key_len]);
+            cx.last_expr_type = Some(clif_types::pointer_type());
+            Ok(map_ptr)
+        }
+        "is_some" => {
+            // is_some(val): Some has tag=1, so check tag != 0
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "is_some requires 1 argument".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let result = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
+            let widened = builder
+                .ins()
+                .uextend(clif_types::default_int_type(), result);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(widened)
+        }
+        "is_none" => {
+            // is_none(val): None has tag=0, so check tag == 0
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "is_none requires 1 argument".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let result = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
+            let widened = builder
+                .ins()
+                .uextend(clif_types::default_int_type(), result);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(widened)
+        }
+        "is_ok" => {
+            // is_ok(val): Ok has tag=0, so check tag == 0
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "is_ok requires 1 argument".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let result = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
+            let widened = builder
+                .ins()
+                .uextend(clif_types::default_int_type(), result);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(widened)
+        }
+        "is_err" => {
+            // is_err(val): Err has tag=1, so check tag != 0
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "is_err requires 1 argument".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let result = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
+            let widened = builder
+                .ins()
+                .uextend(clif_types::default_int_type(), result);
+            cx.last_expr_type = Some(clif_types::default_int_type());
+            Ok(widened)
+        }
+        "unwrap" => {
+            // unwrap(val): get payload; trap if None(tag=0) or Err(tag!=0)
+            // Convention: unwrap for Option checks tag!=0 (Some), for Result checks tag==0 (Ok)
+            // Since we can't distinguish, use Option convention: payload is in Some(tag=1)
+            // For Result, use unwrap_ok() (future)
+            // MVP: trap if tag == 0 (None), return payload of Some(tag=1)
+            if args.is_empty() {
+                return Err(CodegenError::NotImplemented(
+                    "unwrap requires 1 argument".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let payload = cx
+                .last_enum_payload
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let payload_type = cx
+                .last_enum_payload_type
+                .take()
+                .unwrap_or(clif_types::default_int_type());
+            // Trap if tag == 0 (None)
+            let is_none = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
+            builder.ins().trapnz(
+                is_none,
+                cranelift_codegen::ir::TrapCode::user(1).expect("valid trap"),
+            );
+            cx.last_expr_type = Some(payload_type);
+            Ok(payload)
+        }
+        "unwrap_or" => {
+            // unwrap_or(val, default): use Option convention
+            // If tag != 0 (Some), return payload; else return default
+            if args.len() < 2 {
+                return Err(CodegenError::NotImplemented(
+                    "unwrap_or requires 2 arguments".into(),
+                ));
+            }
+            let tag = compile_expr(builder, cx, &args[0].value)?;
+            let payload = cx
+                .last_enum_payload
+                .take()
+                .unwrap_or_else(|| builder.ins().iconst(clif_types::default_int_type(), 0));
+            let payload_type = cx
+                .last_enum_payload_type
+                .take()
+                .unwrap_or(clif_types::default_int_type());
+            let default_val = compile_expr(builder, cx, &args[1].value)?;
+            // Select: if tag != 0 (Some), use payload; else use default
+            let is_some = builder.ins().icmp_imm(IntCC::NotEqual, tag, 0);
+            let result = builder.ins().select(is_some, payload, default_val);
+            cx.last_expr_type = Some(payload_type);
+            Ok(result)
+        }
+        _ => Err(CodegenError::Internal(format!(
+            "builtin '{fn_name}' routed to compile_builtin_tensor_maps but not handled"
+        ))),
+    }
 }
 
 /// Compiles a regular (non-builtin) function call.

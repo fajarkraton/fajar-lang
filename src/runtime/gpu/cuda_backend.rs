@@ -1168,7 +1168,7 @@ impl Drop for CudaDevice {
                 if let Ok(cu_module_unload) = unsafe {
                     lib.get::<unsafe extern "C" fn(*mut c_void) -> i32>(b"cuModuleUnload")
                 } {
-                    for (_id, kdata) in kernels.iter() {
+                    for kdata in kernels.values() {
                         if !kdata._module.is_null() {
                             // SAFETY: module was created by cuModuleLoadData in compile_kernel
                             unsafe { cu_module_unload(kdata._module) };
