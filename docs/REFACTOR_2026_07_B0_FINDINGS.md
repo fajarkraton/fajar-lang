@@ -76,8 +76,12 @@ wc -l src/main.rs                          # 6420
 grep -cE '^(pub )?fn cmd_' src/main.rs     # 59
 ```
 
-Worst handlers: `cmd_debug_replay` (main.rs:4398, **2,023 lines**),
-`cmd_build_native` (main.rs:3658, 634 lines). Extraction to a `src/cli/`
+Worst handlers: `cmd_build_native` (main.rs:3658, 634 lines),
+`cmd_build_llvm` (509), `cmd_verify` (327). (The B0 scanner initially
+reported `cmd_debug_replay` as 2,023 lines — corrected during Phase 2
+execution: the item-level re-measure shows 53 lines; the scanner ran past
+a string containing braces. Same correction class as the two §Measurement
+notes false giants.) Extraction to a `src/cli/`
 module tree (one file per command family, `main.rs` keeps clap defs +
 dispatch) is pure code motion. CLAUDE.md §6.3 allows `.expect()` only in
 `main.rs` — moved code must be audited for that during extraction.
