@@ -274,6 +274,32 @@ the compile arbiter.
 **Scanner correction (§6.6 R3):** B0's "cmd_debug_replay 2,023 lines" was
 a brace-scanner false positive — actual 53 lines (fixed in R2 text above).
 
+### Phase 3 — EXECUTED 2026-07-30 (same session) [actual ~45m, est 1 session, -25%]
+
+R3 closed (two sub-moves, both pure test-code motion):
+
+1. **cranelift/tests.rs split**: 17,686-line single file → `tests/` dir with
+   `mod.rs` (header + the 5 shared helpers, all cross-section) + 11 per-area
+   modules (basics, floats_strings_arrays, types_patterns_traits,
+   builtins_methods, parity, modules_sync_asm, tensors_generics,
+   collections_async, ml_repr_selfhost, v04_generics_async,
+   baremetal_os_security; 1.1-2.0K lines each, cut at section banners).
+   Fn-name inventory verified identical pre/post (1,077 names). The B0 line
+   "2,431 test fns" overcounted — it included `fn` inside embedded .fj
+   source strings; actual top-level: **1,063 `#[test]` fns + 5 helpers**.
+2. **Inline test-mod relocation**: `interpreter/eval/mod.rs` 8,914 → 3,215
+   lines (tests → `eval/tests.rs`, 5,698); `analyzer/type_check/mod.rs`
+   6,025 → 2,157 (tests → `type_check/tests.rs`, 3,867).
+
+**Deferred:** `codegen/llvm/mod.rs` test-mod relocation — the llvm feature
+cannot compile in this container (no system LLVM-18), so the move could
+not be verified locally; per §6.6 it ships only from an LLVM-capable env.
+
+**Gates (all green):** lib 6,616 (==, stress 5×) · native 7,792 (==) ·
+codegen::cranelift 1,130 (==) · interpreter::eval 458 (==) ·
+analyzer::type_check 271 (==) · clippy default/native/--tests
+native/--tests default clean · fmt clean.
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |
