@@ -2265,7 +2265,6 @@ mod tests {
         }
     }
 
-    #[allow(dead_code)]
     fn float_lit(v: f64) -> Expr {
         Expr::Literal {
             kind: LiteralKind::Float(v),
@@ -2273,7 +2272,6 @@ mod tests {
         }
     }
 
-    #[allow(dead_code)]
     fn bool_lit(v: bool) -> Expr {
         Expr::Literal {
             kind: LiteralKind::Bool(v),
@@ -2281,7 +2279,6 @@ mod tests {
         }
     }
 
-    #[allow(dead_code)]
     fn string_lit(s: &str) -> Expr {
         Expr::Literal {
             kind: LiteralKind::String(s.to_string()),

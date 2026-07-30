@@ -336,6 +336,42 @@ literal-parity assert added as a mandatory gate. Nothing reached a commit.
 default/native/--tests-native clean · fmt · release build ·
 stage1_full 91/91 · phase17 byte-equality 4/4.
 
+### Phase 5 — EXECUTED 2026-07-30 (post-merge of PR #1, fresh branch off main) [actual ~1h, est 0.5 session, +100%]
+
+R6 closed via a compiler-arbitrated audit: strip every `allow()` of the
+five stale-suppression lints (dead_code, unused_unsafe, unused_imports,
+unused_mut, unused_variables), compile across four feature sets (default,
+native, wasm, cuda) with warnings visible, then keep removed only the
+allows whose lint never fires.
+
+**Removed (18 stale allows):** 15× dead_code (11 in interpreter/eval/mod.rs
+field/method clusters, 3 in codegen/wasm, 1 each qnn.rs +
+cranelift/context.rs) and 3× unused_imports (cranelift/compile/{asm,call,
+method}.rs).
+
+**Kept, with verified rationale:**
+- 36× live `dead_code` — the code IS dead and deliberately kept (full
+  file:line list in the Phase 5 log); candidates for actual deletion in a
+  future scoped pass, not this mechanical one.
+- 8× `unused_unsafe` in cranelift/runtime_bare.rs — target-dependent
+  (per-arch `#[cfg(target_arch)]` fallbacks inside the fn; the lint fires
+  on non-x86_64 CI runners).
+- 5× `unused_unsafe` in hw/cpu.rs — **manual review wrongly called these
+  stale**; the strip experiment proved them live: `__cpuid` is safe on
+  current toolchains, so the `unsafe` blocks trip the lint there, while
+  MSRV 1.87 still requires them. Removable only when MSRV crosses the
+  cpuid-safety version. (Second demonstration this session that the
+  compiler, not code reading, is the arbiter.)
+- 1× `unused_variables` on llvm-gated `cmd_build_llvm` + 1× `unused_mut`
+  in runtime/gpu/mod.rs (mut used only under gpu/cuda cfg) — restored as
+  feature-dependent.
+- Out of scope (env cannot compile): allows in codegen/llvm/mod.rs and
+  ffi_v2/python.rs.
+
+**Gates:** lib 6,616 == (stress 5×) · native 7,792 == · clippy
+default/native/tests-native/wasm/cuda all clean · fmt · audit_unsafe
+--strict PASS · audit_unwrap 0 rows.
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |

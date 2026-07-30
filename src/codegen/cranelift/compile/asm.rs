@@ -9,7 +9,6 @@ use cranelift_module::Module;
 
 use super::super::clif_types;
 use super::super::context::CodegenCtx;
-#[allow(unused_imports)]
 use super::*;
 use crate::codegen::CodegenError;
 

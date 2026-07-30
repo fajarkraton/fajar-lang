@@ -153,9 +153,7 @@ struct WsConnection {
     url: String,
     connected: bool,
     /// Simulation buffers (used when `websocket` feature is disabled).
-    #[allow(dead_code)]
     send_buffer: Vec<String>,
-    #[allow(dead_code)]
     recv_buffer: std::collections::VecDeque<String>,
     /// Real WebSocket socket (used when `websocket` feature is enabled).
     #[cfg(feature = "websocket")]
@@ -179,7 +177,6 @@ struct MqttClientState {
     #[allow(dead_code)]
     broker_addr: String,
     connected: bool,
-    #[allow(dead_code)]
     subscriptions: Vec<String>,
     #[cfg(feature = "mqtt")]
     real_client: Option<RealMqttClient>,
@@ -187,7 +184,6 @@ struct MqttClientState {
 
 /// In-memory MQTT message broker for simulation (used when `mqtt` feature is off).
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 struct MqttBroker {
     /// topic → list of queued messages
     topics: std::collections::HashMap<String, Vec<String>>,
@@ -195,7 +191,6 @@ struct MqttBroker {
     subscriptions: std::collections::HashMap<i64, Vec<String>>,
 }
 
-#[allow(dead_code)]
 impl MqttBroker {
     fn new() -> Self {
         Self {
@@ -273,7 +268,6 @@ pub enum AsyncOperation {
 
 /// Simulated BLE (Bluetooth Low Energy) device.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct BleDevice {
     /// Device address (e.g., "AA:BB:CC:DD:EE:FF").
     addr: String,
@@ -287,7 +281,6 @@ struct BleDevice {
 
 /// Simulated BLE adapter managing scanned and connected devices.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct BleAdapter {
     /// Known devices from scanning.
     scanned: Vec<BleDevice>,
@@ -297,7 +290,6 @@ struct BleAdapter {
     next_handle: i64,
 }
 
-#[allow(dead_code)]
 impl BleAdapter {
     fn new() -> Self {
         Self {
@@ -547,7 +539,6 @@ type EffectReplayLevel = (Vec<(String, String, Value)>, usize);
 ///
 /// Each actor runs in its own `std::thread`, receiving messages via an
 /// `mpsc::Sender<Value>`. Dropping the sender signals the actor to shut down.
-#[allow(dead_code)]
 struct ActorHandle {
     /// Actor name (for debugging/status).
     name: String,
@@ -560,6 +551,7 @@ struct ActorHandle {
     /// Handler function name (for restart).
     handler_fn: String,
     /// Handler function's closure environment (for restart).
+    #[allow(dead_code)]
     handler_env: crate::interpreter::env::EnvRef,
 }
 
@@ -635,12 +627,10 @@ pub struct Interpreter {
     /// MQTT clients: handle → MqttClient state.
     mqtt_clients: std::collections::HashMap<i64, MqttClientState>,
     /// In-memory MQTT broker for simulation (unused when `mqtt` feature active).
-    #[allow(dead_code)]
     mqtt_broker: MqttBroker,
     /// Next MQTT handle ID.
     next_mqtt_id: i64,
     /// Simulated BLE adapter for Bluetooth Low Energy operations.
-    #[allow(dead_code)]
     ble_adapter: BleAdapter,
     /// GUI state accumulated by gui_* builtins.
     gui_state: GuiState,
