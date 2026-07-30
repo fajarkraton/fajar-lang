@@ -300,6 +300,42 @@ codegen::cranelift 1,130 (==) · interpreter::eval 458 (==) ·
 analyzer::type_check 271 (==) · clippy default/native/--tests
 native/--tests default clean · fmt clean.
 
+### Phase 4 — EXECUTED 2026-07-30 (same session) [actual ~2h, est 1-2 sessions, -50%]
+
+R4 closed for the two FLAT dispatchers; one target reclassified:
+
+1. **`call_builtin`** (interpreter/eval/builtins.rs, 3,714 lines, 379 arms):
+   now a ~90-line router + **13 domain methods** (`builtin_{core_io,math_int,
+   os_mem,tensor_quant,autograd,optimizer,model_export,layers_dyn,
+   actors_const,metrics_str_io,maps_ctors,hw_embedded,kernel_x86}`) + a
+   `builtin_effect_fallback` method (the former 600-line `_` arm). Arms moved
+   verbatim; router groups generated from the arm patterns themselves with a
+   mechanical **literal-parity assert (510 == 510 names)**.
+2. **`compile_call`'s builtin match** (codegen/cranelift/compile/call.rs,
+   1,786 lines, 112 arms): router + **5 free fns**
+   (`compile_builtin_{core_io_math,sync_mem,tensor_ml,dist_data,
+   tensor_maps}`), literal parity 185 == 185. `fn_name` usages rebased
+   String→&str (8× `&fn_name`, 3× `.as_str()`); 111 tail `return`s dropped
+   via `cargo clippy --fix`.
+3. **`compile_method_call` RECLASSIFIED, not split:** it is a sequential
+   receiver-type dispatch (35 banner sections, 204 return sites,
+   fall-through between sections), not a flat match — B0's own criterion
+   ("don't break up dispatchers just for line count; only decompose tangled
+   logic") says a forced split here is control-flow rewriting, not code
+   motion. Left for a dedicated Option-wrap decomposition with its own plan
+   if ever needed.
+
+**Incident log (prevention worked):** splitter v1 read only the first line
+of each match pattern; rustfmt-wrapped multi-line alternations lost 135+74
+names from the routers → 22 cranelift tests failed (`UndefinedFunction`).
+Files restored from git, extractor rewritten multi-line-aware, and the
+literal-parity assert added as a mandatory gate. Nothing reached a commit.
+
+**Gates (all green, post-fix):** lib 6,616 (==, stress 5×) · native 7,792
+(==) · codegen::cranelift 1,130 (==) · interpreter 508 (==) · clippy
+default/native/--tests-native clean · fmt · release build ·
+stage1_full 91/91 · phase17 byte-equality 4/4.
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |
