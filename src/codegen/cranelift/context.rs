@@ -307,7 +307,6 @@ pub(crate) struct CodegenCtx<'a, M: Module> {
     pub current_context: Option<String>,
     /// When true, security hardening checks (bounds, overflow) are active.
     /// Reserved for use by array-access and arithmetic codegen when security mode is on.
-    #[allow(dead_code)]
     pub security_enabled: bool,
 }
 

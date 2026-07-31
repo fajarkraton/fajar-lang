@@ -11,7 +11,6 @@ use cranelift_module::Module;
 
 use super::super::clif_types;
 use super::super::context::{CodegenCtx, OwnedKind};
-#[allow(unused_imports)]
 use super::*;
 use crate::codegen::CodegenError;
 use crate::parser::ast::{CallArg, Expr, LiteralKind};
