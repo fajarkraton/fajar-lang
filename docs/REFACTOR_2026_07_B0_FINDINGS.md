@@ -372,6 +372,25 @@ method}.rs).
 default/native/tests-native/wasm/cuda all clean · fmt · audit_unsafe
 --strict PASS · audit_unwrap 0 rows.
 
+**Incident (PR #2 CI, 2026-07-31):** 4 of 18 Feature Tests jobs (ble,
+mqtt, websocket, wasm) failed — the local 4-feature matrix missed two
+things the CI matrix catches: (1) CI sets `RUSTFLAGS="-D warnings"` on
+`cargo test`, so dead_code fires on the *lib-test* target, which plain
+clippy (lib target only) never compiles; (2) the networking features
+flip mock↔real implementations, creating a third allow class:
+**feature-inverted dead code** — the simulation mocks (BleDevice/
+BleAdapter/MqttBroker/WsConnection.recv_buffer) are live by default and
+dead only when the corresponding feature enables the real path. Fixed
+with `#[cfg_attr(feature = "X", allow(dead_code))]` so the lint still
+guards default builds, not a blanket restore. The 3 wasm test-mod
+helpers (float_lit/bool_lit/string_lit) turned out dead in their ONLY
+cfg (`mod wasm` is feature-gated, helpers uncalled) — deleted outright.
+mqtt/websocket/wasm reproduced + verified locally under
+`RUSTFLAGS="-D warnings" cargo test --lib --no-run`; ble not buildable
+locally (needs libdbus), same pattern applied, CI-verified. Lesson for
+future lint audits: replicate the CI matrix (`-D warnings` on test
+targets, per-feature), not just clippy on the lib target.
+
 ## Self-check (CLAUDE.md §6.8)
 
 | Rule | Status |

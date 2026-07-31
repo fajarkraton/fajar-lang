@@ -2265,27 +2265,6 @@ mod tests {
         }
     }
 
-    fn float_lit(v: f64) -> Expr {
-        Expr::Literal {
-            kind: LiteralKind::Float(v),
-            span: span(),
-        }
-    }
-
-    fn bool_lit(v: bool) -> Expr {
-        Expr::Literal {
-            kind: LiteralKind::Bool(v),
-            span: span(),
-        }
-    }
-
-    fn string_lit(s: &str) -> Expr {
-        Expr::Literal {
-            kind: LiteralKind::String(s.to_string()),
-            span: span(),
-        }
-    }
-
     fn ident(name: &str) -> Expr {
         Expr::Ident {
             name: name.to_string(),

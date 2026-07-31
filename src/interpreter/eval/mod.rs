@@ -154,6 +154,7 @@ struct WsConnection {
     connected: bool,
     /// Simulation buffers (used when `websocket` feature is disabled).
     send_buffer: Vec<String>,
+    #[cfg_attr(feature = "websocket", allow(dead_code))]
     recv_buffer: std::collections::VecDeque<String>,
     /// Real WebSocket socket (used when `websocket` feature is enabled).
     #[cfg(feature = "websocket")]
@@ -184,6 +185,7 @@ struct MqttClientState {
 
 /// In-memory MQTT message broker for simulation (used when `mqtt` feature is off).
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "mqtt", allow(dead_code))]
 struct MqttBroker {
     /// topic → list of queued messages
     topics: std::collections::HashMap<String, Vec<String>>,
@@ -191,6 +193,7 @@ struct MqttBroker {
     subscriptions: std::collections::HashMap<i64, Vec<String>>,
 }
 
+#[cfg_attr(feature = "mqtt", allow(dead_code))]
 impl MqttBroker {
     fn new() -> Self {
         Self {
@@ -268,6 +271,7 @@ pub enum AsyncOperation {
 
 /// Simulated BLE (Bluetooth Low Energy) device.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "ble", allow(dead_code))]
 struct BleDevice {
     /// Device address (e.g., "AA:BB:CC:DD:EE:FF").
     addr: String,
@@ -281,6 +285,7 @@ struct BleDevice {
 
 /// Simulated BLE adapter managing scanned and connected devices.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "ble", allow(dead_code))]
 struct BleAdapter {
     /// Known devices from scanning.
     scanned: Vec<BleDevice>,
@@ -290,6 +295,7 @@ struct BleAdapter {
     next_handle: i64,
 }
 
+#[cfg_attr(feature = "ble", allow(dead_code))]
 impl BleAdapter {
     fn new() -> Self {
         Self {
@@ -627,10 +633,12 @@ pub struct Interpreter {
     /// MQTT clients: handle → MqttClient state.
     mqtt_clients: std::collections::HashMap<i64, MqttClientState>,
     /// In-memory MQTT broker for simulation (unused when `mqtt` feature active).
+    #[cfg_attr(feature = "mqtt", allow(dead_code))]
     mqtt_broker: MqttBroker,
     /// Next MQTT handle ID.
     next_mqtt_id: i64,
-    /// Simulated BLE adapter for Bluetooth Low Energy operations.
+    /// Simulated BLE adapter for Bluetooth Low Energy operations (unused when `ble` feature active).
+    #[cfg_attr(feature = "ble", allow(dead_code))]
     ble_adapter: BleAdapter,
     /// GUI state accumulated by gui_* builtins.
     gui_state: GuiState,
